@@ -15,8 +15,8 @@ Erlang реализация [Библиотеки RPC вызовов для об
 1> EventHandler = my_event_handler.  %% реализует rpc_event_handler behaviour
 2> Service = money_service.  %% имя модуля, описывающего thrift сервис
 3> ThriftHandler = thrift_money_service_handler.  %% реализует rpc_thrift_handler behaviour
-4> NetOpts = [].
-5> Handlers = [{"/v1/thrift_money_service",{Service, ThriftHandler, NetOpts}}].
+4> Opts = [].
+5> Handlers = [{"/v1/thrift_money_service",{Service, ThriftHandler, Opts}}].
 6> ServerSpec = rpc_server:child_spec(money_service_sup, #{
 6>     handlers => Handlers,
 6>     event_handler => EventHandler,

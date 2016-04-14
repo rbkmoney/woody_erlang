@@ -7,7 +7,7 @@
 -include_lib("thrift/include/thrift_protocol.hrl").
 
 %%
-%% rpc_thrift_handler behaviour definition
+%% behaviour definition
 %%
 -type result() :: any().
 -export_type([result/0]).

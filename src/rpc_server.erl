@@ -8,10 +8,12 @@
 %% API
 -export([child_spec/2]).
 
-%% Supervisor callbacks
+%% supervisor callbacks
 -export([init/1]).
 
+%%
 %% behaviour definition
+%%
 -callback child_spec(_Id, options()) -> supervisor:child_spec().
 
 %%

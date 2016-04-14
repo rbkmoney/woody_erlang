@@ -1,28 +1,21 @@
 -module(rpc_event_handler).
 
+%% API
+-export([handle_event/3]).
+
 %%
-%% Behaviour definition
+%% behaviour definition
 %%
 -type event_type() :: atom() | {atom(), any()}.
 -type meta() :: [{atom(), term()}].
-
 -export_type([event_type/0, meta/0]).
 
--callback handle_event(Type, Meta) -> _ when
-    Type :: event_type(),
-    Meta :: meta().
+-callback handle_event(event_type(), meta()) -> _.
+
 
 %%
 %% API
 %%
--export([handle_event/3]).
-
--spec handle_event(Handler, Type, Meta) -> _ when
-    Handler :: module(),
-    Type :: event_type(),
-    Meta :: meta().
-handle_event(Handler, Type, Meta) when
-    is_atom(Handler),
-    is_list(Meta)
-->
+-spec handle_event(rpc_t:handler(), event_type(), meta()) -> _.
+handle_event(Handler, Type, Meta) ->
     Handler:handle_event(Type, Meta).

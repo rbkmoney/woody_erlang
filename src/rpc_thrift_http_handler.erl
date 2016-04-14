@@ -115,8 +115,7 @@ config() ->
     req_id :: rpc_t:req_id(),
     body = <<>> :: binary(),
     resp_body = <<>> :: binary(),
-    event_handler :: rpc_t:handler(),
-    replied = false :: boolean()
+    event_handler :: rpc_t:handler()
 }).
 -type state() :: #http_req{}.
 
@@ -146,15 +145,15 @@ flush(State = #http_req{
     resp_body = Body,
     event_handler = EventHandler
 }) ->
-    {Code, Req0} = add_x_error_header(Req),
+    {Code, Req1} = add_x_error_header(Req),
     ?log_event(EventHandler, send_reply, ReqId, Code,[]),
-    {ok, Req1} = cowboy_req:reply(
+    {ok, Req2} = cowboy_req:reply(
         Code,
         [],
         Body,
-        Req0
+        Req1
     ),
-    {State#http_req{req = Req1, body = <<>>, resp_body = <<>>, replied = true}, ok}.
+    {State#http_req{req = Req2, body = <<>>, resp_body = <<>>}, ok}.
 
 -spec close(state()) -> {state(), ok}.
 close(_State) ->
