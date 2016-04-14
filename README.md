@@ -1,4 +1,5 @@
-# rpc
+RPC [![wercker status](https://app.wercker.com/status/16ae0cdda280aed795f28131edefa41f/s "wercker status")](https://app.wercker.com/project/bykey/16ae0cdda280aed795f28131edefa41f)
+======
 
 Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://52.29.202.218/scrapyard/rpc-lib/).
 
