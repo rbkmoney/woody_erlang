@@ -105,7 +105,7 @@ all() ->
         call_handle_error_fails_test,
         call_oneway_void_test,
         call_async_ok_test,
-        checkrpc_ids_sequence_test,
+        check_req_ids_sequence_test,
         call_two_services_test,
         call_with_client_pool_test,
         multiplexed_transport_test
@@ -293,8 +293,8 @@ get_weapon(Client, Sup, Cb, Gun) ->
 collect({ok, Result, Tag}, Pid) ->
     send_msg(Pid, {Tag, Result}).
 
-checkrpc_ids_sequence_test(_) ->
-    Id = <<"checkrpc_ids_sequence">>,
+check_req_ids_sequence_test(_) ->
+    Id = <<"check_req_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Client = get_client(Id),
     Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS), Client#{req_id => Id}},
@@ -338,7 +338,12 @@ multiplexed_transport_test(_) ->
 
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        rpc_thrift_http_transport:new(true, Id, Id, #{url => Url}),
+        rpc_thrift_http_transport:new(
+            #{
+                req_id => Id, root_req_id => Id, parent_req_id => Id
+            },
+           #{url => Url}
+        ),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),

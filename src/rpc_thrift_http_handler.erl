@@ -42,16 +42,23 @@
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
--define(log_event(EventHandler, Event, ReqId, Status, Meta),
+-define(log_event(EventHandler, Event, Status, Dir, Meta),
     rpc_event_handler:handle_event(EventHandler, Event, Meta#{
         rpc_role => server,
-        req_id => ReqId,
+        direction => Dir,
         status => Status
     })
 ).
 
--define(event_send_reply, send_reply).
--define(event_rpc_receive, rpc_receive).
+-define(event_send_reply, send_response).
+-define(event_rpc_receive, receive_request).
+
+-define(HEADERS_RPC_ID, #{
+    req_id => ?HEADER_NAME_RPC_ID,
+    root_req_id => ?HEADER_NAME_RPC_ROOT_ID,
+    parent_req_id => ?HEADER_NAME_RPC_PARENT_ID
+}).
+
 
 %%
 %% rpc_server callback
@@ -115,17 +122,18 @@ config() ->
 %%
 -record(http_req, {
     req :: cowboy_req:req(),
-    req_id :: rpc_t:req_id(),
+    rpc_id :: rpc_t:rpc_id(),
     body = <<>> :: binary(),
     resp_body = <<>> :: binary(),
-    event_handler :: rpc_t:handler()
+    event_handler :: rpc_t:handler(),
+    replied = false :: boolean()
 }).
 -type state() :: #http_req{}.
 
-make_transport(Req, ReqId, Body, EventHandler) ->
+make_transport(Req, RpcId, Body, EventHandler) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #http_req{
         req = Req,
-        req_id = ReqId,
+        rpc_id = RpcId,
         body = Body,
         event_handler = EventHandler
     }),
@@ -141,22 +149,25 @@ read(State = #http_req{body = Body}, Len) when is_integer(Len) ->
 write(State = #http_req{resp_body = Resp}, Data) ->
     {State#http_req{resp_body = <<Resp/binary, Data/binary>>}, ok}.
 
--spec flush(state()) -> {state(), ok}.
+-spec flush(state()) -> {state(), ok} | {error, already_replied}.
+flush(State = #http_req{replied = true}) ->
+    {State, {error, already_replied}};
 flush(State = #http_req{
     req = Req,
-    req_id = ReqId,
+    rpc_id = RpcId,
     resp_body = Body,
     event_handler = EventHandler
 }) ->
     {Code, Req1} = add_x_error_header(Req),
-    ?log_event(EventHandler, ?event_send_reply, ReqId, reply_status(Code), #{code => Code}),
+    ?log_event(EventHandler, ?event_send_reply, reply_status(Code),
+        response, RpcId#{code => Code}),
     {ok, Req2} = cowboy_req:reply(
         Code,
         [],
         Body,
         Req1
     ),
-    {State#http_req{req = Req2, resp_body = <<>>}, ok}.
+    {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
 
 reply_status(200) -> ok;
 reply_status(_) -> error.
@@ -169,6 +180,7 @@ close(_State) ->
 mark_thrift_error(Type, Error) ->
     erlang:put(?THRIFT_ERROR_KEY, {Type, Error}).
 
+
 %%
 %% cowboy_http_handler callbacks
 %%
@@ -178,54 +190,73 @@ mark_thrift_error(Type, Error) ->
 init({_Transport, http}, Req, Opts = [EventHandler|_]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
-        {ok, ReqId, Req2} ->
-            check_headers(set_resp_headers(ReqId, Req2),
-                EventHandler, ReqId, Url, Opts);
-        {error, Req2} ->
-            ?log_event(EventHandler, ?event_rpc_receive, undefined, error,
-                #{url => Url, reason => no_rpc_id}),
+        {ok, RpcId, Req2} ->
+            check_headers(set_resp_headers(RpcId, Req2),
+                EventHandler, RpcId, Url, Opts);
+        {error, ErrorMeta, Req2} ->
+            ?log_event(EventHandler, ?event_rpc_receive, error,
+                request, ErrorMeta#{url => Url, reason => no_rpc_id}),
             reply_error_early(403, Req2)
     end.
 
 -spec handle(cowboy_req:req(), list()) ->
     {ok, cowboy_req:req(), _}.
-handle(Req, [Url, ReqId, ServerOpts, EventHandler, ThriftHandler]) ->
+handle(Req, [Url, RpcId, ServerOpts, EventHandler, ThriftHandler]) ->
     case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            ?log_event(EventHandler, ?event_rpc_receive, ReqId, ok, #{url => Url}),
-            do_handle(ReqId, Body, ThriftHandler, EventHandler, Req1);
+            ?log_event(EventHandler, ?event_rpc_receive, ok, request, RpcId#{url => Url}),
+            do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
         {ok, <<>>, Req1} ->
-            reply_error(411, ReqId, EventHandler, Req1);
+            reply_error(411, RpcId, EventHandler, Req1);
         {error, body_too_large, Req1} ->
-            ?log_event(EventHandler, ?event_rpc_receive, ReqId, error,
-                #{url => Url, reason => body_too_large}),
-            reply_error(413, ReqId, EventHandler, Req1);
+            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+                RpcId#{url => Url, reason => body_too_large}),
+            reply_error(413, RpcId, EventHandler, Req1);
         {error, Reason, Req1} ->
-            ?log_event(EventHandler, ?event_rpc_receive, ReqId, error,
-                #{url => Url, reason => {body_read_error, Reason}}),
-            reply_error(400, ReqId, EventHandler, Req1)
+            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+                RpcId#{url => Url, reason => {body_read_error, Reason}}),
+            reply_error(400, RpcId, EventHandler, Req1)
     end.
 
 -spec terminate(_Reason, _Req, list() | _) ->
     ok.
 terminate({normal, _}, _Req, _Status) ->
     ok;
-terminate(Reason, _Req, [_, ReqId, _, EventHandler | _]) ->
-    ?log_event(EventHandler, http_handler_terminate, ReqId, error,
-        #{reason => Reason}),
+terminate(Reason, _Req, [_, RpcId, _, EventHandler | _]) ->
+    ?log_event(EventHandler, http_handler_terminate, error, undefined,
+        RpcId#{reason => Reason}),
     ok.
 
-check_headers(Req, EventHandler, ReqId, Url, Opts) ->
+get_rpc_id(Req) ->
+    check_ids(maps:fold(
+        fun(K, V, A) -> get_rpc_id(K, V, A) end,
+        #{req => Req}, ?HEADERS_RPC_ID
+    )).
+
+get_rpc_id(Key, Header, Acc = #{req := Req}) ->
+    case cowboy_req:header(Header, Req) of
+        {undefined, Req1} ->
+            Acc#{Key => undefined, req => Req1, status => error};
+        {Id, Req1} ->
+            Acc#{Key => Id, req => Req1}
+    end.
+
+check_ids(Map = #{status := error, req := Req}) ->
+    {error, maps:without([req, status], Map), Req};
+check_ids(Map = #{req := Req}) ->
+    {ok, maps:without([req], Map), Req}.
+
+check_headers(Req, EventHandler, RpcId, Url, Opts) ->
     case check_content_type(check_method(Req)) of
         {ok, Req3} ->
-            {ok, Req3, [Url, ReqId | Opts]};
+            {ok, Req3, [Url, RpcId | Opts]};
         {error, {wrong_method, Method}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, ReqId, error,
-                #{url => Url, reason => {wrong_method, Method}}),
+            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+                RpcId#{url => Url, reason => {wrong_method, Method}}),
             reply_error_early(405, Req3);
         {error, {wrong_content_type, BadType}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, ReqId, error,
-                #{url => Url, reason => {wrong_content_type, BadType}}),
+            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+                RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
             reply_error_early(403, Req3)
     end.
 
@@ -247,14 +278,6 @@ check_content_type({ok, Req}) ->
 check_content_type(Error) ->
     Error.
 
-get_rpc_id(Req) ->
-    case cowboy_req:header(?HEADER_NAME_RPC_ID, Req) of
-        {undefined, Req1} ->
-            {error, Req1};
-        {ReqId, Req1} ->
-            {ok, ReqId, Req1}
-    end.
-
 get_body(Req, ServerOpts) ->
     MaxBody = genlib_opts:get(max_body_length, ServerOpts),
     case cowboy_req:body(Req, [{length, MaxBody}]) of
@@ -266,25 +289,25 @@ get_body(Req, ServerOpts) ->
             {error, Reason, Req}
     end.
 
-do_handle(ReqId, Body, ThriftHander, EventHandler, Req) ->
-    RpcClient = rpc_client:make_child_client(ReqId, EventHandler),
-    Transport = make_transport(Req, ReqId, Body, EventHandler),
-    case rpc_thrift_handler:start(Transport, ReqId, RpcClient, ThriftHander, EventHandler, ?MODULE) of
+do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
+    RpcClient = rpc_client:make_child_client(RpcId, EventHandler),
+    Transport = make_transport(Req, RpcId, Body, EventHandler),
+    case rpc_thrift_handler:start(Transport, RpcId, RpcClient, ThriftHander, EventHandler, ?MODULE) of
         ok ->
             {ok, Req, undefined};
         {error, Reason} ->
-            handle_error(Reason, ReqId, EventHandler, Req);
+            handle_error(Reason, RpcId, EventHandler, Req);
         noreply ->
             {ok, Req, undefined}
     end.
 
-handle_error(badrequest, ReqId, EventHandler, Req) ->
-    reply_error(400, ReqId, EventHandler, Req);
-handle_error(_Error, ReqId, EventHandler, Req) ->
-    reply_error(500, ReqId, EventHandler, Req).
+handle_error(badrequest, RpcId, EventHandler, Req) ->
+    reply_error(400, RpcId, EventHandler, Req);
+handle_error(_Error, RpcId, EventHandler, Req) ->
+    reply_error(500, RpcId, EventHandler, Req).
 
-reply_error(Code, ReqId, EventHandler, Req) when is_integer(Code), Code >= 400 ->
-    ?log_event(EventHandler, ?event_send_reply, ReqId, error, #{code => Code}),
+reply_error(Code, RpcId, EventHandler, Req) when is_integer(Code), Code >= 400 ->
+    ?log_event(EventHandler, ?event_send_reply, error, response, RpcId#{code => Code}),
     {_, Req1} = add_x_error_header(Req),
     {ok, Req2} = cowboy_req:reply(Code, Req1),
     {ok, Req2, undefined}.
@@ -293,10 +316,10 @@ reply_error_early(Code, Req) when is_integer(Code) ->
     {ok, Req1} = cowboy_req:reply(Code, Req),
     {shutdown, Req1, undefined}.
 
-set_resp_headers(ReqId, Req) ->
-    lists:foldl(fun({H,V}, R) -> cowboy_req:set_resp_header(H, V, R) end, Req,
-        [{?HEADER_NAME_RPC_ID, ReqId}, {<<"content-type">>, ?CONTENT_TYPE_THRIFT}]
-    ).
+set_resp_headers(RpcId, Req) ->
+    Vals = RpcId#{<<"content-type">> => ?CONTENT_TYPE_THRIFT},
+    maps:fold(fun(K, H, R) -> cowboy_req:set_resp_header(H, genlib_map:get(K, Vals), R) end, Req, ?HEADERS_RPC_ID).
+
 
 add_x_error_header(Req) ->
     case erlang:erase(?THRIFT_ERROR_KEY) of

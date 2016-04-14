@@ -7,6 +7,12 @@
 -export([get_protocol_handler/2]).
 
 -type req_id() :: binary().
+-type rpc_id() :: #{
+    req_id => rpc_id(),
+    root_req_id => rpc_id(),
+    parent_req_id => rpc_id()
+}.
+
 -type options() :: map().
 -type handler() :: module().
 -type url() :: binary().
@@ -22,7 +28,7 @@
                   | {'via', Module :: module(), Name :: any()}
                   | pid().
 
--export_type([req_id/0, service/0, func/0, options/0, handler/0,
+-export_type([req_id/0, rpc_id/0, service/0, func/0, options/0, handler/0,
     url/0, role/0, sup_ref/0]).
 
 

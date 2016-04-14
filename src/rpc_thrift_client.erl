@@ -30,34 +30,29 @@ stop_pool(Name) ->
     rpc_thrift_http_transport:stop_client_pool(Name).
 
 -spec call(rpc_client:client(), request(), rpc_client:options()) -> rpc_client:result_ok() | no_return().
-call(Client = #{
-        root_rpc := IsRoot,
-        parent_req_id := PaReqId,
-        req_id := ReqId,
-        event_handler := EventHandler
-    },
+call(Client = #{event_handler := EventHandler},
     {Service, Function, Args}, TransportOpts = #{url := Url})
 ->
-    rpc_event_handler:handle_event(EventHandler, rpc_send_request, #{
+    RpcId = maps:with([req_id, root_req_id, parent_req_id], Client),
+    rpc_event_handler:handle_event(EventHandler, send_request, RpcId#{
         rpc_role => client,
-        req_id => ReqId,
-        parent_request_id => PaReqId,
+        direction => request,
         url => Url,
         service => Service,
         function => Function,
         args => Args
     }),
-    Result = do_call(make_thrift_client(IsRoot, PaReqId, ReqId, Service, TransportOpts), Function, Args),
-    rpc_event_handler:handle_event(EventHandler, rpc_result_received, #{
+    Result = do_call(make_thrift_client( RpcId, Service, TransportOpts), Function, Args),
+    rpc_event_handler:handle_event(EventHandler, receive_response, RpcId#{
         rpc_role => client,
-        req_id => ReqId,
+        direction => response,
         rpc_result => Result
     }),
     format_return(Result, Client).
 
-make_thrift_client(IsRoot, PaReqId, ReqId, Service, TransportOpts) ->
+make_thrift_client(RpcId, Service, TransportOpts) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        rpc_thrift_http_transport:new(IsRoot, PaReqId, ReqId, TransportOpts),
+        rpc_thrift_http_transport:new(RpcId, TransportOpts),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),

@@ -29,12 +29,13 @@
 %%
 %% API
 %%
--type client() :: #{
-    root_rpc => boolean(), %% mandatory
-    event_handler => rpc_t:handler(), %% mandatory
-    seq => non_neg_integer(), %% mandatory
-    parent_req_id => rpc_t:req_id(), %% mandatory
-    req_id => rpc_t:req_id() %% optional
+-type client() :: #{  %% all elements are mandatory
+    root_rpc => boolean(),
+    req_id => rpc_t:req_id() | undefined,
+    root_req_id => rpc_t:req_id(),
+    parent_req_id => rpc_t:req_id(),
+    event_handler => rpc_t:handler(),
+    seq => non_neg_integer()
 }.
 
 -type result_ok() :: {ok, _Reply, client()} | {ok, client()}.
@@ -54,18 +55,27 @@
 new(ReqId, EventHandler) ->
     #{
         root_rpc => true,
+        req_id => ReqId,
+        root_req_id => ReqId,
         parent_req_id => ReqId,
         seq => 0,
         event_handler => EventHandler
     }.
 
--spec make_child_client(rpc_t:req_id(), rpc_t:handler()) -> client().
-make_child_client(ReqId, EventHandler) ->
-    (new(ReqId, EventHandler))#{root_rpc => false}.
+-spec make_child_client(rpc_t:rpc_id(), rpc_t:handler()) -> client().
+make_child_client(#{req_id := ReqId, root_req_id := RootReqId}, EventHandler) ->
+    #{
+        root_rpc => false,
+        req_id => undefined,
+        root_req_id => RootReqId,
+        parent_req_id => ReqId,
+        seq => 0,
+        event_handler => EventHandler
+    }.
 
 -spec next(client()) -> client().
-next(Client = #{root_rpc := true, parent_req_id := ParentReqId}) ->
-    Client#{req_id => ParentReqId};
+next(Client = #{root_rpc := true}) ->
+    Client;
 next(Client = #{root_rpc := false, seq := Seq}) ->
     NextSeq = Seq +1,
     Client#{req_id => make_req_id(NextSeq), seq => NextSeq}.

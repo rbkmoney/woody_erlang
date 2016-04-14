@@ -6,7 +6,7 @@
 -include("rpc_thrift_http_headers.hrl").
 
 %% API
--export([new/4]).
+-export([new/2]).
 
 -export([start_client_pool/2]).
 -export([stop_client_pool/1]).
@@ -17,27 +17,28 @@
 -type url() :: binary().
 -export_type([url/0]).
 
--record(rpc_transport, {
-    req_id :: rpc_t:req_id(),
-    parent_req_id = undefined :: undefined | rpc_t:req_id(),
-    url :: url(),
-    options = #{} :: map(),
-    write_buffer = <<>> :: binary(),
-    read_buffer = <<>> :: binary()
-}).
--type rpc_transport() :: #rpc_transport{}.
+-type rpc_transport() :: #{
+    req_id => rpc_t:req_id(),
+    root_req_id => rpc_t:req_id(),
+    parent_req_id => rpc_t:req_id(),
+    url => url(),
+    options => map(),
+    write_buffer => binary(),
+    read_buffer => binary()
+}.
+
 
 %%
 %% API
 %%
--spec new(boolean(), rpc_t:req_id(), rpc_t:req_id(), rpc_client:options()) ->
+-spec new(rpc_t:rpc_id(), rpc_client:options()) ->
     thrift_transport:t_transport().
-new(IsRoot, PaReqId, ReqId, TransportOpts = #{url := Url}) ->
-    {ok, Transport} = thrift_transport:new(?MODULE, #rpc_transport{
-        req_id = ReqId,
-        parent_req_id = get_parent_id(IsRoot, PaReqId),
-        url = Url,
-        options = TransportOpts
+new(RpcId, TransportOpts = #{url := Url}) ->
+    {ok, Transport} = thrift_transport:new(?MODULE, RpcId#{
+        url => Url,
+        options => TransportOpts,
+        write_buffer => <<>>,
+        read_buffer => <<>>
     }),
     Transport.
 
@@ -54,30 +55,31 @@ stop_client_pool(Name) ->
 %% Thrift transport callbacks
 %%
 -spec write(rpc_transport(), binary()) -> {rpc_transport(), ok}.
-write(Transport = #rpc_transport{write_buffer = WBuffer}, Data) when
+write(Transport = #{write_buffer := WBuffer}, Data) when
     is_binary(WBuffer),
     is_binary(Data)
 ->
-    {Transport#rpc_transport{write_buffer = <<WBuffer/binary, Data/binary>>}, ok}.
+    {Transport#{write_buffer => <<WBuffer/binary, Data/binary>>}, ok}.
 
 -spec read(rpc_transport(), pos_integer()) -> {rpc_transport(), {ok, binary()}}.
-read(Transport = #rpc_transport{read_buffer = RBuffer}, Len) when
+read(Transport = #{read_buffer := RBuffer}, Len) when
     is_binary(RBuffer)
 ->
     Give = min(byte_size(RBuffer), Len),
     <<Data:Give/binary, RBuffer1/binary>> = RBuffer,
     Response = {ok, Data},
-    Transport1 = Transport#rpc_transport{read_buffer = RBuffer1},
+    Transport1 = Transport#{read_buffer => RBuffer1},
     {Transport1, Response}.
 
 -spec flush(rpc_transport()) -> {rpc_transport(), ok | {error, _Reason}}.
-flush(Transport = #rpc_transport{
-    url = Url,
-    parent_req_id = RpcParentId,
-    req_id = RpcId,
-    options = Options,
-    write_buffer = WBuffer,
-    read_buffer = RBuffer
+flush(Transport = #{
+    url := Url,
+    req_id := ReqId,
+    root_req_id := RootReqId,
+    parent_req_id := PaReqId,
+    options := Options,
+    write_buffer := WBuffer,
+    read_buffer := RBuffer
 }) when
     is_binary(WBuffer),
     is_binary(RBuffer)
@@ -85,22 +87,23 @@ flush(Transport = #rpc_transport{
     Headers = [
         {<<"content-type">>, ?CONTENT_TYPE_THRIFT},
         {<<"accept">>, ?CONTENT_TYPE_THRIFT},
-        {?HEADER_NAME_RPC_ID, genlib:to_binary(RpcId)}
+        {?HEADER_NAME_RPC_ROOT_ID, genlib:to_binary(RootReqId)},
+        {?HEADER_NAME_RPC_ID, genlib:to_binary(ReqId)},
+        {?HEADER_NAME_RPC_PARENT_ID, genlib:to_binary(PaReqId)}
     ],
-    Headers1 = add_parent_id_header(RpcParentId, Headers),
-    case send(Url, Headers1, WBuffer, Options) of
+    case send(Url, Headers, WBuffer, Options) of
         {ok, Response} ->
-            {Transport#rpc_transport{
-                read_buffer = <<RBuffer/binary, Response/binary>>,
-                write_buffer = <<>>
+            {Transport#{
+                read_buffer => <<RBuffer/binary, Response/binary>>,
+                write_buffer => <<>>
             }, ok};
         Error ->
-            {Transport#rpc_transport{read_buffer = <<>>, write_buffer = <<>>}, Error}
+            {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
     end.
 
 -spec close(rpc_transport()) -> {rpc_transport(), ok}.
 close(Transport) ->
-    {Transport#rpc_transport{read_buffer = <<>>, write_buffer = <<>>}, ok}.
+    {Transport#{}, ok}.
 
 %%
 %% Internal functions
@@ -119,13 +122,3 @@ handle_response(200, {ok, Body}) ->
     {ok, Body};
 handle_response(StatusCode, Body) ->
     {error, {StatusCode, Body}}.
-
-get_parent_id(true, _) ->
-    undefined;
-get_parent_id(false, PaReqId) ->
-    PaReqId.
-
-add_parent_id_header(undefined, Headers)->
-    Headers;
-add_parent_id_header(RpcParentId, Headers)->
-    [{?HEADER_NAME_RPC_PARENT_ID, genlib:to_binary(RpcParentId)} | Headers].
