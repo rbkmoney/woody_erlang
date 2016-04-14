@@ -38,21 +38,21 @@ call(Client = #{
     },
     {Service, Function, Args}, TransportOpts = #{url := Url})
 ->
-    rpc_event_handler:handle_event(EventHandler, rpc_send_request, [
-        {rpc_role, client},
-        {req_id, ReqId},
-        {parent_request_id, PaReqId},
-        {url, Url},
-        {service, Service},
-        {function, Function},
-        {args, Args}
-    ]),
+    rpc_event_handler:handle_event(EventHandler, rpc_send_request, #{
+        rpc_role => client,
+        req_id => ReqId,
+        parent_request_id => PaReqId,
+        url => Url,
+        service => Service,
+        function => Function,
+        args => Args
+    }),
     Result = do_call(make_thrift_client(IsRoot, PaReqId, ReqId, Service, TransportOpts), Function, Args),
-    rpc_event_handler:handle_event(EventHandler, rpc_result_received, [
-        {rpc_role, client},
-        {req_id, ReqId},
-        {rpc_result, Result}
-    ]),
+    rpc_event_handler:handle_event(EventHandler, rpc_result_received, #{
+        rpc_role => client,
+        req_id => ReqId,
+        rpc_result => Result
+    }),
     format_return(Result, Client).
 
 make_thrift_client(IsRoot, PaReqId, ReqId, Service, TransportOpts) ->
