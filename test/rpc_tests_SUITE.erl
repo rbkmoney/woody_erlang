@@ -90,22 +90,23 @@
 %%
 all() ->
     [
-        call_safe_ok,
-        call_ok,
-        call_safe_handler_throw,
-        call_handler_throw,
-        call_safe_handler_throw_unexpected,
-        call_handler_throw_unexpected,
-        call_safe_handler_error,
-        call_handler_error,
-        call_safe_client_transport_error,
-        call_client_transport_error,
-        call_safe_server_transport_error,
-        call_server_transport_error,
-        call_async_ok,
-        checkrpc_ids_sequence,
-        call_two_services,
-        call_with_client_pool
+        call_safe_ok_test,
+        call_ok_test,
+        call_safe_handler_throw_test,
+        call_handler_throw_test,
+        call_safe_handler_throw_unexpected_test,
+        call_handler_throw_unexpected_test,
+        call_safe_handler_error_test,
+        call_handler_error_test,
+        call_safe_client_transport_error_test,
+        call_client_transport_error_test,
+        call_safe_server_transport_error_test,
+        call_server_transport_error_test,
+        call_handle_error_fails_test,
+        call_async_ok_test,
+        checkrpc_ids_sequence_test,
+        call_two_services_test,
+        call_with_client_pool_test
     ].
 
 %%
@@ -129,12 +130,13 @@ application_stop(App) ->
     application:stop(App).
 
 init_per_testcase(Tc, C) when
-    Tc =:= call_safe_server_transport_error ;
-    Tc =:= call_server_transport_error
+    Tc =:= call_safe_server_transport_error_test ;
+    Tc =:= call_server_transport_error_test ;
+    Tc =:= call_handle_error_fails_test
 ->
     do_init_per_testcase([powerups], C);
 init_per_testcase(Tc, C) when
-    Tc =:= call_two_services
+    Tc =:= call_two_services_test
 ->
     do_init_per_testcase([weapons, powerups], C);
 init_per_testcase(_, C) ->
@@ -181,23 +183,23 @@ end_per_test_case(_,C) ->
 %%
 %% tests
 %%
-call_safe_ok(_) ->
+call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
-    basic_gun_test(call_safe, <<"call_safe_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+    gun_test_bacic(call_safe, <<"call_safe_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
-call_ok(_) ->
+call_ok_test(_) ->
     Gun = <<"Enforcer">>,
-    basic_gun_test(call, <<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+    gun_test_bacic(call, <<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
-call_safe_handler_throw(_) ->
+call_safe_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
-    basic_gun_test(call_safe, <<"call_safe_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
+    gun_test_bacic(call_safe, <<"call_safe_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
 
-call_handler_throw(_) ->
+call_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
-    basic_gun_catch_test(<<"call_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
+    gun_catch_test_basic(<<"call_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
 
-call_safe_handler_throw_unexpected(_) ->
+call_safe_handler_throw_unexpected_test(_) ->
     Id = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client = get_client(Id),
@@ -206,7 +208,7 @@ call_safe_handler_throw_unexpected(_) ->
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
 
-call_handler_throw_unexpected(_) ->
+call_handler_throw_unexpected_test(_) ->
     Id = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client = get_client(Id),
@@ -217,43 +219,48 @@ call_handler_throw_unexpected(_) ->
     end,
     {ok, _} = receive_msg({Id, Current}).
 
-call_safe_handler_error(_) ->
+call_safe_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    basic_gun_test(call_safe, <<"call_safe_handler_error">>, Gun, {error, rpc_failed}, true).
+    gun_test_bacic(call_safe, <<"call_safe_handler_error">>, Gun, {error, rpc_failed}, true).
 
-call_handler_error(_) ->
+call_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    basic_gun_catch_test(<<"call_handler_error">>, Gun, {error, rpc_failed}, true).
+    gun_catch_test_basic(<<"call_handler_error">>, Gun, {error, rpc_failed}, true).
 
-call_safe_client_transport_error(_) ->
+call_safe_client_transport_error_test(_) ->
     Gun = 'The Ultimate Super Mega Destroyer',
-    basic_gun_test(call_safe, <<"call_safe_client_transport_error">>, Gun, {error, rpc_failed}, false).
+    gun_test_bacic(call_safe, <<"call_safe_client_transport_error">>, Gun, {error, rpc_failed}, false).
 
-call_client_transport_error(_) ->
+call_client_transport_error_test(_) ->
     Gun = 'The Ultimate Super Mega Destroyer',
-    basic_gun_catch_test(<<"call_client_transport_error">>, Gun, {error, rpc_failed}, false).
+    gun_catch_test_basic(<<"call_client_transport_error">>, Gun, {error, rpc_failed}, false).
 
-call_safe_server_transport_error(_) ->
+call_safe_server_transport_error_test(_) ->
     Id = <<"call_safe_server_transport_error">>,
     Armor = <<"Helmet">>,
     Client = get_client(Id),
-    Client1 = Client#{req_id => Id},
-    {error, rpc_failed , Client1} = call_safe(Client, powerups, get_powerup,
+    Expect = {error, rpc_failed, Client#{req_id => Id}},
+    Expect = call_safe(Client, powerups, get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
-call_server_transport_error(_) ->
-    Id = <<"call_server_transport_error">>,
+call_server_transport_error_test(_) ->
+    do_call_server_transport_error(<<"call_server_transport_error">>).
+
+call_handle_error_fails_test(_) ->
+    do_call_server_transport_error(<<"call_handle_error_fails">>).
+
+do_call_server_transport_error(Id) ->
     Armor = <<"Helmet">>,
     Client = get_client(Id),
-    Client1 = Client#{req_id => Id},
+    Expect = {rpc_failed, Client#{req_id => Id}},
     try call(Client, powerups, get_powerup, [Armor, self_to_bin()])
     catch
-        error:{rpc_failed, Client1} -> ok
+        error:Expect -> ok
     end,
     {ok, _} = receive_msg({Id, Armor}).
 
-call_async_ok(C) ->
+call_async_ok_test(C) ->
     Sup = proplists:get_value(sup, C),
     Pid = self(),
     Callback = fun(Res) -> collect(Res, Pid) end,
@@ -274,7 +281,7 @@ get_weapon(Client, Sup, Cb, Gun) ->
 collect({ok, Result, Tag}, Pid) ->
     send_msg(Pid, {Tag, Result}).
 
-checkrpc_ids_sequence(_) ->
+checkrpc_ids_sequence_test(_) ->
     Id = <<"checkrpc_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Client = get_client(Id),
@@ -282,9 +289,9 @@ checkrpc_ids_sequence(_) ->
     Expect = call(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
-call_two_services(_) ->
+call_two_services_test(_) ->
     Gun =  <<"Enforcer">>,
-    basic_gun_test(call_safe, <<"two_services1">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true),
+    gun_test_bacic(call_safe, <<"two_services1">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true),
     Id = <<"two_services2">>,
     Armor = <<"Body Armor">>,
     Client = get_client(Id),
@@ -292,7 +299,7 @@ call_two_services(_) ->
     Expect = call_safe(Client, powerups, get_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
-call_with_client_pool(_) ->
+call_with_client_pool_test(_) ->
     Pool = guns,
     ok = rpc_thrift_client:start_pool(Pool, 10),
     Id = <<"call_with_client_pool">>,
@@ -344,7 +351,9 @@ handle_function(get_powerup, #{parent_req_id := PaReqId}, {Name, To}, _Opts) ->
     send_msg(To, {PaReqId, Name}),
     {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)}.
 
-handle_error(_Function, _RpcId, _Reason, _Opts) ->
+handle_error(get_powerup, #{parent_req_id := <<"call_handle_error_fails">>}, _, _) ->
+    error(no_more_powerups);
+handle_error(_Function, _RpcClient, _Reason, _Opts) ->
     ok.
 
 
@@ -393,7 +402,7 @@ get_service_endpoint(powerups) ->
         rpc_test_powerups_service
     }.
 
-basic_gun_test(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
+gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
     Client = get_client(Id),
     Expect = {ExpectStatus, ExpectRes, Client#{req_id => Id}},
     Expect = ?MODULE:CallFun(Client, weapons, get_weapon, [Gun, self_to_bin()]),
@@ -402,7 +411,7 @@ basic_gun_test(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
         _ -> ok
     end.
 
-basic_gun_catch_test(Id, Gun, {Class, Exception}, WithMsg) ->
+gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     Client = get_client(Id),
     Expect = {Exception, Client#{req_id => Id}},
     try call(Client, weapons, get_weapon, [Gun, self_to_bin()])

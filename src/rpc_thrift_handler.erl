@@ -16,10 +16,12 @@
 -type args() :: list().
 -export_type([handler_opts/0, args/0]).
 
+-type error_reason() :: any().
+
 -callback handle_function(rpc_t:func(), rpc_client:client(), args(), handler_opts()) ->
     ok | {ok, result()} | {error, result()} | no_return().
 
--callback handle_error(rpc_t:func(), rpc_client:client(), args(), handler_opts()) -> _.
+-callback handle_error(rpc_t:func(), rpc_client:client(), error_reason(), handler_opts()) -> _.
 
 %%
 %% API
@@ -245,18 +247,27 @@ prepare_result({State, noreply}, _) ->
 prepare_result({State, {error, Reason}}, FunctionName) ->
     {handle_protocol_error(State, FunctionName, Reason), State#state.protocol}.
 
-handle_protocol_error(#state{
+handle_protocol_error(State = #state{
     req_id = ReqId,
-    rpc_client = RpcClient,
-    handler = Handler,
-    handler_opts = Opts,
     protocol_stage = Stage,
     transport_handler = Trans,
     event_handler = EventHandler}, Function, Reason)
 ->
-    Handler:handle_error(Function, RpcClient, Reason, Opts),
+    call_error_handler(State, Function, Reason),
     ?log_rpc_result(EventHandler, Stage, ReqId, error, [{reason, Reason}]),
     format_protocol_error(Reason, Trans).
+
+call_error_handler(#state{
+    req_id = ReqId,
+    rpc_client = RpcClient,
+    handler = Handler,
+    handler_opts = Opts,
+    event_handler = EventHandler}, Function, Reason) ->
+    try Handler:handle_error(Function, RpcClient, Reason, Opts)
+    catch
+        Class:Error ->
+            ?log_rpc_result(EventHandler, handle_error, ReqId, Class, [{reason, Error}])
+    end.
 
 format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
     mark_error_to_transport(Trans, transport, "bad binary protocol version"),
