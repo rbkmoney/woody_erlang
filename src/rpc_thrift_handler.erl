@@ -34,6 +34,10 @@
     ] ++ Meta)
 ).
 
+-define(error_unknown_function, no_function).
+-define(error_multiplexed_req, multiplexed_request).
+-define(error_protocol_send, send_error).
+
 -record(state, {
     req_id :: rpc_t:req_id(),
     rpc_client :: rpc_client:client(),
@@ -87,14 +91,31 @@ process(State = #state{protocol = Protocol, service = Service}) ->
             Type =:= ?tMessageType_ONEWAY
         ->
             State2 = release_oneway(Type, State1),
-            FunctionName = list_to_existing_atom(Function),
+            FunctionName = get_function_name(Function),
             prepare_response(handle_function(FunctionName,
-                Service:function_info(FunctionName, params_type),
+                get_params_type(Service, FunctionName),
                 State2,
                 SeqId
             ), FunctionName);
         {error, Reason} ->
             handle_protocol_error(State1, undefined, Reason)
+    end.
+
+get_function_name(Function) ->
+    case string:tokens(Function, ?MULTIPLEXED_SERVICE_SEPARATOR) of
+        [_ServiceName, _FunctionName] ->
+            {error, ?error_multiplexed_req};
+        _ ->
+            try list_to_existing_atom(Function)
+            catch
+                error:badarg -> {error, ?error_unknown_function}
+            end
+    end.
+
+get_params_type(Service, Function) ->
+    try Service:function_info(Function, params_type)
+    catch
+        error:badarg -> ?error_unknown_function
     end.
 
 release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->
@@ -103,8 +124,11 @@ release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->
 release_oneway(_, State) ->
     State.
 
-handle_function(_, no_function, State, _SeqId) ->
-    {State, {error, function_undefined}};
+handle_function(Error = {error, _}, _, State, _SeqId) ->
+    {State, Error};
+
+handle_function(_, ?error_unknown_function, State, _SeqId) ->
+    {State, {error, ?error_unknown_function}};
 
 handle_function(Function, InParams, State = #state{protocol = Protocol}, SeqId) ->
     {Protocol1, ReadResult} = thrift_protocol:read(Protocol, InParams),
@@ -246,7 +270,7 @@ send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Repl
         {State#state{protocol = Protocol4}, ok}
     catch
         error:{badmatch, {_, {error, _} = Error}} ->
-            {State, {error, {send_error, [Error, erlang:get_stacktrace()]}}}
+            {State, {error, {?error_protocol_send, [Error, erlang:get_stacktrace()]}}}
     end.
 
 prepare_response({State, ok}, _) ->
@@ -284,10 +308,13 @@ format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
 format_protocol_error(no_binary_protocol_version, Trans) ->
     mark_error_to_transport(Trans, transport, "no binary protocol version"),
     {error, badrequest};
-format_protocol_error({function_undefined, _Fun}, Trans) ->
+format_protocol_error({?error_unknown_function, _Fun}, Trans) ->
     mark_error_to_transport(Trans, transport, "unknown method"),
     {error, badrequest};
-format_protocol_error({send_error, _}, Trans) ->
+format_protocol_error({?error_multiplexed_req, _Fun}, Trans) ->
+    mark_error_to_transport(Trans, transport, "multiplexing not supported"),
+    {error, badrequest};
+format_protocol_error({?error_protocol_send, _}, Trans) ->
     mark_error_to_transport(Trans, transport, "internal error"),
     {error, server_error};
 format_protocol_error(_Reason, Trans) ->

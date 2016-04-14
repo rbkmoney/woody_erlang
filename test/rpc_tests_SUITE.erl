@@ -107,7 +107,8 @@ all() ->
         call_async_ok_test,
         checkrpc_ids_sequence_test,
         call_two_services_test,
-        call_with_client_pool_test
+        call_with_client_pool_test,
+        multiplexed_transport_test
     ].
 
 %%
@@ -134,7 +135,8 @@ init_per_testcase(Tc, C) when
     Tc =:= call_safe_server_transport_error_test ;
     Tc =:= call_server_transport_error_test ;
     Tc =:= call_handle_error_fails_test ;
-    Tc =:= call_oneway_void_test
+    Tc =:= call_oneway_void_test ;
+    Tc =:= multiplexed_transport_test
 ->
     do_init_per_testcase([powerups], C);
 init_per_testcase(Tc, C) when
@@ -324,6 +326,25 @@ call_with_client_pool_test(_) ->
     ),
     receive_msg({Id, Gun}),
     ok = rpc_thrift_client:stop_pool(Pool).
+
+multiplexed_transport_test(_) ->
+    Id  = <<"multiplexed_transport">>,
+    {Client1, {error, {400, _}}} = thrift_client:call(
+        make_thrift_multiplexed_client(Id, "powerups", get_service_endpoint(powerups)),
+        get_powerup,
+        [<<"Body Armor">>, self_to_bin()]
+    ),
+    thrift_client:close(Client1).
+
+make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
+    {ok, Protocol} = thrift_binary_protocol:new(
+        rpc_thrift_http_transport:new(true, Id, Id, #{url => Url}),
+        [{strict_read, true}, {strict_write, true}]
+    ),
+    {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
+    {ok, Client} = thrift_client:new(Protocol1, Service),
+    Client.
+
 
 %%
 %% supervisor callbacks
