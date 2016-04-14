@@ -16,6 +16,6 @@
   0},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.0">>},1},
  {<<"thrift">>,
-  {git,"https://github.com/arentrue/thrift_erlang.git",
-       {ref,"df6b2eab878c2b2f94831ce8d63d41ad65211001"}},
+  {git,"https://github.com/rbkmoney/thrift_erlang.git",
+       {ref,"88ded69c8aa9fef4a75c10e2e89061d744bac7b7"}},
   0}].
