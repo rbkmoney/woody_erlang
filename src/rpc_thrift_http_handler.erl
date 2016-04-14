@@ -153,7 +153,7 @@ flush(State = #http_req{
         Body,
         Req1
     ),
-    {State#http_req{req = Req2, body = <<>>, resp_body = <<>>}, ok}.
+    {State#http_req{req = Req2, resp_body = <<>>}, ok}.
 
 -spec close(state()) -> {state(), ok}.
 close(_State) ->

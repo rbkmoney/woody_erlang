@@ -86,15 +86,22 @@ process(State = #state{protocol = Protocol, service = Service}) ->
             Type =:= ?tMessageType_CALL orelse
             Type =:= ?tMessageType_ONEWAY
         ->
+            State2 = release_oneway(Type, State1),
             FunctionName = list_to_existing_atom(Function),
-            prepare_result(handle_function(FunctionName,
+            prepare_response(handle_function(FunctionName,
                 Service:function_info(FunctionName, params_type),
-                State1,
+                State2,
                 SeqId
             ), FunctionName);
         {error, Reason} ->
             handle_protocol_error(State1, undefined, Reason)
     end.
+
+release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->
+    {Protocol1, ok} = thrift_protocol:flush_transport(Protocol),
+    State#state{protocol = Protocol1};
+release_oneway(_, State) ->
+    State.
 
 handle_function(_, no_function, State, _SeqId) ->
     {State, {error, function_undefined}};
@@ -212,8 +219,10 @@ get_except(Exception, {_Fid, _, {struct, {_Module, Type}}, _, _}) when
 get_except(_, _) ->
     undefined.
 
-%% Called when an exception has been explicitly thrown by the service, but it was
+%% Called
+%% - when an exception has been explicitly thrown by the service, but it was
 %% not one of the exceptions that was defined for the function.
+%% - when the service explicitly returned {error, Reason}
 handle_unknown_exception(State, Function, Exception, SeqId) ->
     handle_error(State, Function, {exception_not_declared_as_thrown, Exception}, SeqId).
 
@@ -240,11 +249,11 @@ send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Repl
             {State, {error, {send_error, [Error, erlang:get_stacktrace()]}}}
     end.
 
-prepare_result({State, ok}, _) ->
+prepare_response({State, ok}, _) ->
     {ok, State#state.protocol};
-prepare_result({State, noreply}, _) ->
+prepare_response({State, noreply}, _) ->
     {noreply, State#state.protocol};
-prepare_result({State, {error, Reason}}, FunctionName) ->
+prepare_response({State, {error, Reason}}, FunctionName) ->
     {handle_protocol_error(State, FunctionName, Reason), State#state.protocol}.
 
 handle_protocol_error(State = #state{

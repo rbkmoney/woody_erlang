@@ -103,6 +103,7 @@ all() ->
         call_safe_server_transport_error_test,
         call_server_transport_error_test,
         call_handle_error_fails_test,
+        call_oneway_void_test,
         call_async_ok_test,
         checkrpc_ids_sequence_test,
         call_two_services_test,
@@ -132,7 +133,8 @@ application_stop(App) ->
 init_per_testcase(Tc, C) when
     Tc =:= call_safe_server_transport_error_test ;
     Tc =:= call_server_transport_error_test ;
-    Tc =:= call_handle_error_fails_test
+    Tc =:= call_handle_error_fails_test ;
+    Tc =:= call_oneway_void_test
 ->
     do_init_per_testcase([powerups], C);
 init_per_testcase(Tc, C) when
@@ -260,6 +262,14 @@ do_call_server_transport_error(Id) ->
     end,
     {ok, _} = receive_msg({Id, Armor}).
 
+call_oneway_void_test(_) ->
+    Id = <<"call_oneway_void_test">>,
+    Armor = <<"Helmet">>,
+    Client = get_client(Id),
+    Expect = {ok, ok, Client#{req_id => Id}},
+    Expect = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
+    {ok, _} = receive_msg({Id, Armor}).
+
 call_async_ok_test(C) ->
     Sup = proplists:get_value(sup, C),
     Pid = self(),
@@ -349,7 +359,10 @@ handle_function(get_weapon, #{parent_req_id := PaReqId},
 %% Powerups
 handle_function(get_powerup, #{parent_req_id := PaReqId}, {Name, To}, _Opts) ->
     send_msg(To, {PaReqId, Name}),
-    {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)}.
+    {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
+handle_function(like_powerup, #{parent_req_id := PaReqId}, {Name, To}, _Opts) ->
+    send_msg(To, {PaReqId, Name}),
+    ok.
 
 handle_error(get_powerup, #{parent_req_id := <<"call_handle_error_fails">>}, _, _) ->
     error(no_more_powerups);

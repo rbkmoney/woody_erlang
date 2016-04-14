@@ -40,4 +40,8 @@ service Powerups {
         1: string name
         2: binary data
     ) throws(1: Failure error)
+    oneway void like_powerup(
+        1: string name
+        2: binary data
+    )
 }

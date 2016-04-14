@@ -16,7 +16,8 @@
 
 function_names() -> 
     [
-        'get_powerup'
+        'get_powerup',
+        'like_powerup'
     ].
 
 struct_info(_) -> erlang:error(badarg).
@@ -33,5 +34,15 @@ function_info('get_powerup', exceptions) ->
     {struct, [
         {1, undefined, {struct, {rpc_test_types, 'failure'}}, 'error', #'failure'{}}
     ]};
+% like_powerup(This, Name, Data)
+function_info('like_powerup', params_type) ->
+    {struct, [
+        {1, undefined, string, 'name', undefined},
+        {2, undefined, string, 'data', undefined}
+    ]};
+function_info('like_powerup', reply_type) ->
+    oneway_void;
+function_info('like_powerup', exceptions) ->
+    {struct, []};
 function_info(_Func, _Info) -> erlang:error(badarg).
 
