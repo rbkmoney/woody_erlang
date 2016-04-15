@@ -33,20 +33,20 @@
 }.
 
 -type options() :: #{
-    handlers => list(server_handler()),
+    handlers      => list(server_handler()),
     event_handler => rpc_t:handler(),
-    ip => inet:ip_address(),
-    port => inet:port_address(),
-    net_opts => list()
+    ip            => inet:ip_address(),
+    port          => inet:port_address(),
+    net_opts      => list()
 }.
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
 -define(log_event(EventHandler, Event, Status, Dir, Meta),
     rpc_event_handler:handle_event(EventHandler, Event, Meta#{
-        rpc_role => server,
+        rpc_role  => server,
         direction => Dir,
-        status => Status
+        status    => Status
     })
 ).
 
@@ -54,8 +54,8 @@
 -define(event_rpc_receive, receive_request).
 
 -define(HEADERS_RPC_ID, #{
-    req_id => ?HEADER_NAME_RPC_ID,
-    root_req_id => ?HEADER_NAME_RPC_ROOT_ID,
+    req_id        => ?HEADER_NAME_RPC_ID,
+    root_req_id   => ?HEADER_NAME_RPC_ROOT_ID,
     parent_req_id => ?HEADER_NAME_RPC_PARENT_ID
 }).
 
@@ -66,10 +66,10 @@
 -spec child_spec(_Id, options()) ->
     supervisor:child_spec().
 child_spec(Id, #{
-    handlers := Handlers,
+    handlers      := Handlers,
     event_handler := EventHandler,
-    ip := Ip,
-    port := Port,
+    ip            := Ip,
+    port          := Port,
     net_opts := NetOpts
 }) ->
     _ = check_callback(handle_event, 2, EventHandler),
@@ -93,7 +93,7 @@ validate_handler(Handler) when is_atom(Handler) ->
 
 get_socket_transport(Ip, Port, Options) ->
     Opts = [
-        {ip, Ip},
+        {ip,   Ip},
         {port, Port}
     ],
     case genlib_opts:get(ssl, Options) of
@@ -121,20 +121,20 @@ config() ->
 %% thrift_transport callbacks
 %%
 -record(http_req, {
-    req :: cowboy_req:req(),
-    rpc_id :: rpc_t:rpc_id(),
-    body = <<>> :: binary(),
+    req              :: cowboy_req:req(),
+    rpc_id           :: rpc_t:rpc_id(),
+    body = <<>>      :: binary(),
     resp_body = <<>> :: binary(),
-    event_handler :: rpc_t:handler(),
-    replied = false :: boolean()
+    event_handler    :: rpc_t:handler(),
+    replied = false  :: boolean()
 }).
 -type state() :: #http_req{}.
 
 make_transport(Req, RpcId, Body, EventHandler) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #http_req{
-        req = Req,
-        rpc_id = RpcId,
-        body = Body,
+        req           = Req,
+        rpc_id        = RpcId,
+        body          = Body,
         event_handler = EventHandler
     }),
     Transport.
@@ -153,20 +153,15 @@ write(State = #http_req{resp_body = Resp}, Data) ->
 flush(State = #http_req{replied = true}) ->
     {State, {error, already_replied}};
 flush(State = #http_req{
-    req = Req,
-    rpc_id = RpcId,
-    resp_body = Body,
+    req           = Req,
+    rpc_id        = RpcId,
+    resp_body     = Body,
     event_handler = EventHandler
 }) ->
     {Code, Req1} = add_x_error_header(Req),
     ?log_event(EventHandler, ?event_send_reply, reply_status(Code),
         response, RpcId#{code => Code}),
-    {ok, Req2} = cowboy_req:reply(
-        Code,
-        [],
-        Body,
-        Req1
-    ),
+    {ok, Req2} = cowboy_req:reply(Code, [], Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
 
 reply_status(200) -> ok;
@@ -185,8 +180,8 @@ mark_thrift_error(Type, Error) ->
 %% cowboy_http_handler callbacks
 %%
 -spec init({_, http}, cowboy_req:req(), list()) ->
-    {ok, cowboy_req:req(), list()} |
-    {shutdown, cowboy_req:req(), _}.
+    {ok       , cowboy_req:req(), list()} |
+    {shutdown , cowboy_req:req(), _}.
 init({_Transport, http}, Req, Opts = [EventHandler|_]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
@@ -308,7 +303,7 @@ handle_error(_Error, RpcId, EventHandler, Req) ->
 
 reply_error(Code, RpcId, EventHandler, Req) when is_integer(Code), Code >= 400 ->
     ?log_event(EventHandler, ?event_send_reply, error, response, RpcId#{code => Code}),
-    {_, Req1} = add_x_error_header(Req),
+    {_,  Req1} = add_x_error_header(Req),
     {ok, Req2} = cowboy_req:reply(Code, Req1),
     {ok, Req2, undefined}.
 

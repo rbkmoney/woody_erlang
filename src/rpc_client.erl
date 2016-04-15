@@ -30,12 +30,12 @@
 %% API
 %%
 -type client() :: #{  %% all elements are mandatory
-    root_rpc => boolean(),
-    req_id => rpc_t:req_id() | undefined,
-    root_req_id => rpc_t:req_id(),
+    root_rpc      => boolean(),
+    req_id        => rpc_t:req_id() | undefined,
+    root_req_id   => rpc_t:req_id(),
     parent_req_id => rpc_t:req_id(),
     event_handler => rpc_t:handler(),
-    seq => non_neg_integer()
+    seq           => non_neg_integer()
 }.
 
 -type result_ok() :: {ok, _Reply, client()} | {ok, client()}.
@@ -44,9 +44,9 @@
 -type request() :: any().
 
 -type options() :: #{
-    protocol => thrift, %% optional
+    protocol  => thrift, %% optional
     transport => http, %% optional
-    url => rpc_t:url() %% mandatory
+    url       => rpc_t:url() %% mandatory
 }.
 
 -type callback() :: fun((result_ok() | result_error()) -> _).
@@ -54,22 +54,22 @@
 -spec new(rpc_t:req_id(), rpc_t:handler()) -> client().
 new(ReqId, EventHandler) ->
     #{
-        root_rpc => true,
-        req_id => ReqId,
-        root_req_id => ReqId,
+        root_rpc      => true,
+        req_id        => ReqId,
+        root_req_id   => ReqId,
         parent_req_id => ReqId,
-        seq => 0,
+        seq           => 0,
         event_handler => EventHandler
     }.
 
 -spec make_child_client(rpc_t:rpc_id(), rpc_t:handler()) -> client().
 make_child_client(#{req_id := ReqId, root_req_id := RootReqId}, EventHandler) ->
     #{
-        root_rpc => false,
-        req_id => undefined,
-        root_req_id => RootReqId,
+        root_rpc      => false,
+        req_id        => undefined,
+        root_req_id   => RootReqId,
         parent_req_id => ReqId,
-        seq => 0,
+        seq           => 0,
         event_handler => EventHandler
     }.
 
@@ -98,12 +98,12 @@ call_safe(Client, Request, Options) ->
 call_async(Sup, Callback, Client, Request, Options) ->
     _ = rpc_t:get_protocol_handler(client, Options),
     SupervisorSpec = #{
-        id => {?MODULE, rpc_clients_sup},
-        start => {supervisor, start_link, [?MODULE, rpc_client_sup]},
-        restart => permanent,
+        id       => {?MODULE, rpc_clients_sup},
+        start    => {supervisor, start_link, [?MODULE, rpc_client_sup]},
+        restart  => permanent,
         shutdown => infinity,
-        type => supervisor,
-        modules => [?MODULE]
+        type     => supervisor,
+        modules  => [?MODULE]
     },
     ClientSup = case supervisor:start_child(Sup, SupervisorSpec) of
         {ok, Pid} -> Pid;
@@ -131,17 +131,17 @@ do_call_async(Callback, Client, Request, Options) ->
 init(rpc_client_sup) ->
     {ok, {
         #{
-            strategy => simple_one_for_one,
+            strategy  => simple_one_for_one,
             intensity => 1,
-            period => 1
+            period    => 1
         },
         [#{
-            id => undefined,
-            start => {?MODULE, init_call_async, []},
-            restart => temporary,
+            id       => undefined,
+            start    => {?MODULE, init_call_async, []},
+            restart  => temporary,
             shutdown => brutal_kill,
-            type => worker,
-            modules => []
+            type     => worker,
+            modules  => []
         }]
     }
 }.

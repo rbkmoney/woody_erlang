@@ -15,11 +15,11 @@
 
 -type options() :: map().
 -type handler() :: module().
--type url() :: binary().
--type role() :: client | server.
+-type url()     :: binary().
+-type role()    :: client | server.
 
 -type service() :: handler().
--type func() :: atom().
+-type func()    :: atom().
 
 %% copy-paste from OTP supervsor
 -type sup_ref()  :: (Name :: atom())
@@ -35,13 +35,14 @@
 %%
 %% API
 %%
--spec get_protocol_handler(role(), map()) -> rpc_thrift_client | rpc_thrift_http_handler | no_return().
+-spec get_protocol_handler(role(), map()) ->
+    rpc_thrift_client | rpc_thrift_http_handler | no_return().
 get_protocol_handler(Role, Opts) when Role =:= client ; Role =:= server->
-    Protocol = genlib_map:get(protocol, Opts, thrift),
+    Protocol  = genlib_map:get(protocol, Opts, thrift),
     Transport = genlib_map:get(transport, Opts, http),
     case {Protocol, Transport, Role} of
         {thrift, http, client} -> rpc_thrift_client;
         {thrift, http, server} -> rpc_thrift_http_handler;
-        {_, http, _} -> error({badarg, protocol_unsupported});
-        {thrift, _, _} -> error({badarg, transport_unsupported})
+        {_, http, _}           -> error({badarg, protocol_unsupported});
+        {thrift, _, _}         -> error({badarg, transport_unsupported})
     end.

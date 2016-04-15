@@ -18,13 +18,13 @@
 -export_type([url/0]).
 
 -type rpc_transport() :: #{
-    req_id => rpc_t:req_id(),
-    root_req_id => rpc_t:req_id(),
+    req_id        => rpc_t:req_id(),
+    root_req_id   => rpc_t:req_id(),
     parent_req_id => rpc_t:req_id(),
-    url => url(),
-    options => map(),
-    write_buffer => binary(),
-    read_buffer => binary()
+    url           => url(),
+    options       => map(),
+    write_buffer  => binary(),
+    read_buffer   => binary()
 }.
 
 
@@ -35,10 +35,10 @@
     thrift_transport:t_transport().
 new(RpcId, TransportOpts = #{url := Url}) ->
     {ok, Transport} = thrift_transport:new(?MODULE, RpcId#{
-        url => Url,
-        options => TransportOpts,
+        url          => Url,
+        options      => TransportOpts,
         write_buffer => <<>>,
-        read_buffer => <<>>
+        read_buffer  => <<>>
     }),
     Transport.
 
@@ -73,28 +73,28 @@ read(Transport = #{read_buffer := RBuffer}, Len) when
 
 -spec flush(rpc_transport()) -> {rpc_transport(), ok | {error, _Reason}}.
 flush(Transport = #{
-    url := Url,
-    req_id := ReqId,
-    root_req_id := RootReqId,
+    url           := Url,
+    req_id        := ReqId,
+    root_req_id   := RootReqId,
     parent_req_id := PaReqId,
-    options := Options,
-    write_buffer := WBuffer,
-    read_buffer := RBuffer
+    options       := Options,
+    write_buffer  := WBuffer,
+    read_buffer   := RBuffer
 }) when
     is_binary(WBuffer),
     is_binary(RBuffer)
 ->
     Headers = [
-        {<<"content-type">>, ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>, ?CONTENT_TYPE_THRIFT},
-        {?HEADER_NAME_RPC_ROOT_ID, genlib:to_binary(RootReqId)},
-        {?HEADER_NAME_RPC_ID, genlib:to_binary(ReqId)},
-        {?HEADER_NAME_RPC_PARENT_ID, genlib:to_binary(PaReqId)}
+        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
+        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(RootReqId)},
+        {?HEADER_NAME_RPC_ID        , genlib:to_binary(ReqId)},
+        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(PaReqId)}
     ],
     case send(Url, Headers, WBuffer, Options) of
         {ok, Response} ->
             {Transport#{
-                read_buffer => <<RBuffer/binary, Response/binary>>,
+                read_buffer  => <<RBuffer/binary, Response/binary>>,
                 write_buffer => <<>>
             }, ok};
         Error ->

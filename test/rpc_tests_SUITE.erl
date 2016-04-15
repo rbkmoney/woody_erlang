@@ -38,27 +38,27 @@
 }).
 
 -define(weapon(Name, Pos, Ammo), Name => #weapon{
-    name = Name,
+    name     = Name,
     slot_pos = Pos,
-    ammo = Ammo
+    ammo     = Ammo
 }).
 -define(weapon(Name, Pos), ?weapon(Name, Pos, undefined)).
 
 -define(WEAPONS, #{
-    ?weapon(<<"Impact Hammer">>, 1),
-    ?weapon(<<"Enforcer">>, 2, 25),
-    ?weapon(<<"Bio Rifle">>, 3, 0),
-    ?weapon(<<"Shock Rifle">>, 4, 0),
-    ?weapon(<<"Pulse Gun">>, 5, 0),
-    ?weapon(<<"Ripper">>, 6, 16),
-    ?weapon(<<"Minigun">>, 7, 0),
-    ?weapon(<<"Flak Cannon">>, 8, 30),
-    ?weapon(<<"Rocket Launcher">>, 9, 6),
-    ?weapon(<<"Sniper Rifle">>, 0, 20)
+    ?weapon(<<"Impact Hammer">>   , 1),
+    ?weapon(<<"Enforcer">>        , 2, 25),
+    ?weapon(<<"Bio Rifle">>       , 3, 0),
+    ?weapon(<<"Shock Rifle">>     , 4, 0),
+    ?weapon(<<"Pulse Gun">>       , 5, 0),
+    ?weapon(<<"Ripper">>          , 6, 16),
+    ?weapon(<<"Minigun">>         , 7, 0),
+    ?weapon(<<"Flak Cannon">>     , 8, 30),
+    ?weapon(<<"Rocket Launcher">> , 9, 6),
+    ?weapon(<<"Sniper Rifle">>    , 0, 20)
 }).
 
 -define(weapon_failure(Reason), #failure{
-    code = <<"weapon_error">>,
+    code   = <<"weapon_error">>,
     reason = genlib:to_binary(Reason)
 }).
 
@@ -70,20 +70,20 @@
 ).
 
 -define(POWERUPS, #{
-    ?powerup(<<"Thigh Pads">>, level = 23),
-    ?powerup(<<"Body Armor">>, level = 82),
-    ?powerup(<<"Shield Belt">>, level = 0),
-    ?powerup(<<"AntiGrav Boots">>, level = 2),
-    ?powerup(<<"Damage Amplifier">>, time_left = 0),
-    ?powerup(<<"Invisibility">>, time_left = 0)
+    ?powerup(<<"Thigh Pads">>       , level = 23),
+    ?powerup(<<"Body Armor">>       , level = 82),
+    ?powerup(<<"Shield Belt">>      , level = 0),
+    ?powerup(<<"AntiGrav Boots">>   , level = 2),
+    ?powerup(<<"Damage Amplifier">> , time_left = 0),
+    ?powerup(<<"Invisibility">>     , time_left = 0)
 }).
 
 
--define(SERVER_IP, {0,0,0,0}).
--define(SERVER_PORT, 8085).
--define(URL_BASE, "0.0.0.0:8085").
--define(PATH_WEAPONS, "/v1/rpc/test/weapons").
--define(PATH_POWERUPS, "/v1/rpc/test/powerups").
+-define(SERVER_IP     , {0,0,0,0}).
+-define(SERVER_PORT   , 8085).
+-define(URL_BASE      , "0.0.0.0:8085").
+-define(PATH_WEAPONS  , "/v1/rpc/test/weapons").
+-define(PATH_POWERUPS , "/v1/rpc/test/powerups").
 
 %%
 %% tests descriptions
@@ -148,16 +148,16 @@ init_per_testcase(_, C) ->
 
 do_init_per_testcase(Services, C) ->
     {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    {ok, _} = start_rpc_server(rpc_ct, Sup, Services),
+    {ok, _}   = start_rpc_server(rpc_ct, Sup, Services),
     [{sup, Sup} | C].
 
 start_rpc_server(Id, Sup, Services) ->
     Server = rpc_server:child_spec(Id, #{
-        handlers => [get_handler(S) || S <- Services],
+        handlers      => [get_handler(S) || S <- Services],
         event_handler => ?MODULE,
-        ip => ?SERVER_IP,
-        port => ?SERVER_PORT,
-        net_opts => []
+        ip            => ?SERVER_IP,
+        port          => ?SERVER_PORT,
+        net_opts      => []
     }),
     {ok, _} = supervisor:start_child(Sup, Server).
 
@@ -178,8 +178,10 @@ end_per_test_case(_,C) ->
     Ref = monitor(process, Sup),
     receive
         {'DOWN', Ref, process, Sup, _Reason} ->
-        ok
+            demonitor(Ref),
+            ok
     after 1000 ->
+        demonitor(Ref,[flush]),
         error(exit_timeout)
     end.
 
@@ -204,19 +206,19 @@ call_handler_throw_test(_) ->
     gun_catch_test_basic(<<"call_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
 
 call_safe_handler_throw_unexpected_test(_) ->
-    Id = <<"call_safe_handler_throw_unexpected">>,
+    Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Client = get_client(Id),
-    Expect = {error, rpc_failed, Client#{req_id => Id}},
-    Expect = call_safe(Client, weapons, switch_weapon,
+    Client  = get_client(Id),
+    Expect  = {error, rpc_failed, Client#{req_id => Id}},
+    Expect  = call_safe(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
 
 call_handler_throw_unexpected_test(_) ->
-    Id = <<"call_handler_throw_unexpected">>,
+    Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Client = get_client(Id),
-    Expect = {rpc_failed, Client#{req_id => Id}},
+    Client  = get_client(Id),
+    Expect  = {rpc_failed, Client#{req_id => Id}},
     try call(Client, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -240,8 +242,8 @@ call_client_transport_error_test(_) ->
     gun_catch_test_basic(<<"call_client_transport_error">>, Gun, {error, rpc_failed}, false).
 
 call_safe_server_transport_error_test(_) ->
-    Id = <<"call_safe_server_transport_error">>,
-    Armor = <<"Helmet">>,
+    Id     = <<"call_safe_server_transport_error">>,
+    Armor  = <<"Helmet">>,
     Client = get_client(Id),
     Expect = {error, rpc_failed, Client#{req_id => Id}},
     Expect = call_safe(Client, powerups, get_powerup,
@@ -255,7 +257,7 @@ call_handle_error_fails_test(_) ->
     do_call_server_transport_error(<<"call_handle_error_fails">>).
 
 do_call_server_transport_error(Id) ->
-    Armor = <<"Helmet">>,
+    Armor  = <<"Helmet">>,
     Client = get_client(Id),
     Expect = {rpc_failed, Client#{req_id => Id}},
     try call(Client, powerups, get_powerup, [Armor, self_to_bin()])
@@ -265,24 +267,24 @@ do_call_server_transport_error(Id) ->
     {ok, _} = receive_msg({Id, Armor}).
 
 call_oneway_void_test(_) ->
-    Id = <<"call_oneway_void_test">>,
-    Armor = <<"Helmet">>,
-    Client = get_client(Id),
-    Expect = {ok, ok, Client#{req_id => Id}},
-    Expect = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
+    Id      = <<"call_oneway_void_test">>,
+    Armor   = <<"Helmet">>,
+    Client  = get_client(Id),
+    Expect  = {ok, ok, Client#{req_id => Id}},
+    Expect  = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_async_ok_test(C) ->
-    Sup = proplists:get_value(sup, C),
-    Pid = self(),
-    Callback = fun(Res) -> collect(Res, Pid) end,
-    Id1 = <<"call_async_ok1">>,
-    Client1 = get_client(Id1),
-    Client11 = Client1#{req_id => Id1},
+    Sup        = proplists:get_value(sup, C),
+    Pid        = self(),
+    Callback   = fun(Res) -> collect(Res, Pid) end,
+    Id1        = <<"call_async_ok1">>,
+    Client1    = get_client(Id1),
+    Client11   = Client1#{req_id => Id1},
     {ok, Pid1, Client11} = get_weapon(Client1, Sup, Callback, <<"Impact Hammer">>),
-    Id2 = <<"call_async_ok2">>,
-    Client2 = get_client(Id2),
-    Client22 = Client2#{req_id => Id2},
+    Id2        = <<"call_async_ok2">>,
+    Client2    = get_client(Id2),
+    Client22   = Client2#{req_id => Id2},
     {ok, Pid2, Client22} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
     {ok, Pid1} = receive_msg({Client11, genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
     {ok, Pid2} = receive_msg({Client22, genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
@@ -294,21 +296,21 @@ collect({ok, Result, Tag}, Pid) ->
     send_msg(Pid, {Tag, Result}).
 
 check_req_ids_sequence_test(_) ->
-    Id = <<"check_req_ids_sequence">>,
+    Id      = <<"check_req_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
-    Client = get_client(Id),
-    Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS), Client#{req_id => Id}},
-    Expect = call(Client, weapons, switch_weapon,
+    Client  = get_client(Id),
+    Expect  = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS), Client#{req_id => Id}},
+    Expect  = call(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
 call_two_services_test(_) ->
-    Gun =  <<"Enforcer">>,
+    Gun     =  <<"Enforcer">>,
     gun_test_bacic(call_safe, <<"two_services1">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true),
-    Id = <<"two_services2">>,
-    Armor = <<"Body Armor">>,
-    Client = get_client(Id),
-    Expect = {ok, genlib_map:get(<<"Body Armor">>, ?POWERUPS), Client#{req_id => Id}},
-    Expect = call_safe(Client, powerups, get_powerup, [Armor, self_to_bin()]),
+    Id      = <<"two_services2">>,
+    Armor   = <<"Body Armor">>,
+    Client  = get_client(Id),
+    Expect  = {ok, genlib_map:get(<<"Body Armor">>, ?POWERUPS), Client#{req_id => Id}},
+    Expect  = call_safe(Client, powerups, get_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_with_client_pool_test(_) ->
@@ -375,7 +377,7 @@ handle_function(get_weapon, #{parent_req_id := PaReqId},
 ->
     send_msg(To,{PaReqId,Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
-        #weapon{ammo = 0} ->
+        #weapon{ammo = 0}  ->
             throw(?weapon_failure("out of ammo"));
         Weapon = #weapon{} ->
             Weapon
@@ -447,7 +449,7 @@ gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
     Expect = ?MODULE:CallFun(Client, weapons, get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
-        _ -> ok
+        _    -> ok
     end.
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
@@ -459,7 +461,7 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     end,
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
-        _ -> ok
+        _    -> ok
     end.
 
 switch_weapon(CurrentWeapon, Direction, Shift, RpcClient) ->
@@ -469,7 +471,7 @@ switch_weapon(CurrentWeapon, Direction, Shift, RpcClient) ->
         {ok, Weapon, _} ->
             {ok, Weapon};
         {throw, #failure{
-            code = <<"weapon_error">>,
+            code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }, NextClient} ->
             ok = validate_next_client(NextClient, RpcClient),

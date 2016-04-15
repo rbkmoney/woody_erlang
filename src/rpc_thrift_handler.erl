@@ -9,14 +9,11 @@
 %%
 %% behaviour definition
 %%
--type result() :: any().
--export_type([result/0]).
-
--type handler_opts() :: list().
--type args() :: list().
--export_type([handler_opts/0, args/0]).
-
 -type error_reason() :: any().
+-type result()       :: any().
+-type handler_opts() :: list().
+-type args()         :: list().
+-export_type([handler_opts/0, args/0, result/0, error_reason/0]).
 
 -callback handle_function(rpc_t:func(), rpc_client:client(), args(), handler_opts()) ->
     ok | {ok, result()} | {error, result()} | no_return().
@@ -32,25 +29,25 @@
     })
 ).
 
--define(error_unknown_function, no_function).
--define(error_multiplexed_req, multiplexed_request).
--define(error_protocol_send, send_error).
+-define(error_unknown_function , no_function).
+-define(error_multiplexed_req  , multiplexed_request).
+-define(error_protocol_send    , send_error).
 
--define(stage_read, thrift_protocol_read).
--define(stage_write, thrift_protocol_write).
+-define(stage_read             , thrift_protocol_read).
+-define(stage_write            , thrift_protocol_write).
 
--define(event_handle_func_res, handle_function_result).
--define(event_handle_error_res, handle_error_result).
+-define(event_handle_func_res  , handle_function_result).
+-define(event_handle_error_res , handle_error_result).
 
 -record(state, {
-    rpc_id :: rpc_t:rpc_id(),
-    rpc_client :: rpc_client:client(),
-    service :: module(),
-    handler :: rpc_t:handler(),
-    handler_opts :: handler_opts(),
-    protocol :: any(),
-    protocol_stage :: ?stage_read | ?stage_write,
-    event_handler :: rpc_t:handler(),
+    rpc_id            :: rpc_t:rpc_id(),
+    rpc_client        :: rpc_client:client(),
+    service           :: module(),
+    handler           :: rpc_t:handler(),
+    handler_opts      :: handler_opts(),
+    protocol          :: any(),
+    protocol_stage    :: ?stage_read | ?stage_write,
+    event_handler     :: rpc_t:handler(),
     transport_handler :: rpc_t:handler()
 }).
 
@@ -69,14 +66,14 @@ start(Transport, RpcId, RpcClient, {Service, Handler, Opts}, EventHandler, Trans
         [{strict_read, true}, {strict_write, true}]
     ),
     {Result, Protocol1} = process(#state{
-            rpc_id = RpcId,
-            rpc_client = RpcClient,
-            service = Service,
-            handler = Handler,
-            handler_opts = Opts,
-            protocol = Protocol,
-            protocol_stage = ?stage_read,
-            event_handler = EventHandler,
+            rpc_id            = RpcId,
+            rpc_client        = RpcClient,
+            service           = Service,
+            handler           = Handler,
+            handler_opts      = Opts,
+            protocol          = Protocol,
+            protocol_stage    = ?stage_read,
+            event_handler     = EventHandler,
             transport_handler = TransportHandler
     }),
     thrift_protocol:close_transport(Protocol1),
@@ -154,10 +151,10 @@ try_call_handler(Function, Args, State, SeqId) ->
     end.
 
 call_handler(Function,Args, #state{
-    rpc_id = RpcId,
-    rpc_client = RpcClient,
-    handler = Handler,
-    handler_opts = Opts,
+    rpc_id        = RpcId,
+    rpc_client    = RpcClient,
+    handler       = Handler,
+    handler_opts  = Opts,
     event_handler = EventHandler})
 ->
     rpc_event_handler:handle_event(EventHandler, invoke_handle_function, RpcId#{
@@ -193,10 +190,10 @@ handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
     end.
 
 handle_function_catch(State = #state{
-    rpc_id = RpcId,
-    service = Service,
-    event_handler = EventHandler}, Function, Class, Reason,
-    Stack, SeqId)
+        rpc_id        = RpcId,
+        service       = Service,
+        event_handler = EventHandler
+    }, Function, Class, Reason,Stack, SeqId)
 ->
     ReplyType = Service:function_info(Function, reply_type),
     case {Class, Reason} of
@@ -273,23 +270,23 @@ prepare_response({State, {error, Reason}}, FunctionName) ->
     {handle_protocol_error(State, FunctionName, Reason), State#state.protocol}.
 
 handle_protocol_error(State = #state{
-    rpc_id = RpcId,
-    protocol_stage = Stage,
+    rpc_id            = RpcId,
+    protocol_stage    = Stage,
     transport_handler = Trans,
-    event_handler = EventHandler}, Function, Reason)
+    event_handler     = EventHandler}, Function, Reason)
 ->
     call_error_handler(State, Function, Reason),
     ?log_rpc_result(EventHandler, Stage, error, get_direction(Stage), RpcId#{reason => Reason}),
     format_protocol_error(Reason, Trans).
 
-get_direction(?stage_read) -> request;
+get_direction(?stage_read)  -> request;
 get_direction(?stage_write) -> response.
 
 call_error_handler(#state{
-    rpc_id = RpcId,
-    rpc_client = RpcClient,
-    handler = Handler,
-    handler_opts = Opts,
+    rpc_id        = RpcId,
+    rpc_client    = RpcClient,
+    handler       = Handler,
+    handler_opts  = Opts,
     event_handler = EventHandler}, Function, Reason) ->
     try
         Handler:handle_error(Function, RpcClient, Reason, Opts),

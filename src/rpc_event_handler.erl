@@ -7,7 +7,7 @@
 %% behaviour definition
 %%
 -type event_type() :: atom() | {atom(), any()}.
--type meta() :: #{atom() => term()}.
+-type meta()       :: #{atom() => term()}.
 -export_type([event_type/0, meta/0]).
 
 -callback handle_event(event_type(), meta()) -> _.

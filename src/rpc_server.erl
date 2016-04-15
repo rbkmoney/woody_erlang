@@ -20,7 +20,7 @@
 %% API
 %%
 -type options() :: #{
-    protocol => thrift, %% optional
+    protocol  => thrift, %% optional
     transport => http %% optional
 }.
 
@@ -29,12 +29,12 @@ child_spec(Id, Options) ->
     ProtocolHandler = rpc_t:get_protocol_handler(server, Options),
     ServerSpec = ProtocolHandler:child_spec(Id, Options),
     #{
-        id => Id,
-        start => {supervisor, start_link, [?MODULE, {rpc_server, ServerSpec}]},
-        restart => permanent,
+        id       => Id,
+        start    => {supervisor, start_link, [?MODULE, {rpc_server, ServerSpec}]},
+        restart  => permanent,
         shutdown => infinity,
-        type => supervisor,
-        modules => [?MODULE]
+        type     => supervisor,
+        modules  => [?MODULE]
     }.
 
 %%
@@ -43,8 +43,8 @@ child_spec(Id, Options) ->
 -spec init({rpc_server, supervisor:child_spec()}) -> {ok, {#{}, [#{}, ...]}}.
 init({rpc_server, ChildSpec}) ->
     {ok, {#{
-        strategy => one_for_one,
+        strategy  => one_for_one,
         intensity => 10,
-        period => 10},
+        period    => 10},
     [ChildSpec]}
 }.
