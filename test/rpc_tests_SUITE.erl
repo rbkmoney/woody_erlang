@@ -14,8 +14,8 @@
 -export([init/1]).
 
 %% rpc_thrift_handler callbacks
--export([handle_function/4]).
--export([handle_error/4]).
+-export([handle_function/5]).
+-export([handle_error/5]).
 
 %% rpc_event_handler callbacks
 -export([handle_event/2]).
@@ -366,16 +366,18 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, RpcClient = #{parent_id := ParentId},
-    {CurrentWeapon, Direction, Shift, To}, _Opts
-) ->
-    send_msg(To, {ParentId, CurrentWeapon}),
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
+    _RpcId    = #{span_id   := SpanId, trace_id := TraceId},
+    RpcClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+->
+    send_msg(To, {SpanId, CurrentWeapon}),
     switch_weapon(CurrentWeapon, Direction, Shift, RpcClient);
 
-handle_function(get_weapon, #{parent_id := ParentId},
-    {Name, To}, _Opts)
+handle_function(get_weapon, {Name, To},
+    #{span_id   := SpanId, trace_id := TraceId},
+    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
 ->
-    send_msg(To,{ParentId,Name}),
+    send_msg(To,{SpanId, Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #weapon{ammo = 0}  ->
             throw(?weapon_failure("out of ammo"));
@@ -385,16 +387,28 @@ handle_function(get_weapon, #{parent_id := ParentId},
     {ok, Res};
 
 %% Powerups
-handle_function(get_powerup, #{parent_id := ParentId}, {Name, To}, _Opts) ->
-    send_msg(To, {ParentId, Name}),
+handle_function(get_powerup, {Name, To},
+    #{span_id   := SpanId, trace_id := TraceId},
+    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+->
+    send_msg(To, {SpanId, Name}),
     {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
-handle_function(like_powerup, #{parent_id := ParentId}, {Name, To}, _Opts) ->
-    send_msg(To, {ParentId, Name}),
+handle_function(like_powerup, {Name, To},
+    #{span_id   := SpanId, trace_id := TraceId},
+    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+->
+    send_msg(To, {SpanId, Name}),
     ok.
 
-handle_error(get_powerup, #{parent_id := <<"call_handle_error_fails">>}, _, _) ->
+handle_error(get_powerup, _,
+    #{trace_id := TraceId, span_id   := SpanId = <<"call_handle_error_fails">>},
+    #{trace_id := TraceId, parent_id := SpanId}, _Opts)
+->
     error(no_more_powerups);
-handle_error(_Function, _RpcClient, _Reason, _Opts) ->
+handle_error(_Function, _Reason,
+    _RpcId     = #{span_id   := SpanId, trace_id := TraceId},
+    _RpcClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+->
     ok.
 
 

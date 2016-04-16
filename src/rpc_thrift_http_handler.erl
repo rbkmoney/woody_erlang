@@ -88,7 +88,7 @@ check_callback(Callback, Module) ->
     proplists:get_value(Callback, Module:module_info(exports)).
 
 validate_handler(Handler) when is_atom(Handler) ->
-    [check_callback(F, 4, Handler) || F <- [handle_function, handle_error]],
+    [check_callback(F, 5, Handler) || F <- [handle_function, handle_error]],
     Handler.
 
 get_socket_transport(Ip, Port, Options) ->

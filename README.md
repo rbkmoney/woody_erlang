@@ -1,7 +1,7 @@
 RPC [![wercker status](https://app.wercker.com/status/16ae0cdda280aed795f28131edefa41f/s "wercker status")](https://app.wercker.com/project/bykey/16ae0cdda280aed795f28131edefa41f)
 ======
 
-Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://52.29.202.218/scrapyard/rpc-lib/).
+Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://52.29.202.218/scrapyard/rpc-lib).
 
 На текущий момент RPC реализован с помощью Thrift протокола поверх http.
 
@@ -13,8 +13,8 @@ Erlang реализация [Библиотеки RPC вызовов для об
 
 ```erlang
 1> EventHandler = my_event_handler.  %% реализует rpc_event_handler behaviour
-2> Service = money_service.  %% имя модуля, описывающего thrift сервис
-3> ThriftHandler = thrift_money_service_handler.  %% реализует rpc_thrift_handler behaviour
+2> Service = my_money_service.  %% реализует thrift_service behaviour (генерируется из .thrift файла)
+3> ThriftHandler = my_money_thrift_service_handler.  %% реализует rpc_thrift_handler behaviour
 4> Opts = [].
 5> Handlers = [{"/v1/thrift_money_service",{Service, ThriftHandler, Opts}}].
 6> ServerSpec = rpc_server:child_spec(money_service_sup, #{
@@ -45,7 +45,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 13> {ok, Result, _NextClient} = rpc_client:call(Client, Request, #{url => Url}).
 ```
 
-В случае, когда сервер бросает Exception, описанный в _.thrift_ файле сервиса,
+В случае, когда сервер бросает _exception_, описанный в _.thrift_ файле сервиса,
 `rpc_client:call/3` бросит это же исключение в виде: `throw:{Exception, NextClient}`, а в случае неудачи RPC вызова: `error:{rpc_failed, NextClient}`.
 
 `rpc_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{Class, Error, NextClient}`.
@@ -68,7 +68,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 20> {ok, Pid, _NextClient2} = rpc_client:call_async(SupRef, Callback, Client2, Request, #{url => Url}).
 ```
 
-Можно создать пул коннектов для thrift клиента: `rpc_thrift_client:start_pool/2` и затем использовать его при работе с `rpc_client`:
+Можно создать пул соединений для thrift клиента: `rpc_thrift_client:start_pool/2` и затем использовать его при работе с `rpc_client`:
 
 ```erlang
 21> Pool = my_client_pool.
@@ -81,4 +81,10 @@ Erlang реализация [Библиотеки RPC вызовов для об
 
 ### Важно!
 
-В предыдущих примерах новый thrift клиент `Client` создаётся с помощью `rpc_client:new/2` перед каждым RPC вызовом. В реальном микросервисе, использующем эту библиотеку, в большинстве случаев RPC вызов будет результатом обработки внешнего RPC вызова к этому микросервису. В таком случае `Client` будет получен в рамках `ThriftHandler:handle_function/4` на стороне RPC сервера. Это значение `Client` надо использовать при первом call вызове `rpc_client` API (т.е. вызывать `rpc_client:new/2` не надо). Полученный в результате `NextClient` следует передать в следующий API вызов `rpc_client` и.т.д. Это необходимо, для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
+В предыдущих примерах новый thrift клиент `Client` создаётся с помощью `rpc_client:new/2` перед каждым RPC вызовом. В реальном микросервисе, использующем эту библиотеку, в большинстве случаев RPC запрос будет результатом обработки внешнего RPC вызова к этому микросервису. В таком случае `Client` будет получен в рамках `ThriftHandler:handle_function/5` (реализация `rpc_thrift_handler` _behaviour_) на стороне RPC сервера. Это значение `Client` надо использовать при первом call вызове `rpc_client` API (т.е. вызывать `rpc_client:new/2` не надо). Полученный в результате `NextClient` (в том числе и через _exception_ в случае с `rpc_client:call/3`) следует передать в следующий API вызов `rpc_client` и.т.д.
+
+Также важно заметить, что в `ThriftHandler:handle_function/5` передается переменная `RpcId` (_map_ с тройкой ключей _span id_, _parent id_ и _trace id_, идентифицирующих RPC запрос в дереве обработки запросов), которую следует использовать в хэндлере при логировании событий, относящихся к обработке RPC вызова.
+
+Те же требования касаются и значений `Client` и `RpcId`, которые передаются в функцию `ThriftHandler:handle_error/5`.
+
+Все это необходимо, для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.

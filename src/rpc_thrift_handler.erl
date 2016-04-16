@@ -15,10 +15,10 @@
 -type args()         :: list().
 -export_type([handler_opts/0, args/0, result/0, error_reason/0]).
 
--callback handle_function(rpc_t:func(), rpc_client:client(), args(), handler_opts()) ->
+-callback handle_function(rpc_t:func(), args(), rpc_t:rpc_id(), rpc_client:client(), handler_opts()) ->
     ok | {ok, result()} | {error, result()} | no_return().
 
--callback handle_error(rpc_t:func(), rpc_client:client(), error_reason(), handler_opts()) -> _.
+-callback handle_error(rpc_t:func(), error_reason(), rpc_t:rpc_id(), rpc_client:client(), handler_opts()) -> _.
 
 %%
 %% API
@@ -161,7 +161,7 @@ call_handler(Function,Args, #state{
         rpc_role => server, direction => request,
         function => Function, args => Args, options => Opts
     }),
-    Result = Handler:handle_function(Function, RpcClient, Args, Opts),
+    Result = Handler:handle_function(Function, Args, RpcId, RpcClient, Opts),
     ?log_rpc_result(EventHandler, ?event_handle_func_res, ok, response, RpcId#{result => Result}),
     Result.
 
@@ -296,7 +296,7 @@ call_error_handler(#state{
     handler_opts  = Opts,
     event_handler = EventHandler}, Function, Reason) ->
     try
-        Handler:handle_error(Function, RpcClient, Reason, Opts),
+        Handler:handle_error(Function, Reason, RpcId, RpcClient, Opts),
         ?log_rpc_result(EventHandler, ?event_handle_error_res, ok, response, RpcId)
     catch
         Class:Error ->
