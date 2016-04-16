@@ -54,9 +54,9 @@
 -define(event_rpc_receive, receive_request).
 
 -define(HEADERS_RPC_ID, #{
-    req_id        => ?HEADER_NAME_RPC_ID,
-    root_req_id   => ?HEADER_NAME_RPC_ROOT_ID,
-    parent_req_id => ?HEADER_NAME_RPC_PARENT_ID
+    span_id   => ?HEADER_NAME_RPC_ID,
+    trace_id  => ?HEADER_NAME_RPC_ROOT_ID,
+    parent_id => ?HEADER_NAME_RPC_PARENT_ID
 }).
 
 

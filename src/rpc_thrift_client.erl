@@ -33,7 +33,7 @@ stop_pool(Name) ->
 call(Client = #{event_handler := EventHandler},
     {Service, Function, Args}, TransportOpts = #{url := Url})
 ->
-    RpcId = maps:with([req_id, root_req_id, parent_req_id], Client),
+    RpcId = maps:with([span_id, trace_id, parent_id], Client),
     rpc_event_handler:handle_event(EventHandler, send_request, RpcId#{
         rpc_role  => client,
         direction => request,
@@ -42,7 +42,7 @@ call(Client = #{event_handler := EventHandler},
         function  => Function,
         args      => Args
     }),
-    Result = do_call(make_thrift_client( RpcId, Service, TransportOpts), Function, Args),
+    Result = do_call(make_thrift_client(RpcId, Service, TransportOpts), Function, Args),
     rpc_event_handler:handle_event(EventHandler, receive_response, RpcId#{
         rpc_role   => client,
         direction  => response,

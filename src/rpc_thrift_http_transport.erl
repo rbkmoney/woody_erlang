@@ -18,13 +18,13 @@
 -export_type([url/0]).
 
 -type rpc_transport() :: #{
-    req_id        => rpc_t:req_id(),
-    root_req_id   => rpc_t:req_id(),
-    parent_req_id => rpc_t:req_id(),
-    url           => url(),
-    options       => map(),
-    write_buffer  => binary(),
-    read_buffer   => binary()
+    span_id      => rpc_t:req_id(),
+    trace_id     => rpc_t:req_id(),
+    parent_id    => rpc_t:req_id(),
+    url          => url(),
+    options      => map(),
+    write_buffer => binary(),
+    read_buffer  => binary()
 }.
 
 
@@ -73,13 +73,13 @@ read(Transport = #{read_buffer := RBuffer}, Len) when
 
 -spec flush(rpc_transport()) -> {rpc_transport(), ok | {error, _Reason}}.
 flush(Transport = #{
-    url           := Url,
-    req_id        := ReqId,
-    root_req_id   := RootReqId,
-    parent_req_id := PaReqId,
-    options       := Options,
-    write_buffer  := WBuffer,
-    read_buffer   := RBuffer
+    url          := Url,
+    span_id      := SpanId,
+    trace_id     := TraceId,
+    parent_id    := ParentId,
+    options      := Options,
+    write_buffer := WBuffer,
+    read_buffer  := RBuffer
 }) when
     is_binary(WBuffer),
     is_binary(RBuffer)
@@ -87,9 +87,9 @@ flush(Transport = #{
     Headers = [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(RootReqId)},
-        {?HEADER_NAME_RPC_ID        , genlib:to_binary(ReqId)},
-        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(PaReqId)}
+        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(TraceId)},
+        {?HEADER_NAME_RPC_ID        , genlib:to_binary(SpanId)},
+        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(ParentId)}
     ],
     case send(Url, Headers, WBuffer, Options) of
         {ok, Response} ->

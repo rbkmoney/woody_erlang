@@ -105,7 +105,7 @@ all() ->
         call_handle_error_fails_test,
         call_oneway_void_test,
         call_async_ok_test,
-        check_req_ids_sequence_test,
+        check_span_ids_sequence_test,
         call_two_services_test,
         call_with_client_pool_test,
         multiplexed_transport_test
@@ -209,7 +209,7 @@ call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client  = get_client(Id),
-    Expect  = {error, rpc_failed, Client#{req_id => Id}},
+    Expect  = {error, rpc_failed, Client#{span_id => Id}},
     Expect  = call_safe(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
@@ -218,7 +218,7 @@ call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client  = get_client(Id),
-    Expect  = {rpc_failed, Client#{req_id => Id}},
+    Expect  = {rpc_failed, Client#{span_id => Id}},
     try call(Client, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -245,7 +245,7 @@ call_safe_server_transport_error_test(_) ->
     Id     = <<"call_safe_server_transport_error">>,
     Armor  = <<"Helmet">>,
     Client = get_client(Id),
-    Expect = {error, rpc_failed, Client#{req_id => Id}},
+    Expect = {error, rpc_failed, Client#{span_id => Id}},
     Expect = call_safe(Client, powerups, get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
@@ -259,7 +259,7 @@ call_handle_error_fails_test(_) ->
 do_call_server_transport_error(Id) ->
     Armor  = <<"Helmet">>,
     Client = get_client(Id),
-    Expect = {rpc_failed, Client#{req_id => Id}},
+    Expect = {rpc_failed, Client#{span_id => Id}},
     try call(Client, powerups, get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
@@ -270,7 +270,7 @@ call_oneway_void_test(_) ->
     Id      = <<"call_oneway_void_test">>,
     Armor   = <<"Helmet">>,
     Client  = get_client(Id),
-    Expect  = {ok, ok, Client#{req_id => Id}},
+    Expect  = {ok, ok, Client#{span_id => Id}},
     Expect  = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
@@ -280,11 +280,11 @@ call_async_ok_test(C) ->
     Callback   = fun(Res) -> collect(Res, Pid) end,
     Id1        = <<"call_async_ok1">>,
     Client1    = get_client(Id1),
-    Client11   = Client1#{req_id => Id1},
+    Client11   = Client1#{span_id => Id1},
     {ok, Pid1, Client11} = get_weapon(Client1, Sup, Callback, <<"Impact Hammer">>),
     Id2        = <<"call_async_ok2">>,
     Client2    = get_client(Id2),
-    Client22   = Client2#{req_id => Id2},
+    Client22   = Client2#{span_id => Id2},
     {ok, Pid2, Client22} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
     {ok, Pid1} = receive_msg({Client11, genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
     {ok, Pid2} = receive_msg({Client22, genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
@@ -295,11 +295,11 @@ get_weapon(Client, Sup, Cb, Gun) ->
 collect({ok, Result, Tag}, Pid) ->
     send_msg(Pid, {Tag, Result}).
 
-check_req_ids_sequence_test(_) ->
-    Id      = <<"check_req_ids_sequence">>,
+check_span_ids_sequence_test(_) ->
+    Id      = <<"check_span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Client  = get_client(Id),
-    Expect  = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS), Client#{req_id => Id}},
+    Expect  = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS), Client#{span_id => Id}},
     Expect  = call(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
@@ -309,7 +309,7 @@ call_two_services_test(_) ->
     Id      = <<"two_services2">>,
     Armor   = <<"Body Armor">>,
     Client  = get_client(Id),
-    Expect  = {ok, genlib_map:get(<<"Body Armor">>, ?POWERUPS), Client#{req_id => Id}},
+    Expect  = {ok, genlib_map:get(<<"Body Armor">>, ?POWERUPS), Client#{span_id => Id}},
     Expect  = call_safe(Client, powerups, get_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
@@ -320,7 +320,7 @@ call_with_client_pool_test(_) ->
     Gun =  <<"Enforcer">>,
     Client = get_client(Id),
     {Url, Service} = get_service_endpoint(weapons),
-    Expect = {ok, genlib_map:get(Gun, ?WEAPONS), Client#{req_id => Id}},
+    Expect = {ok, genlib_map:get(Gun, ?WEAPONS), Client#{span_id => Id}},
     Expect = rpc_client:call(
         Client,
         {Service, get_weapon, [Gun, self_to_bin()]},
@@ -342,7 +342,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
         rpc_thrift_http_transport:new(
             #{
-                req_id => Id, root_req_id => Id, parent_req_id => Id
+                span_id => Id, trace_id => Id, parent_id => Id
             },
            #{url => Url}
         ),
@@ -366,16 +366,16 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, RpcClient = #{parent_req_id := PaReqId},
+handle_function(switch_weapon, RpcClient = #{parent_id := ParentId},
     {CurrentWeapon, Direction, Shift, To}, _Opts
 ) ->
-    send_msg(To, {PaReqId, CurrentWeapon}),
+    send_msg(To, {ParentId, CurrentWeapon}),
     switch_weapon(CurrentWeapon, Direction, Shift, RpcClient);
 
-handle_function(get_weapon, #{parent_req_id := PaReqId},
+handle_function(get_weapon, #{parent_id := ParentId},
     {Name, To}, _Opts)
 ->
-    send_msg(To,{PaReqId,Name}),
+    send_msg(To,{ParentId,Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #weapon{ammo = 0}  ->
             throw(?weapon_failure("out of ammo"));
@@ -385,14 +385,14 @@ handle_function(get_weapon, #{parent_req_id := PaReqId},
     {ok, Res};
 
 %% Powerups
-handle_function(get_powerup, #{parent_req_id := PaReqId}, {Name, To}, _Opts) ->
-    send_msg(To, {PaReqId, Name}),
+handle_function(get_powerup, #{parent_id := ParentId}, {Name, To}, _Opts) ->
+    send_msg(To, {ParentId, Name}),
     {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
-handle_function(like_powerup, #{parent_req_id := PaReqId}, {Name, To}, _Opts) ->
-    send_msg(To, {PaReqId, Name}),
+handle_function(like_powerup, #{parent_id := ParentId}, {Name, To}, _Opts) ->
+    send_msg(To, {ParentId, Name}),
     ok.
 
-handle_error(get_powerup, #{parent_req_id := <<"call_handle_error_fails">>}, _, _) ->
+handle_error(get_powerup, #{parent_id := <<"call_handle_error_fails">>}, _, _) ->
     error(no_more_powerups);
 handle_error(_Function, _RpcClient, _Reason, _Opts) ->
     ok.
@@ -445,7 +445,7 @@ get_service_endpoint(powerups) ->
 
 gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
     Client = get_client(Id),
-    Expect = {ExpectStatus, ExpectRes, Client#{req_id => Id}},
+    Expect = {ExpectStatus, ExpectRes, Client#{span_id => Id}},
     Expect = ?MODULE:CallFun(Client, weapons, get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
@@ -454,7 +454,7 @@ gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     Client = get_client(Id),
-    Expect = {Exception, Client#{req_id => Id}},
+    Expect = {Exception, Client#{span_id => Id}},
     try call(Client, weapons, get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok

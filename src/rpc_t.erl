@@ -8,9 +8,9 @@
 
 -type req_id() :: binary().
 -type rpc_id() :: #{
-    req_id => rpc_id(),
-    root_req_id => rpc_id(),
-    parent_req_id => rpc_id()
+    span_id   => rpc_id(),
+    trace_id  => rpc_id(),
+    parent_id => rpc_id()
 }.
 
 -type options() :: map().

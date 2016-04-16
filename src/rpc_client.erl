@@ -16,6 +16,8 @@
 
 -export_type([client/0, options/0, result_ok/0, result_error/0]).
 
+-define(ROOT_REQ_PARENT_ID, <<"undefined">>).
+
 %% Internal API
 -export([init_call_async/4, do_call_async/4]).
 
@@ -31,14 +33,14 @@
 %%
 -type client() :: #{  %% all elements are mandatory
     root_rpc      => boolean(),
-    req_id        => rpc_t:req_id() | undefined,
-    root_req_id   => rpc_t:req_id(),
-    parent_req_id => rpc_t:req_id(),
+    span_id       => rpc_t:req_id() | undefined,
+    trace_id      => rpc_t:req_id(),
+    parent_id     => rpc_t:req_id(),
     event_handler => rpc_t:handler(),
     seq           => non_neg_integer()
 }.
 
--type result_ok() :: {ok, _Reply, client()} | {ok, client()}.
+-type result_ok() :: {ok, _Response, client()} | {ok, client()}.
 -type result_error() :: {error, rpc_failed, client()} | {throw, _Exception, client()}.
 
 -type request() :: any().
@@ -55,20 +57,20 @@
 new(ReqId, EventHandler) ->
     #{
         root_rpc      => true,
-        req_id        => ReqId,
-        root_req_id   => ReqId,
-        parent_req_id => <<"undefined">>,
+        span_id       => ReqId,
+        trace_id      => ReqId,
+        parent_id     => ?ROOT_REQ_PARENT_ID,
         seq           => 0,
         event_handler => EventHandler
     }.
 
 -spec make_child_client(rpc_t:rpc_id(), rpc_t:handler()) -> client().
-make_child_client(#{req_id := ReqId, root_req_id := RootReqId}, EventHandler) ->
+make_child_client(#{span_id := ReqId, trace_id := TraceId}, EventHandler) ->
     #{
         root_rpc      => false,
-        req_id        => undefined,
-        root_req_id   => RootReqId,
-        parent_req_id => ReqId,
+        span_id       => undefined,
+        trace_id      => TraceId,
+        parent_id     => ReqId,
         seq           => 0,
         event_handler => EventHandler
     }.
@@ -78,7 +80,7 @@ next(Client = #{root_rpc := true}) ->
     Client;
 next(Client = #{root_rpc := false, seq := Seq}) ->
     NextSeq = Seq +1,
-    Client#{req_id => make_req_id(NextSeq), seq => NextSeq}.
+    Client#{span_id => make_req_id(NextSeq), seq => NextSeq}.
 
 -spec call(client(), request(), options()) -> result_ok() | no_return().
 call(Client, Request, Options) ->
