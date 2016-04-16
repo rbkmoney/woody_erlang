@@ -34,7 +34,7 @@ function_info('switch_weapon', reply_type) ->
     {struct, {rpc_test_types, 'weapon'}};
 function_info('switch_weapon', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'failure'}}, 'error', #'failure'{}}
+        {1, undefined, {struct, {rpc_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
     ]};
 % get_weapon(This, Name, Data)
 function_info('get_weapon', params_type) ->
@@ -46,7 +46,7 @@ function_info('get_weapon', reply_type) ->
     {struct, {rpc_test_types, 'weapon'}};
 function_info('get_weapon', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'failure'}}, 'error', #'failure'{}}
+        {1, undefined, {struct, {rpc_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
     ]};
 function_info(_Func, _Info) -> erlang:error(badarg).
 

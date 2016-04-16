@@ -159,13 +159,11 @@ flush(State = #http_req{
     event_handler = EventHandler
 }) ->
     {Code, Req1} = add_x_error_header(Req),
-    ?log_event(EventHandler, ?event_send_reply, reply_status(Code),
+    ?log_event(EventHandler, ?event_send_reply, ok,
         response, RpcId#{code => Code}),
-    {ok, Req2} = cowboy_req:reply(Code, [], Body, Req1),
+    {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
+        Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
-
-reply_status(200) -> ok;
-reply_status(_) -> error.
 
 -spec close(state()) -> {state(), ok}.
 close(_State) ->
@@ -260,7 +258,8 @@ check_method(Req) ->
         {<<"POST">>, Req1} ->
             {ok, Req1};
         {Method, Req1} ->
-            {error, {wrong_method, Method}, Req1}
+            {error, {wrong_method, Method},
+                cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req1)}
     end.
 
 check_content_type({ok, Req}) ->
@@ -312,16 +311,15 @@ reply_error_early(Code, Req) when is_integer(Code) ->
     {shutdown, Req1, undefined}.
 
 set_resp_headers(RpcId, Req) ->
-    Vals = RpcId#{<<"content-type">> => ?CONTENT_TYPE_THRIFT},
-    maps:fold(fun(K, H, R) -> cowboy_req:set_resp_header(H, genlib_map:get(K, Vals), R) end, Req, ?HEADERS_RPC_ID).
+    maps:fold(fun(K, H, R) -> cowboy_req:set_resp_header(H, genlib_map:get(K, RpcId), R) end, Req, ?HEADERS_RPC_ID).
 
 
 add_x_error_header(Req) ->
     case erlang:erase(?THRIFT_ERROR_KEY) of
         undefined ->
             {200, Req};
-        {transport, Error} ->
-            {500, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_TRANSPORT, genlib:to_binary(Error), Req)};
         {logic, Error} ->
-            {200, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_LOGIC, genlib:to_binary(Error), Req)}
+            {200, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_LOGIC, genlib:to_binary(Error), Req)};
+        {transport, Error} ->
+            {500, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_TRANSPORT, genlib:to_binary(Error), Req)}
     end.

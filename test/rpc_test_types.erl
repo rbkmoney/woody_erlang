@@ -35,7 +35,8 @@ struct_names() ->
     [
         'weapon', 
         'powerup', 
-        'failure'
+        'weapon_failure', 
+        'powerup_failure'
     ].
 
 -spec enum_names() -> [atom()].
@@ -61,10 +62,18 @@ struct_info('powerup') ->
         {3, optional, i16, 'time_left', undefined}
     ]};
 
-struct_info('failure') ->
+struct_info('weapon_failure') ->
     {struct, [
-        {1, required, string, 'code', undefined},
-        {2, optional, string, 'reason', undefined}
+        {1, required, string, 'exception_name', <<"weapon failure">>},
+        {2, required, string, 'code', undefined},
+        {3, optional, string, 'reason', undefined}
+    ]};
+
+struct_info('powerup_failure') ->
+    {struct, [
+        {1, required, string, 'exception_name', <<"powerup failure">>},
+        {2, required, string, 'code', undefined},
+        {3, optional, string, 'reason', undefined}
     ]};
 
 struct_info(_) -> erlang:error(badarg).

@@ -29,15 +29,15 @@
     })
 ).
 
--define(error_unknown_function , no_function).
--define(error_multiplexed_req  , multiplexed_request).
--define(error_protocol_send    , send_error).
-
 -define(stage_read             , thrift_protocol_read).
 -define(stage_write            , thrift_protocol_write).
 
 -define(event_handle_func_res  , handle_function_result).
 -define(event_handle_error_res , handle_error_result).
+
+-define(error_unknown_function , no_function).
+-define(error_multiplexed_req  , multiplexed_request).
+-define(error_protocol_send    , send_error).
 
 -record(state, {
     rpc_id            :: rpc_t:rpc_id(),
@@ -193,7 +193,7 @@ handle_function_catch(State = #state{
         rpc_id        = RpcId,
         service       = Service,
         event_handler = EventHandler
-    }, Function, Class, Reason,Stack, SeqId)
+    }, Function, Class, Reason, Stack, SeqId)
 ->
     ReplyType = Service:function_info(Function, reply_type),
     case {Class, Reason} of
@@ -203,7 +203,7 @@ handle_function_catch(State = #state{
             {State, noreply};
         {throw, Exception} when is_tuple(Exception), size(Exception) > 0 ->
             ?log_rpc_result(EventHandler, ?event_handle_func_res, error, response,
-                RpcId#{class => throw, reason => Reason, ignore => false}),
+                RpcId#{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
             ?log_rpc_result(EventHandler, ?event_handle_func_res, error, response,
@@ -214,23 +214,30 @@ handle_function_catch(State = #state{
 
 handle_exception(State = #state{service = Service, transport_handler = Trans}, Function, Exception, SeqId) ->
     {struct, XInfo} = ReplySpec = Service:function_info(Function, exceptions),
-    ExceptionList = lists:map(fun(X) -> get_except(Exception, X) end, XInfo),
+    {ExceptionList, FoundExcept} = lists:mapfoldl(fun(X, A) -> get_except(Exception, X, A) end, undefined, XInfo),
     ExceptionTuple = list_to_tuple([Function | ExceptionList]),
-    case lists:all(fun(X) -> X =:= undefined end, ExceptionList) of
-        true ->
+    case FoundExcept of
+        undefined ->
             handle_unknown_exception(State, Function, Exception, SeqId);
-        false ->
-            mark_error_to_transport(Trans, logic, element(1, Exception)),
+        {Module, Type} ->
+            mark_error_to_transport(Trans, logic, get_except_name(Module, Type)),
             send_reply(State, Function, ?tMessageType_REPLY,
                 {ReplySpec, ExceptionTuple}, SeqId)
     end.
 
-get_except(Exception, {_Fid, _, {struct, {_Module, Type}}, _, _}) when
+get_except(Exception, {_Fid, _, {struct, {Module, Type}}, _, _}, _) when
     element(1, Exception) =:= Type
 ->
-    Exception;
-get_except(_, _) ->
-    undefined.
+    {Exception, {Module, Type}};
+get_except(_, _, TypesModule) ->
+    {undefined, TypesModule}.
+
+get_except_name(Module, Type) ->
+    {struct, Fields} = Module:struct_info(Type),
+    case lists:keyfind(exception_name, 4, Fields) of
+        false -> Type;
+        Field -> element(5, Field)
+    end.
 
 %% Called
 %% - when an exception has been explicitly thrown by the service, but it was
@@ -244,7 +251,7 @@ handle_error(State = #state{transport_handler = Trans}, Function, Error, SeqId) 
     Exception = #'TApplicationException'{message = Message,
         type = ?TApplicationException_UNKNOWN},
     Reply = {?TApplicationException_Structure, Exception},
-    mark_error_to_transport(Trans, transport, "unknown"),
+    mark_error_to_transport(Trans, transport, "application exception unknown"),
     send_reply(State, Function, ?tMessageType_EXCEPTION, Reply, SeqId).
 
 send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Reply, SeqId) ->

@@ -57,7 +57,7 @@
     ?weapon(<<"Sniper Rifle">>    , 0, 20)
 }).
 
--define(weapon_failure(Reason), #failure{
+-define(weapon_failure(Reason), #weapon_failure{
     code   = <<"weapon_error">>,
     reason = genlib:to_binary(Reason)
 }).
@@ -470,7 +470,7 @@ switch_weapon(CurrentWeapon, Direction, Shift, RpcClient) ->
     of
         {ok, Weapon, _} ->
             {ok, Weapon};
-        {throw, #failure{
+        {throw, #weapon_failure{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }, NextClient} ->

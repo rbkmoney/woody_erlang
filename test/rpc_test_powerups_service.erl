@@ -32,7 +32,7 @@ function_info('get_powerup', reply_type) ->
     {struct, {rpc_test_types, 'powerup'}};
 function_info('get_powerup', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'failure'}}, 'error', #'failure'{}}
+        {1, undefined, {struct, {rpc_test_types, 'powerup_failure'}}, 'error', #'powerup_failure'{}}
     ]};
 % like_powerup(This, Name, Data)
 function_info('like_powerup', params_type) ->

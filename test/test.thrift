@@ -17,9 +17,16 @@ enum Direction {
     PREV = 0
 }
 
-exception Failure {
-    1: required string code
-    2: optional string reason
+exception WeaponFailure {
+    1: required string exception_name = "weapon failure"
+    2: required string code
+    3: optional string reason
+}
+
+exception PowerupFailure {
+    1: required string exception_name = "powerup failure"
+    2: required string code
+    3: optional string reason
 }
 
 service Weapons {
@@ -28,18 +35,18 @@ service Weapons {
         2: Direction direction
         3: i16 shift
         4: binary data
-    ) throws (1: Failure error)
+    ) throws (1: WeaponFailure error)
     Weapon get_weapon(
         1: string name
         2: binary data
-    ) throws (1: Failure error)
+    ) throws (1: WeaponFailure error)
 }
 
 service Powerups {
     Powerup get_powerup(
         1: string name
         2: binary data
-    ) throws(1: Failure error)
+    ) throws(1: PowerupFailure error)
     oneway void like_powerup(
         1: string name
         2: binary data

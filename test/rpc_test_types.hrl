@@ -25,13 +25,24 @@
 
 -type 'powerup'() :: #'powerup'{}.
 
-%% struct 'failure'
+%% struct 'weapon_failure'
 
--record('failure', {
+-record('weapon_failure', {
+    'exception_name' = <<"weapon failure">> :: binary(),
     'code' :: binary(),
     'reason' :: binary()
 }).
 
--type 'failure'() :: #'failure'{}.
+-type 'weapon_failure'() :: #'weapon_failure'{}.
+
+%% struct 'powerup_failure'
+
+-record('powerup_failure', {
+    'exception_name' = <<"powerup failure">> :: binary(),
+    'code' :: binary(),
+    'reason' :: binary()
+}).
+
+-type 'powerup_failure'() :: #'powerup_failure'{}.
 
 -endif.
