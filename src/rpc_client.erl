@@ -57,7 +57,7 @@ new(ReqId, EventHandler) ->
         root_rpc      => true,
         req_id        => ReqId,
         root_req_id   => ReqId,
-        parent_req_id => ReqId,
+        parent_req_id => <<"undefined">>,
         seq           => 0,
         event_handler => EventHandler
     }.
