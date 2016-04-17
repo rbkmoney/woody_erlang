@@ -274,7 +274,7 @@ check_content_type(Error) ->
 get_body(Req, ServerOpts) ->
     MaxBody = genlib_opts:get(max_body_length, ServerOpts),
     case cowboy_req:body(Req, [{length, MaxBody}]) of
-        {ok, Body, Req1} when byte_size(Body) =< ?MAX_BODY_LENGTH ->
+        {ok, Body, Req1} when byte_size(Body) < MaxBody ->
             {ok, Body, Req1};
         {Res, _, Req1} when Res =:= ok orelse Res =:= more->
             {error, body_too_large, Req1};
