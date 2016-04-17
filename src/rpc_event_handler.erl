@@ -42,9 +42,9 @@
     (?internal_error , meta_internal_error ()) -> _.
 
 
--type event_type() :: ?client_send | ?client_receive | ?server_receive |
-    ?server_send | ?call_service  | ?service_result | ?thrift_error |
-    ?internal_error.
+-type event_type() :: ?create_rpc | ?rpc_result | ?client_send | ?client_receive |
+    ?server_receive | ?server_send | ?call_service  | ?service_result |
+    ?thrift_error | ?internal_error.
 
 -type service() :: binary().
 -type rpc_type() :: call | cast.

@@ -10,9 +10,6 @@
 %% rpc_client behaviour callback
 -export([call/3]).
 
-%% ToDo
-%% -export([cast/6]).
-
 -type args() :: any().
 -type request() :: {rpc_t:service(), rpc_t:func(), args()}.
 
