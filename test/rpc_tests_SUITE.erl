@@ -191,25 +191,29 @@ end_per_test_case(_,C) ->
 %%
 call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
-    gun_test_bacic(call_safe, <<"call_safe_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+    gun_test_bacic(call_safe, <<"call_safe_ok">>, Gun,
+        {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
-    gun_test_bacic(call, <<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+    gun_test_bacic(call, <<"call_ok">>, Gun,
+        {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
 call_safe_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
-    gun_test_bacic(call_safe, <<"call_safe_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
+    gun_test_bacic(call_safe, <<"call_safe_handler_throw">>, Gun,
+        {throw, ?weapon_failure("out of ammo")}, true).
 
 call_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
-    gun_catch_test_basic(<<"call_handler_throw">>, Gun, {throw, ?weapon_failure("out of ammo")}, true).
+    gun_catch_test_basic(<<"call_handler_throw">>, Gun,
+        {throw, ?weapon_failure("out of ammo")}, true).
 
 call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client  = get_client(Id),
-    Expect  = {error, rpc_failed, Client#{span_id => Id}},
+    Expect  = {error, {transport_error, server_error}, Client},
     Expect  = call_safe(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
@@ -218,7 +222,7 @@ call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Client  = get_client(Id),
-    Expect  = {rpc_failed, Client#{span_id => Id}},
+    Expect  = {{transport_error, server_error}, Client},
     try call(Client, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -227,25 +231,35 @@ call_handler_throw_unexpected_test(_) ->
 
 call_safe_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    gun_test_bacic(call_safe, <<"call_safe_handler_error">>, Gun, {error, rpc_failed}, true).
+    gun_test_bacic(call_safe, <<"call_safe_handler_error">>, Gun,
+        {error, {transport_error, server_error}}, true).
 
 call_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    gun_catch_test_basic(<<"call_handler_error">>, Gun, {error, rpc_failed}, true).
+    gun_catch_test_basic(<<"call_handler_error">>, Gun,
+        {error, {transport_error, server_error}}, true).
 
 call_safe_client_transport_error_test(_) ->
-    Gun = 'The Ultimate Super Mega Destroyer',
-    gun_test_bacic(call_safe, <<"call_safe_client_transport_error">>, Gun, {error, rpc_failed}, false).
+    Gun = 'Wrong Type of Mega Destroyer',
+    Id = <<"call_safe_client_transport_error">>,
+    Client = get_client(Id),
+    {error, {protocol_error, _}, Client, _Stack} = call_safe(Client,
+        weapons, get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
-    Gun = 'The Ultimate Super Mega Destroyer',
-    gun_catch_test_basic(<<"call_client_transport_error">>, Gun, {error, rpc_failed}, false).
+    Gun = 'Wrong Type of Mega Destroyer',
+    Id = <<"call_client_transport_error">>,
+    Client = get_client(Id),
+    try call(Client, weapons, get_weapon, [Gun, self_to_bin()])
+    catch
+        error:{{protocol_error, _}, Client} -> ok
+    end.
 
 call_safe_server_transport_error_test(_) ->
     Id     = <<"call_safe_server_transport_error">>,
     Armor  = <<"Helmet">>,
     Client = get_client(Id),
-    Expect = {error, rpc_failed, Client#{span_id => Id}},
+    Expect = {error, {transport_error, server_error}, Client},
     Expect = call_safe(Client, powerups, get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
@@ -259,7 +273,7 @@ call_handle_error_fails_test(_) ->
 do_call_server_transport_error(Id) ->
     Armor  = <<"Helmet">>,
     Client = get_client(Id),
-    Expect = {rpc_failed, Client#{span_id => Id}},
+    Expect = {{transport_error, server_error}, Client},
     try call(Client, powerups, get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
@@ -270,7 +284,7 @@ call_oneway_void_test(_) ->
     Id      = <<"call_oneway_void_test">>,
     Armor   = <<"Helmet">>,
     Client  = get_client(Id),
-    Expect  = {ok, ok, Client#{span_id => Id}},
+    Expect  = {ok, Client},
     Expect  = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
@@ -280,14 +294,12 @@ call_async_ok_test(C) ->
     Callback   = fun(Res) -> collect(Res, Pid) end,
     Id1        = <<"call_async_ok1">>,
     Client1    = get_client(Id1),
-    Client11   = Client1#{span_id => Id1},
-    {ok, Pid1, Client11} = get_weapon(Client1, Sup, Callback, <<"Impact Hammer">>),
+    {ok, Pid1, Client1} = get_weapon(Client1, Sup, Callback, <<"Impact Hammer">>),
     Id2        = <<"call_async_ok2">>,
     Client2    = get_client(Id2),
-    Client22   = Client2#{span_id => Id2},
-    {ok, Pid2, Client22} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg({Client11, genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
-    {ok, Pid2} = receive_msg({Client22, genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
+    {ok, Pid2, Client2} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
+    {ok, Pid1} = receive_msg({Client1, genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
+    {ok, Pid2} = receive_msg({Client2, genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
 get_weapon(Client, Sup, Cb, Gun) ->
     call_async(Client, weapons, get_weapon, [Gun, <<>>], Sup, Cb).
@@ -331,7 +343,7 @@ call_with_client_pool_test(_) ->
 
 multiplexed_transport_test(_) ->
     Id  = <<"multiplexed_transport">>,
-    {Client1, {error, {400, _}}} = thrift_client:call(
+    {Client1, {error, {transport_error, bad_request}}} = thrift_client:call(
         make_thrift_multiplexed_client(Id, "powerups", get_service_endpoint(powerups)),
         get_powerup,
         [<<"Body Armor">>, self_to_bin()]
@@ -344,7 +356,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
             #{
                 span_id => Id, trace_id => Id, parent_id => Id
             },
-           #{url => Url}
+           #{url => Url}, ?MODULE
         ),
         [{strict_read, true}, {strict_write, true}]
     ),
@@ -459,7 +471,7 @@ get_service_endpoint(powerups) ->
 
 gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
     Client = get_client(Id),
-    Expect = {ExpectStatus, ExpectRes, Client#{span_id => Id}},
+    Expect = {ExpectStatus, ExpectRes, Client},
     Expect = ?MODULE:CallFun(Client, weapons, get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
@@ -468,7 +480,7 @@ gun_test_bacic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     Client = get_client(Id),
-    Expect = {Exception, Client#{span_id => Id}},
+    Expect = {Exception, Client},
     try call(Client, weapons, get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok

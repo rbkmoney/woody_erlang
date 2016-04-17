@@ -45,10 +45,11 @@ Erlang реализация [Библиотеки RPC вызовов для об
 13> {ok, Result, _NextClient} = rpc_client:call(Client, Request, #{url => Url}).
 ```
 
-В случае, когда сервер бросает _exception_, описанный в _.thrift_ файле сервиса,
-`rpc_client:call/3` бросит это же исключение в виде: `throw:{Exception, NextClient}`, а в случае неудачи RPC вызова: `error:{rpc_failed, NextClient}`.
+В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_), `rpc_client:call/3` вернет только `{ok, NextClient}`.
 
-`rpc_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{Class, Error, NextClient}`.
+Если сервер бросает _exception_, описанный в _.thrift_ файле сервиса, `rpc_client:call/3` бросит это же исключение в виде: `throw:{Exception, NextClient}`, а в случае ошибки RPC вызова: `error:{Reason, NextClient}`.
+
+`rpc_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{Class, Error, NextClient}` либо `{error, Reason, NextClient, Stacktace}`.
 
 ```erlang
 14> Args1 = [1000000, <<"usd">>].

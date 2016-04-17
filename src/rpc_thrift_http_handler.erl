@@ -178,12 +178,11 @@ mark_thrift_error(Type, Error) ->
 -spec init({_, http}, cowboy_req:req(), list()) ->
     {ok       , cowboy_req:req(), list()} |
     {shutdown , cowboy_req:req(), _}.
-init({_Transport, http}, Req, Opts = [EventHandler|_]) ->
+init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            check_headers(set_resp_headers(RpcId, Req2),
-                EventHandler, RpcId, Url, Opts);
+            check_headers(set_resp_headers(RpcId, Req2), [Url, RpcId | Opts]);
         {error, ErrorMeta, Req2} ->
             ?log_event(EventHandler, ?event_rpc_receive, error,
                 ErrorMeta#{url => Url, reason => bad_rpc_id}),
@@ -198,7 +197,7 @@ handle(Req, [Url, RpcId, ServerOpts, EventHandler, ThriftHandler]) ->
             ?log_event(EventHandler, ?event_rpc_receive, ok, RpcId#{url => Url}),
             do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
         {ok, <<>>, Req1} ->
-            reply_error(411, RpcId, EventHandler, Req1);
+            reply_error(400, RpcId, EventHandler, Req1);
         {error, body_too_large, Req1} ->
             ?log_event(EventHandler, ?event_rpc_receive, error,
                 RpcId#{url => Url, reason => body_too_large}),
@@ -238,38 +237,29 @@ check_ids(Map = #{status := error, req := Req}) ->
 check_ids(Map = #{req := Req}) ->
     {ok, maps:without([req], Map), Req}.
 
-check_headers(Req, EventHandler, RpcId, Url, Opts) ->
-    case check_content_type(check_method(Req)) of
-        {ok, Req3} ->
-            {ok, Req3, [Url, RpcId | Opts]};
-        {error, {wrong_method, Method}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error,
-                RpcId#{url => Url, reason => {wrong_method, Method}}),
-            reply_error_early(405, Req3);
-        {error, {wrong_content_type, BadType}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error,
-                RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
-            reply_error_early(403, Req3)
-    end.
+check_headers(Req, Opts) ->
+    check_method(cowboy_req:method(Req), Opts).
 
-check_method(Req) ->
-    case cowboy_req:method(Req) of
-        {<<"POST">>, Req1} ->
-            {ok, Req1};
-        {Method, Req1} ->
-            {error, {wrong_method, Method},
-                cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req1)}
-    end.
+check_method({<<"POST">>, Req}, Opts) ->
+    check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
+check_method({Method, Req}, [RpcId, Url, EventHandler | _]) ->
+    ?log_event(EventHandler, ?event_rpc_receive, error,
+        RpcId#{url => Url, reason => {wrong_method, Method}}),
+    reply_error_early(405, cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req)).
 
-check_content_type({ok, Req}) ->
-    case cowboy_req:header(<<"content-type">>, Req) of
-        {?CONTENT_TYPE_THRIFT, Req1} ->
-            {ok, Req1};
-        {BadType, Req1} ->
-            {error, {wrong_content_type, BadType}, Req1}
-    end;
-check_content_type(Error) ->
-    Error.
+check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
+    check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
+check_content_type({BadType, Req}, [RpcId, Url, EventHandler | _]) ->
+    ?log_event(EventHandler, ?event_rpc_receive, error,
+        RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
+    reply_error_early(403, Req).
+
+check_accept({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
+    {ok, Req, Opts};
+check_accept({BadType, Req1}, [RpcId, Url, EventHandler | _]) ->
+    ?log_event(EventHandler, ?event_rpc_receive, error,
+        RpcId#{url => Url, reason => {wrong_client_accept, BadType}}),
+    reply_error_early(406, Req1).
 
 get_body(Req, ServerOpts) ->
     MaxBody = genlib_opts:get(max_body_length, ServerOpts),
@@ -294,7 +284,7 @@ do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
             {ok, Req, undefined}
     end.
 
-handle_error(badrequest, RpcId, EventHandler, Req) ->
+handle_error(bad_request, RpcId, EventHandler, Req) ->
     reply_error(400, RpcId, EventHandler, Req);
 handle_error(_Error, RpcId, EventHandler, Req) ->
     reply_error(500, RpcId, EventHandler, Req).

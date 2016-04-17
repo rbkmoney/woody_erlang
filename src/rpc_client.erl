@@ -39,9 +39,14 @@
     event_handler => rpc_t:handler(),
     seq           => non_neg_integer()
 }.
+-type stacktrace() :: list().
 
 -type result_ok() :: {ok, _Response, client()} | {ok, client()}.
--type result_error() :: {error, rpc_failed, client()} | {throw, _Exception, client()}.
+
+-type result_error() ::
+    {throw, rpc_thrift_client:thrift_except(), client()} |
+    {error, rpc_thrift_http_transport:error(), client()} |
+    {error, _Error, client(), stacktrace()}.
 
 -type request() :: any().
 
@@ -82,7 +87,10 @@ next(Client = #{root_rpc := false, seq := Seq}) ->
     NextSeq = Seq +1,
     Client#{span_id => make_req_id(NextSeq), seq => NextSeq}.
 
--spec call(client(), request(), options()) -> result_ok() | no_return().
+-spec call(client(), request(), options()) -> result_ok() |
+    no_return().  %% throw:{rpc_thrift_client:thrift_except() , client()} |
+                  %% error:{rpc_thrift_client:call_error()    , client()} |
+                  %% error:{rpc_thrift_client:badarg_error()  , client()}.
 call(Client, Request, Options) ->
     ProtocolHandler = rpc_t:get_protocol_handler(client, Options),
     ProtocolHandler:call(next(Client), Request, Options).
@@ -91,8 +99,18 @@ call(Client, Request, Options) ->
 call_safe(Client, Request, Options) ->
     try call(Client, Request, Options)
     catch
+        %% valid thrift exception
+        throw:{Except, Client1} ->
+            {throw, Except, Client1};
+        %% rpc send failed
+        error:{TError = {transport_error, _}, Client1} ->
+            {error, TError, Client1};
+        %% thrift protocol error
+        error:{PError = {protocol_error, _}, Client1} ->
+            {error, PError, Client1, erlang:get_stacktrace()};
+        %% what else could have happened?
         Class:{Reason, Client1} ->
-            {Class, Reason, Client1}
+            {Class, Reason, Client1, erlang:get_stacktrace()}
     end.
 
 -spec call_async(rpc_t:sup_ref(), callback(), client(), request(), options()) ->

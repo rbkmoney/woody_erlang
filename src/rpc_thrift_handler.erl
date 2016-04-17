@@ -302,22 +302,22 @@ call_error_handler(#state{
 
 format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
     mark_error_to_transport(Trans, transport, "bad binary protocol version"),
-    {error, badrequest};
+    {error, bad_request};
 format_protocol_error(no_binary_protocol_version, Trans) ->
     mark_error_to_transport(Trans, transport, "no binary protocol version"),
-    {error, badrequest};
+    {error, bad_request};
 format_protocol_error({?error_unknown_function, _Fun}, Trans) ->
     mark_error_to_transport(Trans, transport, "unknown method"),
-    {error, badrequest};
+    {error, bad_request};
 format_protocol_error({?error_multiplexed_req, _Fun}, Trans) ->
     mark_error_to_transport(Trans, transport, "multiplexing not supported"),
-    {error, badrequest};
+    {error, bad_request};
 format_protocol_error({?error_protocol_send, _}, Trans) ->
     mark_error_to_transport(Trans, transport, "internal error"),
     {error, server_error};
 format_protocol_error(_Reason, Trans) ->
     mark_error_to_transport(Trans, transport, "bad request"),
-    {error, badrequest}.
+    {error, bad_request}.
 
 -spec mark_error_to_transport(transport_handler(), transport | logic, _Error) -> _.
 mark_error_to_transport(TransportHandler, Type, Error) ->
