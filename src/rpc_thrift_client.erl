@@ -34,18 +34,14 @@ call(Client = #{event_handler := EventHandler},
     {Service, Function, Args}, TransportOpts = #{url := Url})
 ->
     RpcId = maps:with([span_id, trace_id, parent_id], Client),
-    rpc_event_handler:handle_event(EventHandler, send_request, RpcId#{
-        rpc_role  => client,
-        direction => request,
+    rpc_event_handler:handle_event(EventHandler, 'client send request', RpcId#{
         url       => Url,
         service   => Service,
         function  => Function,
         args      => Args
     }),
     Result = do_call(make_thrift_client(RpcId, Service, TransportOpts), Function, Args),
-    rpc_event_handler:handle_event(EventHandler, receive_response, RpcId#{
-        rpc_role   => client,
-        direction  => response,
+    rpc_event_handler:handle_event(EventHandler, 'client receive response', RpcId#{
         rpc_result => Result
     }),
     format_return(Result, Client).

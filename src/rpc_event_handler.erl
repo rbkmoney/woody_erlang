@@ -3,19 +3,146 @@
 %% API
 -export([handle_event/3]).
 
+-define(client_send         , 'client send request').
+-define(client_receive      , 'client receive response').
+-define(server_receive      , 'server receive request').
+-define(server_send         , 'server send response').
+-define(call_service        , 'call service').
+-define(get_result          , 'get service result').
+-define(thrift_error        , 'thrift error').
+-define(internal_error      , 'internal error').
+
+
 %%
 %% behaviour definition
 %%
--type event_type() :: atom() | {atom(), any()}.
--type meta()       :: #{atom() => term()}.
--export_type([event_type/0, meta/0]).
+-export_type([event_type/0, meta_client_send/0, meta_client_receive/0,
+    meta_server_receive/0, meta_server_send/0, meta_call_service/0,
+    meta_service_result/0, meta_thrift_error/0, meta_internal_error/0
+]).
 
--callback handle_event(event_type(), meta()) -> _.
+-callback handle_event
+    %% mandatory
+    (?client_send    , meta_client_send    ()) -> _;
+    (?client_receive , meta_client_receive ()) -> _;
+    (?server_receive , meta_server_receive ()) -> _;
+    (?server_send    , meta_server_send    ()) -> _;
+    (?call_service   , meta_call_service   ()) -> _;
+    (?get_result     , meta_service_result ()) -> _;
+    %% optional
+    (?thrift_error   , meta_thrift_error   ()) -> _;
+    (?internal_error , meta_internal_error ()) -> _.
+
+
+-type event_type() :: ?client_send | ?client_receive | ?server_receive |
+    ?server_send | ?call_service  | ?get_result | ?thrift_error |
+    ?internal_error.
+
+-type status() :: ok | error.
+-type thrift_stage() :: protocol_read | protocol_write.
+
+-type meta_client_send() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    url       => rpc_t:url(),
+    function  => rpc_t:func(),
+    %% optional
+    service   => rpc_t:handler(),
+    args      => rpc_client:args()
+}.
+
+-type meta_client_receive() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    status    => status(),
+    %% optional
+    result    => any()
+}.
+
+-type meta_server_receive() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    url       => rpc_t:url(),
+    status    => status(),
+    %% optional
+    reason    => any()
+}.
+
+-type meta_server_send() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    status    => status(),
+    %% optional
+    code      => pos_integer()
+}.
+
+-type meta_call_service() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    function  => rpc_t:func(),
+    %% optional
+    args      => rpc_thrift_handler:args(),
+    options   => rpc_thrift_handler:handler_opts()
+}.
+
+-type meta_service_result() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    status    => status(),
+    %% optional
+    result    => any(),
+    class     => throw | error | exit,
+    reason    => any(),
+    stack     => any(),
+    ignore    => boolean()
+}.
+
+-type meta_thrift_error() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    stage     => thrift_stage(),
+    reason    => any()
+}.
+
+-type meta_internal_error() :: #{
+    %% mandatory
+    span_id   => rpc_t:rpc_id(),
+    parent_id => rpc_t:rpc_id(),
+    trace_id  => rpc_t:rpc_id(),
+    error     => any(),
+    reason    => any(),
+    %% optional
+    stack     => any()
+}.
 
 
 %%
 %% API
 %%
--spec handle_event(rpc_t:handler(), event_type(), meta()) -> _.
+-spec handle_event
+    %% mandatory
+    (rpc_t:handler() , ?client_send    , meta_client_send    ()) -> _;
+    (rpc_t:handler() , ?client_receive , meta_client_receive ()) -> _;
+    (rpc_t:handler() , ?server_receive , meta_server_receive ()) -> _;
+    (rpc_t:handler() , ?server_send    , meta_server_send    ()) -> _;
+    (rpc_t:handler() , ?call_service   , meta_call_service   ()) -> _;
+    (rpc_t:handler() , ?get_result     , meta_service_result ()) -> _;
+    %% optional
+    (rpc_t:handler() , ?thrift_error   , meta_thrift_error   ()) -> _;
+    (rpc_t:handler() , ?internal_error , meta_internal_error ()) -> _.
 handle_event(Handler, Type, Meta) ->
     Handler:handle_event(Type, Meta).

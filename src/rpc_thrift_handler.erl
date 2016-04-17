@@ -23,17 +23,13 @@
 %%
 %% API
 %%
--define(log_rpc_result(EventHandler, Event, Status, Dir, Meta),
-    rpc_event_handler:handle_event(EventHandler, Event, Meta#{
-        rpc_role => server, direction => Dir, status => Status
-    })
+-define(log_rpc_result(EventHandler, Status, Meta),
+    rpc_event_handler:handle_event(EventHandler, 'get service result',
+        Meta#{status => Status})
 ).
 
--define(stage_read             , thrift_protocol_read).
--define(stage_write            , thrift_protocol_write).
-
--define(event_handle_func_res  , handle_function_result).
--define(event_handle_error_res , handle_error_result).
+-define(stage_read  , protocol_read).
+-define(stage_write , protocol_write).
 
 -define(error_unknown_function , no_function).
 -define(error_multiplexed_req  , multiplexed_request).
@@ -157,12 +153,11 @@ call_handler(Function,Args, #state{
     handler_opts  = Opts,
     event_handler = EventHandler})
 ->
-    rpc_event_handler:handle_event(EventHandler, invoke_handle_function, RpcId#{
-        rpc_role => server, direction => request,
+    rpc_event_handler:handle_event(EventHandler, 'call service', RpcId#{
         function => Function, args => Args, options => Opts
     }),
     Result = Handler:handle_function(Function, Args, RpcId, RpcClient, Opts),
-    ?log_rpc_result(EventHandler, ?event_handle_func_res, ok, response, RpcId#{result => Result}),
+    ?log_rpc_result(EventHandler, ok, RpcId#{result => Result}),
     Result.
 
 handle_result(ok, State, Function, SeqId) ->
@@ -198,16 +193,16 @@ handle_function_catch(State = #state{
     ReplyType = Service:function_info(Function, reply_type),
     case {Class, Reason} of
         _Error when ReplyType =:= oneway_void ->
-            ?log_rpc_result(EventHandler, ?event_handle_func_res, error, response,
+            ?log_rpc_result(EventHandler, error,
                 RpcId#{class => Class, reason => Reason, ignore => true}),
             {State, noreply};
         {throw, Exception} when is_tuple(Exception), size(Exception) > 0 ->
-            ?log_rpc_result(EventHandler, ?event_handle_func_res, error, response,
+            ?log_rpc_result(EventHandler, error,
                 RpcId#{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
-            ?log_rpc_result(EventHandler, ?event_handle_func_res, error, response,
-                RpcId#{class => error, reason => Reason, stacktrace => Stack, ignore => false}),
+            ?log_rpc_result(EventHandler, error, RpcId#{class => error,
+                reason => Reason, stack => Stack, ignore => false}),
             Reason1 = if is_tuple(Reason) -> element(1, Reason); true -> Reason end,
             handle_error(State, Function, Reason1, SeqId)
     end.
@@ -283,11 +278,9 @@ handle_protocol_error(State = #state{
     event_handler     = EventHandler}, Function, Reason)
 ->
     call_error_handler(State, Function, Reason),
-    ?log_rpc_result(EventHandler, Stage, error, get_direction(Stage), RpcId#{reason => Reason}),
+    rpc_event_handler:handle_event(EventHandler, 'thrift error',
+        RpcId#{stage => Stage, reason => Reason}),
     format_protocol_error(Reason, Trans).
-
-get_direction(?stage_read)  -> request;
-get_direction(?stage_write) -> response.
 
 call_error_handler(#state{
     rpc_id        = RpcId,
@@ -296,12 +289,15 @@ call_error_handler(#state{
     handler_opts  = Opts,
     event_handler = EventHandler}, Function, Reason) ->
     try
-        Handler:handle_error(Function, Reason, RpcId, RpcClient, Opts),
-        ?log_rpc_result(EventHandler, ?event_handle_error_res, ok, response, RpcId)
+        Handler:handle_error(Function, Reason, RpcId, RpcClient, Opts)
     catch
         Class:Error ->
-            ?log_rpc_result(EventHandler, ?event_handle_error_res, error, response,
-                RpcId#{class => Class, reason => Error})
+            rpc_event_handler:handle_event(EventHandler, 'internal error', RpcId#{
+                error => <<"service error handler failed">>,
+                class => Class,
+                reason => Error,
+                stack => erlang:get_stacktrace()
+            })
     end.
 
 format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->

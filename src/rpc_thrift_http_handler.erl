@@ -42,16 +42,14 @@
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
--define(log_event(EventHandler, Event, Status, Dir, Meta),
+-define(log_event(EventHandler, Event, Status, Meta),
     rpc_event_handler:handle_event(EventHandler, Event, Meta#{
-        rpc_role  => server,
-        direction => Dir,
-        status    => Status
+        status => Status
     })
 ).
 
--define(event_send_reply, send_response).
--define(event_rpc_receive, receive_request).
+-define(event_send_reply  , 'server send response').
+-define(event_rpc_receive , 'server receive request').
 
 -define(HEADERS_RPC_ID, #{
     span_id   => ?HEADER_NAME_RPC_ID,
@@ -160,7 +158,7 @@ flush(State = #http_req{
 }) ->
     {Code, Req1} = add_x_error_header(Req),
     ?log_event(EventHandler, ?event_send_reply, ok,
-        response, RpcId#{code => Code}),
+        RpcId#{code => Code}),
     {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
         Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
@@ -188,7 +186,7 @@ init({_Transport, http}, Req, Opts = [EventHandler|_]) ->
                 EventHandler, RpcId, Url, Opts);
         {error, ErrorMeta, Req2} ->
             ?log_event(EventHandler, ?event_rpc_receive, error,
-                request, ErrorMeta#{url => Url, reason => no_rpc_id}),
+                ErrorMeta#{url => Url, reason => bad_rpc_id}),
             reply_error_early(403, Req2)
     end.
 
@@ -197,16 +195,16 @@ init({_Transport, http}, Req, Opts = [EventHandler|_]) ->
 handle(Req, [Url, RpcId, ServerOpts, EventHandler, ThriftHandler]) ->
     case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            ?log_event(EventHandler, ?event_rpc_receive, ok, request, RpcId#{url => Url}),
+            ?log_event(EventHandler, ?event_rpc_receive, ok, RpcId#{url => Url}),
             do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
         {ok, <<>>, Req1} ->
             reply_error(411, RpcId, EventHandler, Req1);
         {error, body_too_large, Req1} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+            ?log_event(EventHandler, ?event_rpc_receive, error,
                 RpcId#{url => Url, reason => body_too_large}),
             reply_error(413, RpcId, EventHandler, Req1);
         {error, Reason, Req1} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+            ?log_event(EventHandler, ?event_rpc_receive, error,
                 RpcId#{url => Url, reason => {body_read_error, Reason}}),
             reply_error(400, RpcId, EventHandler, Req1)
     end.
@@ -216,8 +214,9 @@ handle(Req, [Url, RpcId, ServerOpts, EventHandler, ThriftHandler]) ->
 terminate({normal, _}, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, [_, RpcId, _, EventHandler | _]) ->
-    ?log_event(EventHandler, http_handler_terminate, error, undefined,
-        RpcId#{reason => Reason}),
+    rpc_event_handler:handle_event(EventHandler, 'internal error', RpcId#{
+        error => <<"http handler terminated abnormally">>, reason => Reason
+    }),
     ok.
 
 get_rpc_id(Req) ->
@@ -244,11 +243,11 @@ check_headers(Req, EventHandler, RpcId, Url, Opts) ->
         {ok, Req3} ->
             {ok, Req3, [Url, RpcId | Opts]};
         {error, {wrong_method, Method}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+            ?log_event(EventHandler, ?event_rpc_receive, error,
                 RpcId#{url => Url, reason => {wrong_method, Method}}),
             reply_error_early(405, Req3);
         {error, {wrong_content_type, BadType}, Req3} ->
-            ?log_event(EventHandler, ?event_rpc_receive, error, request,
+            ?log_event(EventHandler, ?event_rpc_receive, error,
                 RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
             reply_error_early(403, Req3)
     end.
@@ -301,7 +300,7 @@ handle_error(_Error, RpcId, EventHandler, Req) ->
     reply_error(500, RpcId, EventHandler, Req).
 
 reply_error(Code, RpcId, EventHandler, Req) when is_integer(Code), Code >= 400 ->
-    ?log_event(EventHandler, ?event_send_reply, error, response, RpcId#{code => Code}),
+    ?log_event(EventHandler, ?event_send_reply, error, RpcId#{code => Code}),
     {_,  Req1} = add_x_error_header(Req),
     {ok, Req2} = cowboy_req:reply(Code, Req1),
     {ok, Req2, undefined}.
