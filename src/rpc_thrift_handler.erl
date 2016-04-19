@@ -5,6 +5,7 @@
 
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
+-include("rpc_defs.hrl").
 
 %%
 %% behaviour definition
@@ -15,16 +16,20 @@
 -type args()         :: list().
 -export_type([handler_opts/0, args/0, result/0, error_reason/0]).
 
--callback handle_function(rpc_t:func(), args(), rpc_t:rpc_id(), rpc_client:client(), handler_opts()) ->
+-callback handle_function(rpc_t:func(), args(), rpc_t:rpc_id(),
+    rpc_client:client(), handler_opts())
+->
     ok | {ok, result()} | {error, result()} | no_return().
 
--callback handle_error(rpc_t:func(), error_reason(), rpc_t:rpc_id(), rpc_client:client(), handler_opts()) -> _.
+-callback handle_error(rpc_t:func(), error_reason(), rpc_t:rpc_id(),
+    rpc_client:client(), handler_opts())
+-> _.
 
 %%
 %% API
 %%
 -define(log_rpc_result(EventHandler, Status, Meta),
-    rpc_event_handler:handle_event(EventHandler, 'get service result',
+    rpc_event_handler:handle_event(EventHandler, ?EV_SERVICE_HANDLER_RESULT,
         Meta#{status => Status})
 ).
 
@@ -51,13 +56,15 @@
 -export_type([thrift_handler/0]).
 
 -type event_handler() :: rpc_t:handler().
--type transport_handler() :: rpc_t:hander().
+-type transport_handler() :: rpc_t:handler().
 
 -spec start(thrift_transport:t_transport(), rpc_t:rpc_id(), rpc_client:client(),
     thrift_handler(), event_handler(), transport_handler())
 ->
     ok | noreply | {error, _Reason}.
-start(Transport, RpcId, RpcClient, {Service, Handler, Opts}, EventHandler, TransportHandler) ->
+start(Transport, RpcId, RpcClient, {Service, Handler, Opts},
+    EventHandler, TransportHandler)
+->
     {ok, Protocol} = thrift_binary_protocol:new(Transport,
         [{strict_read, true}, {strict_write, true}]
     ),
@@ -153,7 +160,7 @@ call_handler(Function,Args, #state{
     handler_opts  = Opts,
     event_handler = EventHandler})
 ->
-    rpc_event_handler:handle_event(EventHandler, 'call service', RpcId#{
+    rpc_event_handler:handle_event(EventHandler, ?EV_INVOKE_SERVICE_HANDLER, RpcId#{
         function => Function, args => Args, options => Opts
     }),
     Result = Handler:handle_function(Function, Args, RpcId, RpcClient, Opts),
@@ -207,9 +214,12 @@ handle_function_catch(State = #state{
             handle_error(State, Function, Reason1, SeqId)
     end.
 
-handle_exception(State = #state{service = Service, transport_handler = Trans}, Function, Exception, SeqId) ->
+handle_exception(State = #state{service = Service, transport_handler = Trans},
+    Function, Exception, SeqId)
+->
     {struct, XInfo} = ReplySpec = Service:function_info(Function, exceptions),
-    {ExceptionList, FoundExcept} = lists:mapfoldl(fun(X, A) -> get_except(Exception, X, A) end, undefined, XInfo),
+    {ExceptionList, FoundExcept} = lists:mapfoldl(
+        fun(X, A) -> get_except(Exception, X, A) end, undefined, XInfo),
     ExceptionTuple = list_to_tuple([Function | ExceptionList]),
     case FoundExcept of
         undefined ->
@@ -278,7 +288,7 @@ handle_protocol_error(State = #state{
     event_handler     = EventHandler}, Function, Reason)
 ->
     call_error_handler(State, Function, Reason),
-    rpc_event_handler:handle_event(EventHandler, 'thrift error',
+    rpc_event_handler:handle_event(EventHandler, ?EV_THRIFT_ERROR,
         RpcId#{stage => Stage, reason => Reason}),
     format_protocol_error(Reason, Trans).
 
@@ -292,7 +302,7 @@ call_error_handler(#state{
         Handler:handle_error(Function, Reason, RpcId, RpcClient, Opts)
     catch
         Class:Error ->
-            rpc_event_handler:handle_event(EventHandler, 'internal error', RpcId#{
+            rpc_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId#{
                 error => <<"service error handler failed">>,
                 class => Class,
                 reason => Error,

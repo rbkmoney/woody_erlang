@@ -42,28 +42,29 @@ Erlang реализация [Библиотеки RPC вызовов для об
 10> Args = [100, <<"rub">>].
 11> Request = {Service, Function, Args}.
 12> Client = rpc_client:new(<<"myUniqRequestID1">>, EventHandler).
-13> {ok, Result, _NextClient} = rpc_client:call(Client, Request, #{url => Url}).
+13> {{ok, Result}, _NextClient} = rpc_client:call(Client, Request, #{url => Url}).
 ```
 
-В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_), `rpc_client:call/3` вернет только `{ok, NextClient}`.
+В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_), `rpc_client:call/3` вернет `{ok, NextClient}`.
 
-Если сервер бросает _exception_, описанный в _.thrift_ файле сервиса, `rpc_client:call/3` бросит это же исключение в виде: `throw:{Exception, NextClient}`, а в случае ошибки RPC вызова: `error:{Reason, NextClient}`.
+Если сервер бросает `Exception`, описанный в _.thrift_ файле сервиса, `rpc_client:call/3` бросит это же исключение в виде: `throw:{{exception, Exception}, NextClient}`, а в случае ошибки RPC вызова: `error:{Reason, NextClient}`.
 
-`rpc_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{Class, Error, NextClient}` либо `{error, Reason, NextClient, Stacktace}`.
+`rpc_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{{exception | error, Error}, NextClient}` либо `{{error, Error, Stacktace}, NextClient}`.
 
 ```erlang
 14> Args1 = [1000000, <<"usd">>].
 15> Request1 = {Service, Function, Args1}.
 16> Client1 = rpc_client:new(<<"myUniqRequestID2">>, EventHandler).
-17> {throw, #take_it_easy{}, _NextClient1} = rpc_client:call_safe(Client1, Request1, #{url => Url}).
+17> {{exception, #take_it_easy{}}, _NextClient1} = rpc_client:call_safe(Client1, Request1, #{url => Url}).
 ```
 
 `rpc_client:call_async/5` позволяет сделать call асинхронно и обработать результат в callback функции. `rpc_client:call_async/5` требует также _sup_ref()_ для включения процесса, обрабатывающего RPC вызов, в supervision tree приложения.
 
 ```erlang
-18> Callback = fun({ok, Res, _NextClient2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
-18>     ({throw, Error, _NextClient2}) -> io:format("Service exception: ~p~n", [Error]);
-18>     ({error, rpc_failed, _NextClient2}) -> io:format("Rpc failed")
+18> Callback = fun({{ok, Res}, _NextClient2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
+18>     ({{exception, Error}, _NextClient2}) -> io:format("Service exception: ~p~n", [Error]);
+18>     ({{error, _} _NextClient2}) -> io:format("Rpc failed")
+18>     ({{error, _, _} _NextClient2}) -> io:format("Rpc failed")
 18> end.
 19> Client2 = rpc_client:new(<<"myUniqRequestID3">>, EventHandler).
 20> {ok, Pid, _NextClient2} = rpc_client:call_async(SupRef, Callback, Client2, Request, #{url => Url}).
@@ -75,17 +76,56 @@ Erlang реализация [Библиотеки RPC вызовов для об
 21> Pool = my_client_pool.
 22> ok = rpc_thrift_client:start_pool(Pool, 10).
 23> Client3 = rpc_client:new(<<"myUniqRequestID3">>, EventHandler).
-24> {ok, Result, _NextClient3} = rpc_client:call(Client, Request, #{url => Url, pool => Pool}).
+24> {{ok, Result}, _NextClient3} = rpc_client:call(Client, Request, #{url => Url, pool => Pool}).
 ```
 
 Закрыть пул можно с помошью `rpc_thrift_client:stop_pool/1`.
 
-### Важно!
+### RPC Thrift Handler
 
-В предыдущих примерах новый thrift клиент `Client` создаётся с помощью `rpc_client:new/2` перед каждым RPC вызовом. В реальном микросервисе, использующем эту библиотеку, в большинстве случаев RPC запрос будет результатом обработки внешнего RPC вызова к этому микросервису. В таком случае `Client` будет получен в рамках `ThriftHandler:handle_function/5` (реализация `rpc_thrift_handler` _behaviour_) на стороне RPC сервера. Это значение `Client` надо использовать при первом call вызове `rpc_client` API (т.е. вызывать `rpc_client:new/2` не надо). Полученный в результате `NextClient` (в том числе и через _exception_ в случае с `rpc_client:call/3`) следует передать в следующий API вызов `rpc_client` и.т.д.
+```erlang
+-module(my_money_service).
+-behaviour(rpc_thrift_handler).
 
-Также важно заметить, что в `ThriftHandler:handle_function/5` передается переменная `RpcId` (_map_ с тройкой ключей _span id_, _parent id_ и _trace id_, идентифицирующих RPC запрос в дереве обработки запросов), которую следует использовать в хэндлере при логировании событий, относящихся к обработке RPC вызова.
+%% Auto-generated Thrift types for my_money_service
+-include("my_money_types.hrl").
 
-Те же требования касаются и значений `Client` и `RpcId`, которые передаются в функцию `ThriftHandler:handle_error/5`.
+-export([handle_function/5, handle_error/5]).
 
-Все это необходимо, для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
+-spec handle_function(rpc_t:func(), rpc_thrift_handler:args(), rpc_t:rpc_id(),
+    rpc_client:client(), rpc_thrift_handler:handler_opts())
+->
+    {ok, rpc_thrift_handler:result()} |  no_return().
+handle_function(give_me_money, Sum = {Amount, Currency}, RpcId, Client, _Opts) ->
+    Wallet = <<"localhost:8022/v1/thrift_wallet_service">>,
+    RequestLimits = {my_wallet_service, check_limits, Sum},
+
+    %% Используется Client, полученный handle_function,
+    %% rpc_client:new/2 вызывать не надо.
+    case rpc_client:call(Client, RequestLimits, #{url => Wallet}) of
+        {{ok, ok}, Client1} ->
+
+            %% Логи следует тэгировать RpcId, полученным handle_function.
+            lager:info("[~p] giving away ~p ~p",
+                [my_event_handler:format_id(RpcId), Amount, Currency]),
+            RequestMoney = {my_wallet_service, get_money, Sum},
+
+            %% Используется новое значение Client1, полученное из предыдущего вызова
+            %% rpc_client/call/3 (call_safe/3, call_async/5).
+            {{ok, Money}, _Client2} = rpc_client:call_safe(Client1, RequestMoney,
+                #{url => Wallet}),
+            {ok, Money};
+        {{ok, error}, _Client1} ->
+            lager:info("[~p] ~p ~p is too much",
+                [my_event_handler:format_id(RpcId), Amount, Currency]),
+            throw(#take_it_easy{})
+    end.
+
+-spec handle_error(rpc_t:func(), rpc_thrift_handler:error_reason(), rpc_t:rpc_id(),
+    rpc_client:client(), rpc_thrift_handler:handler_opts()) -> _.
+handle_error(give_me_money, Error, RpcId, _Client, _Opts) ->
+    lager:info("[~p] got error from thrift: ~p",
+        [my_event_handler:format_id(RpcId), Error]).
+```
+
+Показанное в этом наивном примере реализации `my_money_service` использование `Client` и `RpcId` необходимо для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.

@@ -3,7 +3,7 @@
 -behaviour(thrift_transport).
 -dialyzer(no_undefined_callbacks).
 
--include("rpc_thrift_http_headers.hrl").
+-include("rpc_defs.hrl").
 
 -define(SUPPORTED_TRANSPORT_OPTS, [pool, ssl_options, connect_timeout]).
 
@@ -26,28 +26,24 @@
 -define(code500, server_error).
 -define(code503, service_unavailable).
 
--define(transport_error(Reason), {transport_error, Reason}).
-
--type transport_error(A) :: ?transport_error(A).
-
 -type error_code() ::
     ?code400 | ?code403 | ?code408 | ?code413 | ?code429 |
     ?code500 | ?code503 | {http_code, pos_integer()}.
-
+-type error_transport(A) ::
+    ?error_transport(A).
 -type error() ::
-    transport_error(error_code())     |
-    transport_error(partial_response) |
-    transport_error(_).
+    error_transport(error_code())     |
+    error_transport(partial_response) |
+    error_transport(_).
 
 -export_type([error/0]).
 
 -define(format_error(Error),
-    {error, ?transport_error(Error)}
+    {error, ?error_transport(Error)}
 ).
 
-
 -define(log_response(EventHandler, Status, Meta),
-    rpc_event_handler:handle_event(EventHandler, 'client receive response',
+    rpc_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
         Meta#{status =>Status})
 ).
 
@@ -135,7 +131,7 @@ flush(Transport = #{
         {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(ParentId)}
     ],
     RpcId = maps:with([span_id, trace_id, parent_id], Transport),
-    rpc_event_handler:handle_event(EventHandler, 'client send request',
+    rpc_event_handler:handle_event(EventHandler, ?EV_CLIENT_SEND,
         RpcId#{url => Url}),
     case send(Url, Headers, WBuffer, Options, RpcId, EventHandler) of
         {ok, Response} ->

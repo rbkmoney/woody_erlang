@@ -5,6 +5,8 @@
 
 -behaviour(supervisor).
 
+-include("rpc_defs.hrl").
+
 %% API
 -export([new/2]).
 -export([make_child_client/2]).
@@ -41,18 +43,18 @@
 }.
 -type stacktrace() :: list().
 
--type result_ok() :: {ok, _Response, client()} | {ok, client()}.
+-type result_ok() :: {ok | {ok, _Response}, client()}.
 
 -type result_error() ::
-    {throw, rpc_thrift_client:thrift_except(), client()} |
-    {error, rpc_thrift_http_transport:error(), client()} |
-    {error, _Error, client(), stacktrace()}.
+    {{exception , rpc_thrift_client:except_thrift()} , client()} |
+    {{error     , rpc_thrift_http_transport:error()} , client()} |
+    {{error     , _Error, stacktrace()}              , client()}.
 
 -type request() :: any().
 
 -type options() :: #{
-    protocol  => thrift, %% optional
-    transport => http, %% optional
+    protocol  => thrift,     %% optional
+    transport => http,       %% optional
     url       => rpc_t:url() %% mandatory
 }.
 
@@ -87,10 +89,7 @@ next(Client = #{root_rpc := false, seq := Seq}) ->
     NextSeq = Seq +1,
     Client#{span_id => make_req_id(NextSeq), seq => NextSeq}.
 
--spec call(client(), request(), options()) -> result_ok() |
-    no_return().  %% throw:{rpc_thrift_client:thrift_except() , client()} |
-                  %% error:{rpc_thrift_client:call_error()    , client()} |
-                  %% error:{rpc_thrift_client:badarg_error()  , client()}.
+-spec call(client(), request(), options()) -> result_ok() | no_return().
 call(Client, Request, Options) ->
     ProtocolHandler = rpc_t:get_protocol_handler(client, Options),
     ProtocolHandler:call(next(Client), Request, Options).
@@ -100,17 +99,17 @@ call_safe(Client, Request, Options) ->
     try call(Client, Request, Options)
     catch
         %% valid thrift exception
-        throw:{Except, Client1} ->
-            {throw, Except, Client1};
+        throw:{Except = ?except_thrift(_), Client1} ->
+            {Except, Client1};
         %% rpc send failed
-        error:{TError = {transport_error, _}, Client1} ->
-            {error, TError, Client1};
+        error:{TError = ?error_transport(_), Client1} ->
+            {{error, TError}, Client1};
         %% thrift protocol error
-        error:{PError = {protocol_error, _}, Client1} ->
-            {error, PError, Client1, erlang:get_stacktrace()};
+        error:{PError = ?error_protocol(_), Client1} ->
+            {{error, PError, erlang:get_stacktrace()}, Client1};
         %% what else could have happened?
-        Class:{Reason, Client1} ->
-            {Class, Reason, Client1, erlang:get_stacktrace()}
+        Class:Reason ->
+            {{Class, Reason, erlang:get_stacktrace()}, Client}
     end.
 
 -spec call_async(rpc_t:sup_ref(), callback(), client(), request(), options()) ->
@@ -165,7 +164,6 @@ init(rpc_client_sup) ->
         }]
     }
 }.
-
 
 %%
 %% Internal functions

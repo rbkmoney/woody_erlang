@@ -11,7 +11,7 @@
         thrift
     ]},
     {env, [
-        {client_pool_size, 1000}
+        {acceptors_pool_size, 100}
     ]},
     {modules, []},
     {maintainers, [

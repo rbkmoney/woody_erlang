@@ -1,7 +1,9 @@
 -module(rpc_thrift_client).
 
 -behaviour(rpc_client).
+
 -include_lib("thrift/include/thrift_constants.hrl").
+-include("rpc_defs.hrl").
 
 %% API
 -export([start_pool/2]).
@@ -13,20 +15,11 @@
 -type args() :: any().
 -type request() :: {rpc_t:service(), rpc_t:func(), args()}.
 
-%% Error types and defs
--define(error_protocol(Reason), {protocol_error, Reason}).
-
 -type except_thrift() :: _OkException.
--type error_protocol() :: ?error_protocol(_Reason).
--type error_call   ()  :: rpc_thrift_http_transport:error() | error_protocol().
--type error_badarg ()  :: {badarg, _}.
-
--export_type([except_thrift/0, error_call/0, error_badarg/0, error_protocol/0]).
-
--define(transport_error(Reason), {transport_error, Reason}).
+-export_type([except_thrift/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
-    rpc_event_handler:handle_event(EventHandler, 'get rpc result', RpcId#{
+    rpc_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{
         status => Status, result => Result
     })
 ).
@@ -45,15 +38,12 @@ stop_pool(Name) ->
     rpc_thrift_http_transport:stop_client_pool(Name).
 
 -spec call(rpc_client:client(), request(), rpc_client:options()) ->
-    rpc_client:result_ok() |
-    no_return().  %% throw:{except_thrift() , rpc_client:client()} |
-                  %% error:{error_call()    , rpc_client:client()} |
-                  %% error:{error_badarg()  , rpc_client:client()}.
+    rpc_client:result_ok() | no_return().
 call(Client = #{event_handler := EventHandler},
     {Service, Function, Args}, TransportOpts)
 ->
     RpcId = maps:with([span_id, trace_id, parent_id], Client),
-    rpc_event_handler:handle_event(EventHandler, 'create rpc', RpcId#{
+    rpc_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
         service   => Service,
         function  => Function,
         type      => get_rpc_type(Service, Function),
@@ -66,6 +56,10 @@ call(Client = #{event_handler := EventHandler},
         ), RpcId, Client
     ).
 
+
+%%
+%% Internal functions
+%%
 get_rpc_type(Service, Function) ->
     try get_rpc_type(Service:function_info(Function, reply_type))
     catch
@@ -105,7 +99,7 @@ format_return({ok, Result}, RpcId,
     Client = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Result),
-    {ok, Result, Client};
+    {{ok, Result}, Client};
 
 %% In case a server violates the requirements and sends
 %% #TAppiacationException{} with http status code 200.
@@ -113,16 +107,16 @@ format_return({exception, Result = #'TApplicationException'{}}, RpcId,
     Client = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Result),
-    error({?transport_error(server_error), Client});
+    error({?error_transport(server_error), Client});
 
-%% Service threw defined thrift exception
-format_return({exception, Exception}, RpcId,
+%% Service threw valid thrift exception
+format_return(Exception = ?except_thrift(_), RpcId,
     Client = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Exception),
     throw({Exception, Client});
 
-format_return({error, Error = ?transport_error(_)}, RpcId,
+format_return({error, Error = ?error_transport(_)}, RpcId,
     Client = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
