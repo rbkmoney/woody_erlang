@@ -1,24 +1,24 @@
--module(rpc_tests_SUITE).
+-module(woody_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 
--include("rpc_test_types.hrl").
--include("src/rpc_defs.hrl").
+-include("woody_test_types.hrl").
+-include("src/woody_defs.hrl").
 
 -compile(export_all).
 
 -behaviour(supervisor).
--behaviour(rpc_thrift_handler).
--behaviour(rpc_event_handler).
+-behaviour(woody_server_thrift_handler).
+-behaviour(woody_event_handler).
 
 %% supervisor callbacks
 -export([init/1]).
 
-%% rpc_thrift_handler callbacks
+%% woody_server_thrift_handler callbacks
 -export([handle_function/5]).
 -export([handle_error/5]).
 
-%% rpc_event_handler callbacks
+%% woody_event_handler callbacks
 -export([handle_event/2]).
 
 %% internal API
@@ -85,8 +85,8 @@
 -define(SERVER_IP     , {0,0,0,0}).
 -define(SERVER_PORT   , 8085).
 -define(URL_BASE      , "0.0.0.0:8085").
--define(PATH_WEAPONS  , "/v1/rpc/test/weapons").
--define(PATH_POWERUPS , "/v1/rpc/test/powerups").
+-define(PATH_WEAPONS  , "/v1/woody/test/weapons").
+-define(PATH_POWERUPS , "/v1/woody/test/powerups").
 
 %%
 %% tests descriptions
@@ -109,7 +109,6 @@ all() ->
         call_oneway_void_test,
         call_async_ok_test,
         span_ids_sequence_test,
-        call_two_services_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
         allowed_transport_options_test,
@@ -120,7 +119,7 @@ all() ->
 %% starting/stopping
 %%
 init_per_suite(C) ->
-    {ok, Apps} = application:ensure_all_started(rpc),
+    {ok, Apps} = application:ensure_all_started(woody),
     [{apps, Apps}|C].
 
 end_per_suite(C) ->
@@ -144,20 +143,16 @@ init_per_testcase(Tc, C) when
     Tc =:= multiplexed_transport_test
 ->
     do_init_per_testcase([powerups], C);
-init_per_testcase(Tc, C) when
-    Tc =:= call_two_services_test
-->
-    do_init_per_testcase([weapons, powerups], C);
 init_per_testcase(_, C) ->
     do_init_per_testcase([weapons], C).
 
 do_init_per_testcase(Services, C) ->
     {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    {ok, _}   = start_rpc_server(rpc_ct, Sup, Services),
+    {ok, _}   = start_woody_server(woody_ct, Sup, Services),
     [{sup, Sup} | C].
 
-start_rpc_server(Id, Sup, Services) ->
-    Server = rpc_server:child_spec(Id, #{
+start_woody_server(Id, Sup, Services) ->
+    Server = woody_server:child_spec(Id, #{
         handlers      => [get_handler(S) || S <- Services],
         event_handler => ?MODULE,
         ip            => ?SERVER_IP,
@@ -169,12 +164,12 @@ start_rpc_server(Id, Sup, Services) ->
 get_handler(powerups) ->
     {
         ?PATH_POWERUPS,
-        {rpc_test_powerups_service, ?MODULE, []}
+        {woody_test_powerups_service, ?MODULE, []}
     };
 get_handler(weapons) ->
     {
         ?PATH_WEAPONS,
-        {rpc_test_weapons_service, ?MODULE, []}
+        {woody_test_weapons_service, ?MODULE, []}
     }.
 
 end_per_test_case(_,C) ->
@@ -320,31 +315,21 @@ span_ids_sequence_test(_) ->
     Expect  = call(Client, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
-call_two_services_test(_) ->
-    Gun     =  <<"Enforcer">>,
-    gun_test_basic(call_safe, <<"two_services1">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true),
-    Id      = <<"two_services2">>,
-    Armor   = <<"Body Armor">>,
-    Client  = get_client(Id),
-    Expect  = {{ok, genlib_map:get(<<"Body Armor">>, ?POWERUPS)}, Client},
-    Expect  = call_safe(Client, powerups, get_powerup, [Armor, self_to_bin()]),
-    {ok, _} = receive_msg({Id, Armor}).
-
 call_with_client_pool_test(_) ->
     Pool = guns,
-    ok = rpc_thrift_client:start_pool(Pool, 10),
+    ok = woody_client_thrift:start_pool(Pool, 10),
     Id = <<"call_with_client_pool">>,
     Gun =  <<"Enforcer">>,
     Client = get_client(Id),
     {Url, Service} = get_service_endpoint(weapons),
     Expect = {{ok, genlib_map:get(Gun, ?WEAPONS)}, Client},
-    Expect = rpc_client:call(
+    Expect = woody_client:call(
         Client,
         {Service, get_weapon, [Gun, self_to_bin()]},
         #{url => Url, pool => Pool}
     ),
     receive_msg({Id, Gun}),
-    ok = rpc_thrift_client:stop_pool(Pool).
+    ok = woody_client_thrift:stop_pool(Pool).
 
 multiplexed_transport_test(_) ->
     Id  = <<"multiplexed_transport">>,
@@ -357,7 +342,7 @@ multiplexed_transport_test(_) ->
 
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        rpc_thrift_http_transport:new(
+        woody_client_thrift_http_transport:new(
             #{
                 span_id => Id, trace_id => Id, parent_id => Id
             },
@@ -375,20 +360,21 @@ allowed_transport_options_test(_) ->
     Args = [Gun, self_to_bin()],
     {Url, Service} = get_service_endpoint(weapons),
     Pool = guns,
-    ok = rpc_thrift_client:start_pool(Pool, 1),
+    ok = woody_client_thrift:start_pool(Pool, 1),
     Client = get_client(Id),
     Options = #{url => Url, pool => Pool, ssl_options => [], connect_timeout => 0},
-    {{error, ?error_transport(connect_timeout)}, Client} = rpc_client:call_safe(
+    {{error, ?error_transport(connect_timeout)}, Client} = woody_client:call_safe(
         Client,
         {Service, get_weapon, Args},
         Options
     ),
     BadOpt = #{custom_option => 'fire!'},
-    {{error, {badarg, {unsupported_options, BadOpt}}, _}, Client}  = rpc_client:call_safe(
+    {{error, {badarg, {unsupported_options, BadOpt}}, _}, Client}  = woody_client:call_safe(
         Client,
         {Service, get_weapon, Args},
         maps:merge(Options, BadOpt)
-    ).
+    ),
+    ok = woody_client_thrift:stop_pool(Pool).
 
 server_http_request_validation_test(_) ->
     Id  = <<"server_http_request_validation">>,
@@ -428,16 +414,16 @@ init(_) ->
 }}.
 
 %%
-%% rpc_thrift_handler callbacks
+%% woody_server_thrift_handler callbacks
 %%
 
 %% Weapons
 handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
     _RpcId    = #{span_id   := SpanId, trace_id := TraceId},
-    RpcClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    WoodyClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
 ->
     send_msg(To, {SpanId, CurrentWeapon}),
-    switch_weapon(CurrentWeapon, Direction, Shift, RpcClient);
+    switch_weapon(CurrentWeapon, Direction, Shift, WoodyClient);
 
 handle_function(get_weapon, {Name, To},
     #{span_id   := SpanId, trace_id := TraceId},
@@ -473,22 +459,22 @@ handle_error(get_powerup, _,
     error(no_more_powerups);
 handle_error(_Function, _Reason,
     _RpcId     = #{span_id   := SpanId, trace_id := TraceId},
-    _RpcClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    _WoodyClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
 ->
     ok.
 
 
 %%
-%% rpc_event_handler callbacks
+%% woody_event_handler callbacks
 %%
 handle_event(Type, Meta) ->
-    ct:pal(info, "rpc event ~p: ~p", [Type, Meta]).
+    ct:pal(info, "woody event ~p: ~p", [Type, Meta]).
 
 %%
 %% internal functions
 %%
 get_client(ReqId) ->
-    rpc_client:new(ReqId, ?MODULE).
+    woody_client:new(ReqId, ?MODULE).
 
 call(Client, ServiceName, Function, Args) ->
     do_call(call, Client, ServiceName, Function, Args).
@@ -498,7 +484,7 @@ call_safe(Client, ServiceName, Function, Args) ->
 
 do_call(Call, Client, ServiceName, Function, Args) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    rpc_client:Call(
+    woody_client:Call(
         Client,
         {Service, Function, Args},
         #{url => Url}
@@ -506,7 +492,7 @@ do_call(Call, Client, ServiceName, Function, Args) ->
 
 call_async(Client, ServiceName, Function, Args, Sup, Callback) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    rpc_client:call_async(Sup, Callback,
+    woody_client:call_async(Sup, Callback,
         Client,
         {Service, Function, Args},
         #{url => Url}
@@ -515,12 +501,12 @@ call_async(Client, ServiceName, Function, Args, Sup, Callback) ->
 get_service_endpoint(weapons) ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_WEAPONS),
-        rpc_test_weapons_service
+        woody_test_weapons_service
     };
 get_service_endpoint(powerups) ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_POWERUPS),
-        rpc_test_powerups_service
+        woody_test_powerups_service
     }.
 
 gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
@@ -544,8 +530,8 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
         _    -> ok
     end.
 
-switch_weapon(CurrentWeapon, Direction, Shift, RpcClient) ->
-    case call_safe(RpcClient, weapons, get_weapon,
+switch_weapon(CurrentWeapon, Direction, Shift, WoodyClient) ->
+    case call_safe(WoodyClient, weapons, get_weapon,
              [new_weapon_name(CurrentWeapon, Direction, Shift), self_to_bin()])
     of
         {{ok, Weapon}, _} ->
@@ -554,7 +540,7 @@ switch_weapon(CurrentWeapon, Direction, Shift, RpcClient) ->
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }}, NextClient} ->
-            ok = validate_next_client(NextClient, RpcClient),
+            ok = validate_next_client(NextClient, WoodyClient),
             switch_weapon(CurrentWeapon, Direction, Shift + 1, NextClient)
     end.
 

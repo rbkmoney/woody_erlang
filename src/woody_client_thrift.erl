@@ -1,25 +1,25 @@
--module(rpc_thrift_client).
+-module(woody_client_thrift).
 
--behaviour(rpc_client).
+-behaviour(woody_client).
 
 -include_lib("thrift/include/thrift_constants.hrl").
--include("rpc_defs.hrl").
+-include("woody_defs.hrl").
 
 %% API
 -export([start_pool/2]).
 -export([stop_pool/1]).
 
-%% rpc_client behaviour callback
+%% woody_client behaviour callback
 -export([call/3]).
 
 -type args() :: any().
--type request() :: {rpc_t:service(), rpc_t:func(), args()}.
+-type request() :: {woody_t:service(), woody_t:func(), args()}.
 
 -type except_thrift() :: _OkException.
 -export_type([except_thrift/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
-    rpc_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{
         status => Status, result => Result
     })
 ).
@@ -31,19 +31,19 @@
 %%
 -spec start_pool(any(), pos_integer()) -> ok.
 start_pool(Name, PoolSize) when is_integer(PoolSize) ->
-    rpc_thrift_http_transport:start_client_pool(Name,PoolSize).
+    woody_client_thrift_http_transport:start_client_pool(Name,PoolSize).
 
 -spec stop_pool(any()) -> ok | {error, not_found | simple_one_for_one}.
 stop_pool(Name) ->
-    rpc_thrift_http_transport:stop_client_pool(Name).
+    woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(rpc_client:client(), request(), rpc_client:options()) ->
-    rpc_client:result_ok() | no_return().
+-spec call(woody_client:client(), request(), woody_client:options()) ->
+    woody_client:result_ok() | no_return().
 call(Client = #{event_handler := EventHandler},
     {Service, Function, Args}, TransportOpts)
 ->
     RpcId = maps:with([span_id, trace_id, parent_id], Client),
-    rpc_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
         service   => Service,
         function  => Function,
         type      => get_rpc_type(Service, Function),
@@ -72,7 +72,7 @@ get_rpc_type(_) -> call.
 
 make_thrift_client(RpcId, Service, TransportOpts, EventHandler) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        rpc_thrift_http_transport:new(RpcId, TransportOpts, EventHandler),
+        woody_client_thrift_http_transport:new(RpcId, TransportOpts, EventHandler),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),

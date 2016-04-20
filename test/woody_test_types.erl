@@ -4,10 +4,10 @@
 %% DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
 %%
 
--module(rpc_test_types).
+-module(woody_test_types).
 
 
--include("rpc_test_types.hrl").
+-include("woody_test_types.hrl").
 
 -type type_ref() :: {module(), atom()}.
 -type field_num() :: pos_integer().

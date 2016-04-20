@@ -1,9 +1,9 @@
--module(rpc_thrift_http_transport).
+-module(woody_client_thrift_http_transport).
 
 -behaviour(thrift_transport).
 -dialyzer(no_undefined_callbacks).
 
--include("rpc_defs.hrl").
+-include("woody_defs.hrl").
 
 -define(SUPPORTED_TRANSPORT_OPTS, [pool, ssl_options, connect_timeout]).
 
@@ -43,17 +43,17 @@
 ).
 
 -define(log_response(EventHandler, Status, Meta),
-    rpc_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
+    woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
         Meta#{status =>Status})
 ).
 
--type rpc_transport() :: #{
-    span_id       => rpc_t:req_id(),
-    trace_id      => rpc_t:req_id(),
-    parent_id     => rpc_t:req_id(),
-    url           => rpc_t:url(),
+-type woody_transport() :: #{
+    span_id       => woody_t:req_id(),
+    trace_id      => woody_t:req_id(),
+    parent_id     => woody_t:req_id(),
+    url           => woody_t:url(),
     options       => map(),
-    event_handler => rpc_t:handler(),
+    event_handler => woody_t:handler(),
     write_buffer  => binary(),
     read_buffer   => binary()
 }.
@@ -62,7 +62,7 @@
 %%
 %% API
 %%
--spec new(rpc_t:rpc_id(), rpc_client:options(), rpc_t:handler()) ->
+-spec new(woody_t:rpc_id(), woody_client:options(), woody_t:handler()) ->
     thrift_transport:t_transport() | no_return().
 new(RpcId, TransportOpts = #{url := Url}, EventHandler) ->
     TransportOpts1 = maps:remove(url, TransportOpts),
@@ -92,14 +92,14 @@ stop_client_pool(Name) ->
 %%
 %% Thrift transport callbacks
 %%
--spec write(rpc_transport(), binary()) -> {rpc_transport(), ok}.
+-spec write(woody_transport(), binary()) -> {woody_transport(), ok}.
 write(Transport = #{write_buffer := WBuffer}, Data) when
     is_binary(WBuffer),
     is_binary(Data)
 ->
     {Transport#{write_buffer => <<WBuffer/binary, Data/binary>>}, ok}.
 
--spec read(rpc_transport(), pos_integer()) -> {rpc_transport(), {ok, binary()}}.
+-spec read(woody_transport(), pos_integer()) -> {woody_transport(), {ok, binary()}}.
 read(Transport = #{read_buffer := RBuffer}, Len) when
     is_binary(RBuffer)
 ->
@@ -109,7 +109,7 @@ read(Transport = #{read_buffer := RBuffer}, Len) when
     Transport1 = Transport#{read_buffer => RBuffer1},
     {Transport1, Response}.
 
--spec flush(rpc_transport()) -> {rpc_transport(), ok | {error, error()}}.
+-spec flush(woody_transport()) -> {woody_transport(), ok | {error, error()}}.
 flush(Transport = #{
     url           := Url,
     span_id       := SpanId,
@@ -131,7 +131,7 @@ flush(Transport = #{
         {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(ParentId)}
     ],
     RpcId = maps:with([span_id, trace_id, parent_id], Transport),
-    rpc_event_handler:handle_event(EventHandler, ?EV_CLIENT_SEND,
+    woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_SEND,
         RpcId#{url => Url}),
     case send(Url, Headers, WBuffer, Options, RpcId, EventHandler) of
         {ok, Response} ->
@@ -143,7 +143,7 @@ flush(Transport = #{
             {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
     end.
 
--spec close(rpc_transport()) -> {rpc_transport(), ok}.
+-spec close(woody_transport()) -> {woody_transport(), ok}.
 close(Transport) ->
     {Transport#{}, ok}.
 

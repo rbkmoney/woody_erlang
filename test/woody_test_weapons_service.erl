@@ -4,11 +4,11 @@
 %% DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
 %%
 
--module(rpc_test_weapons_service).
+-module(woody_test_weapons_service).
 -behaviour(thrift_service).
 
 
--include("rpc_test_weapons_service.hrl").
+-include("woody_test_weapons_service.hrl").
 
 -export([function_info/2]).
 -export([struct_info/1]).
@@ -25,16 +25,16 @@ struct_info(_) -> erlang:error(badarg).
 % switch_weapon(This, Current_weapon, Direction, Shift, Data)
 function_info('switch_weapon', params_type) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'weapon'}}, 'current_weapon', #'weapon'{}},
-        {2, undefined, {enum, {rpc_test_types, 'direction'}}, 'direction', undefined},
+        {1, undefined, {struct, {woody_test_types, 'weapon'}}, 'current_weapon', #'weapon'{}},
+        {2, undefined, {enum, {woody_test_types, 'direction'}}, 'direction', undefined},
         {3, undefined, i16, 'shift', undefined},
         {4, undefined, string, 'data', undefined}
     ]};
 function_info('switch_weapon', reply_type) ->
-    {struct, {rpc_test_types, 'weapon'}};
+    {struct, {woody_test_types, 'weapon'}};
 function_info('switch_weapon', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
+        {1, undefined, {struct, {woody_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
     ]};
 % get_weapon(This, Name, Data)
 function_info('get_weapon', params_type) ->
@@ -43,10 +43,10 @@ function_info('get_weapon', params_type) ->
         {2, undefined, string, 'data', undefined}
     ]};
 function_info('get_weapon', reply_type) ->
-    {struct, {rpc_test_types, 'weapon'}};
+    {struct, {woody_test_types, 'weapon'}};
 function_info('get_weapon', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
+        {1, undefined, {struct, {woody_test_types, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
     ]};
 function_info(_Func, _Info) -> erlang:error(badarg).
 

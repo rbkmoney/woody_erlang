@@ -4,11 +4,11 @@
 %% DO NOT EDIT UNLESS YOU ARE SURE THAT YOU KNOW WHAT YOU ARE DOING
 %%
 
--module(rpc_test_powerups_service).
+-module(woody_test_powerups_service).
 -behaviour(thrift_service).
 
 
--include("rpc_test_powerups_service.hrl").
+-include("woody_test_powerups_service.hrl").
 
 -export([function_info/2]).
 -export([struct_info/1]).
@@ -29,10 +29,10 @@ function_info('get_powerup', params_type) ->
         {2, undefined, string, 'data', undefined}
     ]};
 function_info('get_powerup', reply_type) ->
-    {struct, {rpc_test_types, 'powerup'}};
+    {struct, {woody_test_types, 'powerup'}};
 function_info('get_powerup', exceptions) ->
     {struct, [
-        {1, undefined, {struct, {rpc_test_types, 'powerup_failure'}}, 'error', #'powerup_failure'{}}
+        {1, undefined, {struct, {woody_test_types, 'powerup_failure'}}, 'error', #'powerup_failure'{}}
     ]};
 % like_powerup(This, Name, Data)
 function_info('like_powerup', params_type) ->

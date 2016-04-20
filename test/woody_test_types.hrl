@@ -1,9 +1,9 @@
--ifndef(_rpc_test_types_included).
--define(_rpc_test_types_included, yeah).
+-ifndef(_woody_test_types_included).
+-define(_woody_test_types_included, yeah).
 
 
--define(RPC_TEST_DIRECTION_NEXT, 1).
--define(RPC_TEST_DIRECTION_PREV, 0).
+-define(WOODY_TEST_DIRECTION_NEXT, 1).
+-define(WOODY_TEST_DIRECTION_PREV, 0).
 
 %% struct 'weapon'
 

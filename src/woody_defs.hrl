@@ -1,5 +1,5 @@
--ifndef(_rpc_defs_included).
--define(_rpc_defs_included, yeah).
+-ifndef(_woody_defs_included).
+-define(_woody_defs_included, yeah).
 
 %% Http headers
 -define(CONTENT_TYPE_THRIFT         , <<"application/x-thrift">>).

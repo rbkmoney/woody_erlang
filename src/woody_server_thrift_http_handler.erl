@@ -1,14 +1,14 @@
--module(rpc_thrift_http_handler).
+-module(woody_server_thrift_http_handler).
 
--behaviour(rpc_server).
+-behaviour(woody_server).
 -behaviour(thrift_transport).
 -behaviour(cowboy_http_handler).
 
 -dialyzer(no_undefined_callbacks).
 
--include("rpc_defs.hrl").
+-include("woody_defs.hrl").
 
-%% rpc_server callback
+%% woody_server callback
 -export([child_spec/2]).
 
 %% thrift_transport callbacks
@@ -29,12 +29,12 @@
 
 -type server_handler() :: {
     '_' | iodata(), %% cowboy_router:route_match()
-    rpc_thrift_handler:thrift_handler()
+    woody_server_thrift_handler:thrift_handler()
 }.
 
 -type options() :: #{
     handlers      => list(server_handler()),
-    event_handler => rpc_t:handler(),
+    event_handler => woody_t:handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
     net_opts      => list()
@@ -43,7 +43,7 @@
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
 -define(log_event(EventHandler, Event, Status, Meta),
-    rpc_event_handler:handle_event(EventHandler, Event, Meta#{
+    woody_event_handler:handle_event(EventHandler, Event, Meta#{
         status => Status
     })
 ).
@@ -56,7 +56,7 @@
 
 
 %%
-%% rpc_server callback
+%% woody_server callback
 %%
 -spec child_spec(_Id, options()) ->
     supervisor:child_spec().
@@ -117,10 +117,10 @@ config() ->
 %%
 -record(http_req, {
     req              :: cowboy_req:req(),
-    rpc_id           :: rpc_t:rpc_id(),
+    rpc_id           :: woody_t:rpc_id(),
     body = <<>>      :: binary(),
     resp_body = <<>> :: binary(),
-    event_handler    :: rpc_t:handler(),
+    event_handler    :: woody_t:handler(),
     replied = false  :: boolean()
 }).
 -type state() :: #http_req{}.
@@ -154,11 +154,14 @@ flush(State = #http_req{
     event_handler = EventHandler
 }) ->
     {Code, Req1} = add_x_error_header(Req),
-    ?log_event(EventHandler, ?EV_SERVER_SEND, ok,
+    ?log_event(EventHandler, ?EV_SERVER_SEND, reply_status(Code),
         RpcId#{code => Code}),
     {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
         Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
+
+reply_status(200) -> ok;
+reply_status(_) -> error.
 
 -spec close(state()) -> {state(), ok}.
 close(_State) ->
@@ -213,7 +216,7 @@ terminate({normal, _}, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, [_, RpcId, EventHandler | _]) ->
     erlang:erase(?THRIFT_ERROR_KEY),
-    rpc_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId#{
         error => <<"http handler terminated abnormally">>, reason => Reason
     }),
     ok.
@@ -276,9 +279,11 @@ get_body(Req, ServerOpts) ->
     end.
 
 do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
-    RpcClient = rpc_client:make_child_client(RpcId, EventHandler),
-    Transport = make_transport(Req, RpcId, Body, EventHandler),
-    case rpc_thrift_handler:start(Transport, RpcId, RpcClient, ThriftHander, EventHandler, ?MODULE) of
+    WoodyClient = woody_client:make_child_client(RpcId, EventHandler),
+    Transport   = make_transport(Req, RpcId, Body, EventHandler),
+    case woody_server_thrift_handler:start(Transport, RpcId, WoodyClient, ThriftHander,
+        EventHandler, ?MODULE)
+    of
         ok ->
             {ok, Req, undefined};
         {error, Reason} ->
@@ -292,31 +297,36 @@ handle_error(bad_request, RpcId, EventHandler, Req) ->
 handle_error(_Error, RpcId, EventHandler, Req) ->
     reply_error(500, RpcId, EventHandler, Req).
 
+reply_error(Code, RpcId, EventHandler, Req) ->
+    ?log_event(EventHandler, ?EV_SERVER_SEND, error, RpcId#{code => Code}),
+    {_,  Req1} = add_x_error_header(Req),
+    reply_error(Code, Req1).
 
 reply_error(Code, Req) when is_integer(Code), Code >= 400 ->
     {ok, Req1} = cowboy_req:reply(Code, Req),
     {ok, Req1, undefined}.
-
-reply_error(Code, RpcId, EventHandler, Req) when is_integer(Code), Code >= 400 ->
-    ?log_event(EventHandler, ?EV_SERVER_SEND, error, RpcId#{code => Code}),
-    {_,  Req1} = add_x_error_header(Req),
-    {ok, Req2} = cowboy_req:reply(Code, Req1),
-    {ok, Req2, undefined}.
 
 reply_error_early(Code, Req) when is_integer(Code) ->
     {ok, Req1} = cowboy_req:reply(Code, Req),
     {shutdown, Req1, undefined}.
 
 set_resp_headers(RpcId, Req) ->
-    maps:fold(fun(K, H, R) -> cowboy_req:set_resp_header(H, genlib_map:get(K, RpcId), R) end, Req, ?HEADERS_RPC_ID).
-
+    maps:fold(
+        fun(K, H, R) ->
+            cowboy_req:set_resp_header(H, genlib_map:get(K, RpcId), R)
+        end, Req, ?HEADERS_RPC_ID
+    ).
 
 add_x_error_header(Req) ->
     case erlang:erase(?THRIFT_ERROR_KEY) of
         undefined ->
             {200, Req};
         {logic, Error} ->
-            {200, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_LOGIC, genlib:to_binary(Error), Req)};
+            {200, cowboy_req:set_resp_header(
+                ?HEADER_NAME_ERROR_LOGIC, genlib:to_binary(Error), Req
+            )};
         {transport, Error} ->
-            {500, cowboy_req:set_resp_header(?HEADER_NAME_ERROR_TRANSPORT, genlib:to_binary(Error), Req)}
+            {500, cowboy_req:set_resp_header(
+                ?HEADER_NAME_ERROR_TRANSPORT, genlib:to_binary(Error), Req
+            )}
     end.

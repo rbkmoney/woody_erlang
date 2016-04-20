@@ -1,4 +1,4 @@
-{application, rpc , [
+{application, woody, [
     {description, "An RPC library for inter-MS communication"},
     {vsn, "0.0.1"},
     {registered, []},

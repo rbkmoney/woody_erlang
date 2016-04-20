@@ -1,7 +1,7 @@
 %%% @doc Server API
 %%% @end
 
--module(rpc_server).
+-module(woody_server).
 
 -behaviour(supervisor).
 
@@ -26,11 +26,11 @@
 
 -spec child_spec(_Id, options()) -> supervisor:child_spec().
 child_spec(Id, Options) ->
-    ProtocolHandler = rpc_t:get_protocol_handler(server, Options),
+    ProtocolHandler = woody_t:get_protocol_handler(server, Options),
     ServerSpec = ProtocolHandler:child_spec(Id, Options),
     #{
         id       => Id,
-        start    => {supervisor, start_link, [?MODULE, {rpc_server, ServerSpec}]},
+        start    => {supervisor, start_link, [?MODULE, {woody_server, ServerSpec}]},
         restart  => permanent,
         shutdown => infinity,
         type     => supervisor,
@@ -40,8 +40,8 @@ child_spec(Id, Options) ->
 %%
 %% Supervisor callbacks
 %%
--spec init({rpc_server, supervisor:child_spec()}) -> {ok, {#{}, [#{}, ...]}}.
-init({rpc_server, ChildSpec}) ->
+-spec init({woody_server, supervisor:child_spec()}) -> {ok, {#{}, [#{}, ...]}}.
+init({woody_server, ChildSpec}) ->
     {ok, {#{
         strategy  => one_for_one,
         intensity => 10,

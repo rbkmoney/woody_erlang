@@ -1,4 +1,4 @@
-namespace erl rpc
+namespace erl woody
 
 struct Weapon {
     1: required string name

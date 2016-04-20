@@ -5,5 +5,5 @@
 %%
 
 
--include("rpc_test_types.hrl").
+-include("woody_test_types.hrl").
 

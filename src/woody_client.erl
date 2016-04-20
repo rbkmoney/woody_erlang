@@ -1,11 +1,11 @@
 %%% @doc Client API
 %%% @end
 
--module(rpc_client).
+-module(woody_client).
 
 -behaviour(supervisor).
 
--include("rpc_defs.hrl").
+-include("woody_defs.hrl").
 
 %% API
 -export([new/2]).
@@ -35,10 +35,10 @@
 %%
 -type client() :: #{  %% all elements are mandatory
     root_rpc      => boolean(),
-    span_id       => rpc_t:req_id() | undefined,
-    trace_id      => rpc_t:req_id(),
-    parent_id     => rpc_t:req_id(),
-    event_handler => rpc_t:handler(),
+    span_id       => woody_t:req_id() | undefined,
+    trace_id      => woody_t:req_id(),
+    parent_id     => woody_t:req_id(),
+    event_handler => woody_t:handler(),
     seq           => non_neg_integer()
 }.
 -type stacktrace() :: list().
@@ -46,21 +46,21 @@
 -type result_ok() :: {ok | {ok, _Response}, client()}.
 
 -type result_error() ::
-    {{exception , rpc_thrift_client:except_thrift()} , client()} |
-    {{error     , rpc_thrift_http_transport:error()} , client()} |
-    {{error     , _Error, stacktrace()}              , client()}.
+    {{exception , woody_client_thrift:except_thrift()}, client()} |
+    {{error     , woody_client_thrift_http_transport:error()}, client()} |
+    {{error     , _Error, stacktrace()}, client()}.
 
 -type request() :: any().
 
 -type options() :: #{
     protocol  => thrift,     %% optional
     transport => http,       %% optional
-    url       => rpc_t:url() %% mandatory
+    url       => woody_t:url() %% mandatory
 }.
 
 -type callback() :: fun((result_ok() | result_error()) -> _).
 
--spec new(rpc_t:req_id(), rpc_t:handler()) -> client().
+-spec new(woody_t:req_id(), woody_t:handler()) -> client().
 new(ReqId, EventHandler) ->
     #{
         root_rpc      => true,
@@ -71,7 +71,7 @@ new(ReqId, EventHandler) ->
         event_handler => EventHandler
     }.
 
--spec make_child_client(rpc_t:rpc_id(), rpc_t:handler()) -> client().
+-spec make_child_client(woody_t:rpc_id(), woody_t:handler()) -> client().
 make_child_client(#{span_id := ReqId, trace_id := TraceId}, EventHandler) ->
     #{
         root_rpc      => false,
@@ -91,7 +91,7 @@ next(Client = #{root_rpc := false, seq := Seq}) ->
 
 -spec call(client(), request(), options()) -> result_ok() | no_return().
 call(Client, Request, Options) ->
-    ProtocolHandler = rpc_t:get_protocol_handler(client, Options),
+    ProtocolHandler = woody_t:get_protocol_handler(client, Options),
     ProtocolHandler:call(next(Client), Request, Options).
 
 -spec call_safe(client(), request(), options()) -> result_ok() | result_error().
@@ -112,13 +112,13 @@ call_safe(Client, Request, Options) ->
             {{Class, Reason, erlang:get_stacktrace()}, Client}
     end.
 
--spec call_async(rpc_t:sup_ref(), callback(), client(), request(), options()) ->
+-spec call_async(woody_t:sup_ref(), callback(), client(), request(), options()) ->
     {ok, pid(), client()} | {error, _}.
 call_async(Sup, Callback, Client, Request, Options) ->
-    _ = rpc_t:get_protocol_handler(client, Options),
+    _ = woody_t:get_protocol_handler(client, Options),
     SupervisorSpec = #{
-        id       => {?MODULE, rpc_clients_sup},
-        start    => {supervisor, start_link, [?MODULE, rpc_client_sup]},
+        id       => {?MODULE, woody_clients_sup},
+        start    => {supervisor, start_link, [?MODULE, woody_client_sup]},
         restart  => permanent,
         shutdown => infinity,
         type     => supervisor,
@@ -146,8 +146,8 @@ do_call_async(Callback, Client, Request, Options) ->
 %%
 %% Supervisor callbacks
 %%
--spec init(rpc_client_sup) -> {ok, {#{}, [#{}, ...]}}.
-init(rpc_client_sup) ->
+-spec init(woody_client_sup) -> {ok, {#{}, [#{}, ...]}}.
+init(woody_client_sup) ->
     {ok, {
         #{
             strategy  => simple_one_for_one,
@@ -168,7 +168,7 @@ init(rpc_client_sup) ->
 %%
 %% Internal functions
 %%
--spec make_req_id(non_neg_integer()) -> rpc_t:req_id().
+-spec make_req_id(non_neg_integer()) -> woody_t:req_id().
 make_req_id(Seq) ->
     BinSeq = genlib:to_binary(Seq),
     SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),

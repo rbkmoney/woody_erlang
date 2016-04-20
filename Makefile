@@ -1,7 +1,6 @@
 REBAR := $(shell which rebar3 2>/dev/null || which ./rebar3)
-RELNAME = rpc
 
-.PHONY: all compile devrel start test clean distclean dialyze
+.PHONY: all compile test clean distclean dialyze
 
 all: compile
 
@@ -10,12 +9,6 @@ compile:
 
 rebar-update:
 	$(REBAR) update
-
-devrel:
-	$(REBAR) release
-
-start: devrel
-	_build/default/rel/${RELNAME}/bin/${RELNAME} console
 
 test:
 	$(REBAR) ct
