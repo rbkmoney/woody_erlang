@@ -1,7 +1,7 @@
 Woody [![wercker status](https://app.wercker.com/status/fd36dd241f6c38a784de7bcf7e3f4549/s "wercker status")](https://app.wercker.com/project/bykey/fd36dd241f6c38a784de7bcf7e3f4549)
 ======
 
-Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://52.29.202.218/scrapyard/rpc-lib).
+Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://52.29.202.218/design/ms/platform/rpc-lib).
 
 На текущий момент RPC реализован с помощью Thrift протокола поверх http.
 
