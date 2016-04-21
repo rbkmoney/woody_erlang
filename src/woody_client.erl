@@ -174,4 +174,4 @@ init(woody_client_sup) ->
 make_req_id(Seq) ->
     BinSeq = genlib:to_binary(Seq),
     SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),
-    <<BinSeq/binary, $:, SnowFlake/binary>>.
+    <<SnowFlake/binary, $:, BinSeq/binary>>.
