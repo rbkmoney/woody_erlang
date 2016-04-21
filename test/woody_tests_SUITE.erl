@@ -243,7 +243,7 @@ call_safe_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id = <<"call_safe_client_transport_error">>,
     Client = get_client(Id),
-    {{error, ?error_protocol(_), _Stack}, Client} = call_safe(Client,
+    {{error, ?error_protocol(_)}, Client} = call_safe(Client,
         weapons, get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
@@ -298,8 +298,10 @@ call_async_ok_test(C) ->
     Id2        = <<"call_async_ok2">>,
     Client2    = get_client(Id2),
     {ok, Pid2, Client2} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg({Client1, genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
-    {ok, Pid2} = receive_msg({Client2, genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
+    {ok, Pid1} = receive_msg({Client1,
+        genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
+    {ok, Pid2} = receive_msg({Client2,
+        genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
 get_weapon(Client, Sup, Cb, Gun) ->
     call_async(Client, weapons, get_weapon, [Gun, <<>>], Sup, Cb).
@@ -334,7 +336,8 @@ call_with_client_pool_test(_) ->
 multiplexed_transport_test(_) ->
     Id  = <<"multiplexed_transport">>,
     {Client1, {error, ?error_transport(bad_request)}} = thrift_client:call(
-        make_thrift_multiplexed_client(Id, "powerups", get_service_endpoint(powerups)),
+        make_thrift_multiplexed_client(Id, "powerups",
+            get_service_endpoint(powerups)),
         get_powerup,
         [<<"Body Armor">>, self_to_bin()]
     ),
@@ -369,7 +372,8 @@ allowed_transport_options_test(_) ->
         Options
     ),
     BadOpt = #{custom_option => 'fire!'},
-    {{error, {badarg, {unsupported_options, BadOpt}}, _}, Client}  = woody_client:call_safe(
+    ErrorBadOpt = {badarg, {unsupported_options, BadOpt}},
+    {{error, {error, ErrorBadOpt, _}}, Client} = woody_client:call_safe(
         Client,
         {Service, get_weapon, Args},
         maps:merge(Options, BadOpt)
@@ -388,21 +392,22 @@ server_http_request_validation_test(_) ->
     ],
 
     %% Check missing Id headers, content-type and an empty body on the last step,
-    %% as no Accept is allowed
+    %% as missing Accept is allowed
     lists:foreach(fun({C, H}) ->
         {ok, C, _, _} = hackney:request(post, Url, Headers -- [H], <<>>, [{url, Url}])
         end, lists:zip([403,403,403,403,400], Headers)),
 
-    %% Check wrong Accept,
+    %% Check wrong Accept
     {ok, 406, _, _} = hackney:request(post, Url,
         lists:keyreplace(<<"accept">>, 1, Headers, {<<"accept">>, <<"application/text">>}),
         <<>>, [{url, Url}]),
+
     %% Check wrong methods
     lists:foreach(fun(M) ->
         {ok, 405, _, _} = hackney:request(M, Url, Headers, <<>>, [{url, Url}]) end,
-        [get, put, delete, trace, options, patch]), %% head, options, connect
-    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, [{url, Url}]),
-    {ok, 405, _} = hackney:request(head, Url, Headers, <<>>, [{url, Url}]).
+        [get, put, delete, trace, options, patch]),
+    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, [{url, Url}]),
+    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, [{url, Url}]).
 
 
 %%

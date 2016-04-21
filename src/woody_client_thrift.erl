@@ -12,11 +12,12 @@
 %% woody_client behaviour callback
 -export([call/3]).
 
--type args() :: any().
+-type args()    :: any().
 -type request() :: {woody_t:service(), woody_t:func(), args()}.
 
--type except_thrift() :: _OkException.
--export_type([except_thrift/0]).
+-type except_thrift()  :: _OkException.
+-type error_protocol() :: ?error_protocol(_).
+-export_type([except_thrift/0, error_protocol/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
     woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{

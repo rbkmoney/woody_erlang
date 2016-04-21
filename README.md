@@ -45,7 +45,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 13> {{ok, Result}, _NextClient} = woody_client:call(Client, Request, #{url => Url}).
 ```
 
-В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_), `woody_client:call/3` вернет `{ok, NextClient}`.
+В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_) `woody_client:call/3` вернет `{ok, NextClient}`.
 
 Если сервер бросает `Exception`, описанный в _.thrift_ файле сервиса, `woody_client:call/3` бросит это же исключение в виде: `throw:{{exception, Exception}, NextClient}`, а в случае ошибки RPC вызова: `error:{Reason, NextClient}`.
 
@@ -102,7 +102,7 @@ handle_function(give_me_money, Sum = {Amount, Currency}, RpcId, Client, _Opts) -
 
     %% Используется Client, полученный handle_function,
     %% woody_client:new/2 вызывать не надо.
-    case woody_client:call(Client, RequestLimits, #{url => Wallet}) of
+    case woody_client:call_safe(Client, RequestLimits, #{url => Wallet}) of
         {{ok, ok}, Client1} ->
 
             %% Логи следует тэгировать RpcId, полученным handle_function.
@@ -111,11 +111,11 @@ handle_function(give_me_money, Sum = {Amount, Currency}, RpcId, Client, _Opts) -
             RequestMoney = {my_wallet_service, get_money, Sum},
 
             %% Используется новое значение Client1, полученное из предыдущего вызова
-            %% woody_client:call/3 (call_safe/3, call_async/5).
-            {{ok, Money}, _Client2} = woody_client:call_safe(Client1, RequestMoney,
+            %% woody_client:call_safe/3 (call/3, call_async/5).
+            {{ok, Money}, _Client2} = woody_client:call(Client1, RequestMoney,
                 #{url => Wallet}),
             {ok, Money};
-        {{ok, error}, _Client1} ->
+        {{exception, #over_limits{}}, _Client1} ->
             lager:info("[~p] ~p ~p is too much",
                 [my_event_handler:format_id(RpcId), Amount, Currency]),
             throw(#take_it_easy{})

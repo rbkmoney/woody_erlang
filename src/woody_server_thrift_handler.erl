@@ -329,6 +329,10 @@ format_protocol_error(_Reason, Trans) ->
     mark_error_to_transport(Trans, transport, "bad request"),
     {error, bad_request}.
 
+%% Unfortunately there is no proper way to provide additional info to
+%% the transport, where the actual send happens: the Protocol object
+%% representing thrift protocol and transport in this module is opaque.
+%% So we have to use the hack with a proc dict here.
 -spec mark_error_to_transport(transport_handler(), transport | logic, _Error) -> _.
 mark_error_to_transport(TransportHandler, Type, Error) ->
     TransportHandler:mark_thrift_error(Type, Error).

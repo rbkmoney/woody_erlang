@@ -68,7 +68,7 @@ child_spec(Id, #{
     net_opts := NetOpts
 }) ->
     _ = check_callback(handle_event, 2, EventHandler),
-    AcceptorsPool = genlib_app:env(rpc, acceptors_pool_size,
+    AcceptorsPool = genlib_app:env(woody, acceptors_pool_size,
         ?DEFAULT_ACCEPTORS_POOLSIZE
     ),
     {Transport, TransportOpts} = get_socket_transport(Ip, Port, NetOpts),

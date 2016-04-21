@@ -31,10 +31,11 @@
     ?code500 | ?code503 | {http_code, pos_integer()}.
 -type error_transport(A) ::
     ?error_transport(A).
+-type hackney_other_error() :: term().
 -type error() ::
     error_transport(error_code())     |
     error_transport(partial_response) |
-    error_transport(_).
+    error_transport(hackney_other_error()).
 
 -export_type([error/0]).
 

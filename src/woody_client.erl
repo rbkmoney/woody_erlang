@@ -41,14 +41,16 @@
     event_handler => woody_t:handler(),
     seq           => non_neg_integer()
 }.
+-type class() :: throw | error | exit.
 -type stacktrace() :: list().
 
 -type result_ok() :: {ok | {ok, _Response}, client()}.
 
 -type result_error() ::
-    {{exception , woody_client_thrift:except_thrift()}, client()} |
-    {{error     , woody_client_thrift_http_transport:error()}, client()} |
-    {{error     , _Error, stacktrace()}, client()}.
+    {{exception , woody_client_thrift:except_thrift()}        , client()} |
+    {{error     , woody_client_thrift:error_protocol()}       , client()} |
+    {{error     , woody_client_thrift_http_transport:error()} , client()} |
+    {{error     , {class(), _Reason, stacktrace()}}           , client()}.
 
 -type request() :: any().
 
@@ -106,10 +108,10 @@ call_safe(Client, Request, Options) ->
             {{error, TError}, Client1};
         %% thrift protocol error
         error:{PError = ?error_protocol(_), Client1} ->
-            {{error, PError, erlang:get_stacktrace()}, Client1};
+            {{error, PError}, Client1};
         %% what else could have happened?
         Class:Reason ->
-            {{Class, Reason, erlang:get_stacktrace()}, Client}
+            {{error, {Class, Reason, erlang:get_stacktrace()}}, Client}
     end.
 
 -spec call_async(woody_t:sup_ref(), callback(), client(), request(), options()) ->
