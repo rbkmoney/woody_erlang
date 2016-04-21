@@ -1,0 +1,22 @@
+{application, woody, [
+    {description, "An RPC library for inter-MS communication"},
+    {vsn, "0.0.1"},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib,
+        snowflake,
+        genlib,
+        hackney,
+        thrift
+    ]},
+    {env, [
+        {acceptors_pool_size, 100}
+    ]},
+    {modules, []},
+    {maintainers, [
+        "Anton Belyaev <a.belyaev@rbkmoney.com>"
+    ]},
+    {licenses, []},
+    {links, []}
+]}.
