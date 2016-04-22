@@ -84,7 +84,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 ### Woody Server Thrift Handler
 
 ```erlang
--module(my_money_service).
+-module(my_money_thrift_service_handler).
 -behaviour(woody_server_thrift_handler).
 
 %% Auto-generated Thrift types for my_money_service
@@ -130,3 +130,21 @@ handle_error(give_me_money, Error, RpcId, _Client, _Opts) ->
 ```
 
 Показанное в этом наивном примере реализации `my_money_service` использование `Client` и `RpcId` необходимо для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
+
+### Woody Event Handler
+
+Интерфейс для получения и логирования событий RPC библиотеки.
+
+```erlang
+-module(my_event_handler).
+-behaviour(woody_event_handler).
+
+-export([handle_event/2]).
+
+-spec handle_event(
+    woody_event_handler:event_type(),
+    woody_event_handler:event_meta_type()
+) -> _.
+handle_event(Event, Meta) ->
+    lager:info("woody event ~p: ~p", [Event, Meta]).
+```

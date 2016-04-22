@@ -8,7 +8,7 @@
 %%
 %% behaviour definition
 %%
--export_type([event_type/0, meta_client_send/0, meta_client_receive/0,
+-export_type([event_type/0, event_meta_type/0, meta_client_send/0, meta_client_receive/0,
     meta_server_receive/0, meta_server_send/0, meta_invoke_service_handler/0,
     meta_service_handler_result/0, meta_thrift_error/0, meta_internal_error/0
 ]).
@@ -31,6 +31,10 @@
 -type event_type() :: ?EV_CALL_SERVICE | ?EV_SERVICE_RESULT | ?EV_CLIENT_SEND | ?EV_CLIENT_RECEIVE |
     ?EV_SERVER_RECEIVE | ?EV_SERVER_SEND | ?EV_INVOKE_SERVICE_HANDLER  | ?EV_SERVICE_HANDLER_RESULT |
     ?EV_THRIFT_ERROR | ?EV_INTERNAL_ERROR.
+
+-type event_meta_type() :: meta_client_send() | meta_client_receive() |
+    meta_server_receive() | meta_server_send() | meta_invoke_service_handler() |
+    meta_service_handler_result() | meta_thrift_error() | meta_internal_error().
 
 -type service()      :: woody_t:service().
 -type rpc_type()     :: call | cast.
