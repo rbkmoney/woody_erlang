@@ -395,7 +395,7 @@ server_http_request_validation_test(_) ->
     %% as missing Accept is allowed
     lists:foreach(fun({C, H}) ->
         {ok, C, _, _} = hackney:request(post, Url, Headers -- [H], <<>>, [{url, Url}])
-        end, lists:zip([403,403,403,403,400], Headers)),
+        end, lists:zip([400,400,400,415,400], Headers)),
 
     %% Check wrong Accept
     {ok, 406, _, _} = hackney:request(post, Url,
