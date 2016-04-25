@@ -186,7 +186,7 @@ init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
         {error, ErrorMeta, Req2} ->
             ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
                 ErrorMeta#{url => Url, reason => bad_rpc_id}),
-            reply_error_early(403, Req2)
+            reply_error_early(400, Req2)
     end.
 
 -spec handle(cowboy_req:req(), list()) ->
@@ -255,7 +255,7 @@ check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
 check_content_type({BadType, Req}, [Url, RpcId, EventHandler | _]) ->
     ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
         RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
-    reply_error_early(403, Req).
+    reply_error_early(415, Req).
 
 check_accept({Accept, Req}, Opts) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;

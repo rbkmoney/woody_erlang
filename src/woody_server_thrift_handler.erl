@@ -13,7 +13,7 @@
 -type error_reason() :: any().
 -type result()       :: any().
 -type handler_opts() :: list().
--type args()         :: list().
+-type args()         :: tuple().
 -export_type([handler_opts/0, args/0, result/0, error_reason/0]).
 
 -callback handle_function(woody_t:func(), args(), woody_t:rpc_id(),
