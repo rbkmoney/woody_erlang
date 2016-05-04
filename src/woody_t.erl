@@ -18,8 +18,9 @@
 -type url()     :: binary().
 -type role()    :: client | server.
 
--type service() :: handler().
--type func()    :: atom().
+-type service_name() :: atom().
+-type service()      :: {handler(), service_name()}.
+-type func()         :: atom().
 
 %% copy-paste from OTP supervsor
 -type sup_ref()  :: (Name :: atom())
@@ -28,8 +29,8 @@
                   | {'via', Module :: module(), Name :: any()}
                   | pid().
 
--export_type([req_id/0, rpc_id/0, service/0, func/0, options/0, handler/0,
-    url/0, role/0, sup_ref/0]).
+-export_type([req_id/0, rpc_id/0, service/0, service_name/0, func/0, options/0,
+    handler/0, url/0, role/0, sup_ref/0]).
 
 
 %%

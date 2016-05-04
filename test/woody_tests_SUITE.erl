@@ -2,7 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--include("woody_test_types.hrl").
+-include("woody_test_thrift.hrl").
 -include("src/woody_defs.hrl").
 
 -compile(export_all).
@@ -23,6 +23,9 @@
 
 %% internal API
 -export([call/4, call_safe/4]).
+
+
+-define(THRIFT_DEFS, woody_test_thrift).
 
 %% Weapons service
 -define(SLOTS, #{
@@ -164,12 +167,12 @@ start_woody_server(Id, Sup, Services) ->
 get_handler(powerups) ->
     {
         ?PATH_POWERUPS,
-        {woody_test_powerups_service, ?MODULE, []}
+        {{?THRIFT_DEFS, powerups}, ?MODULE, []}
     };
 get_handler(weapons) ->
     {
         ?PATH_WEAPONS,
-        {woody_test_weapons_service, ?MODULE, []}
+        {{?THRIFT_DEFS, weapons}, ?MODULE, []}
     }.
 
 end_per_test_case(_,C) ->
@@ -506,12 +509,12 @@ call_async(Client, ServiceName, Function, Args, Sup, Callback) ->
 get_service_endpoint(weapons) ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_WEAPONS),
-        woody_test_weapons_service
+        {?THRIFT_DEFS, weapons}
     };
 get_service_endpoint(powerups) ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_POWERUPS),
-        woody_test_powerups_service
+        {?THRIFT_DEFS, powerups}
     }.
 
 gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->

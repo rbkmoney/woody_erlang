@@ -41,11 +41,11 @@ stop_pool(Name) ->
 -spec call(woody_client:client(), request(), woody_client:options()) ->
     woody_client:result_ok() | no_return().
 call(Client = #{event_handler := EventHandler},
-    {Service, Function, Args}, TransportOpts)
+    {Service = {_, ServiceName}, Function, Args}, TransportOpts)
 ->
     RpcId = maps:with([span_id, trace_id, parent_id], Client),
     woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
-        service   => Service,
+        service   => ServiceName,
         function  => Function,
         type      => get_rpc_type(Service, Function),
         args      => Args
@@ -61,8 +61,8 @@ call(Client = #{event_handler := EventHandler},
 %%
 %% Internal functions
 %%
-get_rpc_type(Service, Function) ->
-    try get_rpc_type(Service:function_info(Function, reply_type))
+get_rpc_type({Module, Service}, Function) ->
+    try get_rpc_type(Module:function_info(Service, Function, reply_type))
     catch
         error:_ ->
             error({badarg, {Service,Function}})

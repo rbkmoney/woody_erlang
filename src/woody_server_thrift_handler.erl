@@ -43,7 +43,7 @@
 -record(state, {
     rpc_id            :: woody_t:rpc_id(),
     woody_client      :: woody_client:client(),
-    service           :: module(),
+    service           :: woody_t:service(),
     handler           :: woody_t:handler(),
     handler_opts      :: handler_opts(),
     protocol          :: any(),
@@ -123,7 +123,7 @@ get_function_name(Function) ->
     end.
 
 get_params_type(Service, Function) ->
-    try Service:function_info(Function, params_type)
+    try get_function_info(Service, Function, params_type)
     catch
         error:badarg -> ?error_unknown_function
     end.
@@ -158,10 +158,11 @@ call_handler(Function,Args, #state{
     woody_client  = WoodyClient,
     handler       = Handler,
     handler_opts  = Opts,
+    service       = {_, ServiceName},
     event_handler = EventHandler})
 ->
     woody_event_handler:handle_event(EventHandler, ?EV_INVOKE_SERVICE_HANDLER, RpcId#{
-        function => Function, args => Args, options => Opts
+        service => ServiceName, function => Function, args => Args, options => Opts
     }),
     Result = Handler:handle_function(Function, Args, RpcId, WoodyClient, Opts),
     ?log_rpc_result(EventHandler, ok, RpcId#{result => Result}),
@@ -175,17 +176,17 @@ handle_result({error, Error}, State, Function, SeqId) ->
     handle_error(State, Function, Error, SeqId).
 
 handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
-    ReplyType = Service:function_info(Function, reply_type),
+    ReplyType = get_function_info(Service, Function, reply_type),
     StructName = atom_to_list(Function) ++ "_result",
     case Result of
-        ok when ReplyType == {struct, []} ->
+        ok when ReplyType == {struct, struct, []} ->
             send_reply(State, Function, ?tMessageType_REPLY,
                 {ReplyType, {StructName}}, SeqId);
         ok when ReplyType == oneway_void ->
             {State, noreply};
         ReplyData ->
             Reply = {
-                {struct, [{0, undefined, ReplyType, undefined, undefined}]},
+                {struct, struct, [{0, undefined, ReplyType, undefined, undefined}]},
                 {StructName, ReplyData}
             },
             send_reply(State, Function, ?tMessageType_REPLY, Reply, SeqId)
@@ -197,7 +198,7 @@ handle_function_catch(State = #state{
         event_handler = EventHandler
     }, Function, Class, Reason, Stack, SeqId)
 ->
-    ReplyType = Service:function_info(Function, reply_type),
+    ReplyType = get_function_info(Service, Function, reply_type),
     case {Class, Reason} of
         _Error when ReplyType =:= oneway_void ->
             ?log_rpc_result(EventHandler, error,
@@ -217,7 +218,7 @@ handle_function_catch(State = #state{
 handle_exception(State = #state{service = Service, transport_handler = Trans},
     Function, Exception, SeqId)
 ->
-    {struct, XInfo} = ReplySpec = Service:function_info(Function, exceptions),
+    {struct, _, XInfo} = ReplySpec = get_function_info(Service, Function, exceptions),
     {ExceptionList, FoundExcept} = lists:mapfoldl(
         fun(X, A) -> get_except(Exception, X, A) end, undefined, XInfo),
     ExceptionTuple = list_to_tuple([Function | ExceptionList]),
@@ -230,7 +231,7 @@ handle_exception(State = #state{service = Service, transport_handler = Trans},
                 {ReplySpec, ExceptionTuple}, SeqId)
     end.
 
-get_except(Exception, {_Fid, _, {struct, {Module, Type}}, _, _}, _) when
+get_except(Exception, {_Fid, _, {struct, exception, {Module, Type}}, _, _}, _) when
     element(1, Exception) =:= Type
 ->
     {Exception, {Module, Type}};
@@ -238,7 +239,7 @@ get_except(_, _, TypesModule) ->
     {undefined, TypesModule}.
 
 get_except_name(Module, Type) ->
-    {struct, Fields} = Module:struct_info(Type),
+    {struct, exception, Fields} = Module:struct_info(Type),
     case lists:keyfind(exception_name, 4, Fields) of
         false -> Type;
         Field -> element(5, Field)
@@ -328,6 +329,9 @@ format_protocol_error({?error_protocol_send, _}, Trans) ->
 format_protocol_error(_Reason, Trans) ->
     mark_error_to_transport(Trans, transport, "bad request"),
     {error, bad_request}.
+
+get_function_info({Module, Service}, Function, Info) ->
+    Module:function_info(Service, Function, Info).
 
 %% Unfortunately there is no proper way to provide additional info to
 %% the transport, where the actual send happens: the Protocol object

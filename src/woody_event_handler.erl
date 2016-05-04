@@ -36,7 +36,7 @@
     meta_server_receive() | meta_server_send() | meta_invoke_service_handler() |
     meta_service_handler_result() | meta_thrift_error() | meta_internal_error().
 
--type service()      :: woody_t:service().
+-type service()      :: woody_t:service_name().
 -type rpc_type()     :: call | cast.
 -type status()       :: ok | error.
 -type thrift_stage() :: protocol_read | protocol_write.
