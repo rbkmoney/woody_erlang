@@ -20,7 +20,7 @@
 -export_type([except_thrift/0, error_protocol/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
-    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId, #{
         status => Status, result => Result
     })
 ).
@@ -44,7 +44,7 @@ call(Context = #{event_handler := EventHandler},
     {Service = {_, ServiceName}, Function, Args}, TransportOpts)
 ->
     RpcId = maps:with([span_id, trace_id, parent_id], Context),
-    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId, #{
         service   => ServiceName,
         function  => Function,
         type      => get_rpc_type(Service, Function),

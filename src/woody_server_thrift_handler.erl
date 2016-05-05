@@ -28,9 +28,9 @@
 %%
 %% API
 %%
--define(log_rpc_result(EventHandler, Status, Meta),
+-define(log_rpc_result(EventHandler, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_HANDLER_RESULT,
-        Meta#{status => Status})
+        RpcId, Meta#{status => Status})
 ).
 
 -define(stage_read  , protocol_read).
@@ -159,11 +159,11 @@ call_handler(Function,Args, #state{
     event_handler = EventHandler})
 ->
     RpcId = woody_client:get_rpc_id(Context),
-    woody_event_handler:handle_event(EventHandler, ?EV_INVOKE_SERVICE_HANDLER, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_INVOKE_SERVICE_HANDLER, RpcId, #{
         service => ServiceName, function => Function, args => Args, options => Opts
     }),
     Result = Handler:handle_function(Function, Args, Context, Opts),
-    ?log_rpc_result(EventHandler, ok, RpcId#{result => Result}),
+    ?log_rpc_result(EventHandler, ok, RpcId, #{result => Result}),
     Result.
 
 handle_result(ok, State, Function, SeqId) ->
@@ -200,15 +200,15 @@ handle_function_catch(State = #state{
     ReplyType = get_function_info(Service, Function, reply_type),
     case {Class, Reason} of
         _Error when ReplyType =:= oneway_void ->
-            ?log_rpc_result(EventHandler, error,
-                RpcId#{class => Class, reason => Reason, ignore => true}),
+            ?log_rpc_result(EventHandler, error, RpcId,
+                #{class => Class, reason => Reason, ignore => true}),
             {State, noreply};
         {throw, Exception} when is_tuple(Exception), size(Exception) > 0 ->
-            ?log_rpc_result(EventHandler, error,
-                RpcId#{class => throw, reason => Exception, ignore => false}),
+            ?log_rpc_result(EventHandler, error, RpcId,
+                #{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
-            ?log_rpc_result(EventHandler, error, RpcId#{class => error,
+            ?log_rpc_result(EventHandler, error, RpcId, #{class => error,
                 reason => Reason, stack => Stack, ignore => false}),
             Reason1 = if is_tuple(Reason) -> element(1, Reason); true -> Reason end,
             handle_error(State, Function, Reason1, SeqId)
@@ -290,7 +290,7 @@ handle_protocol_error(State = #state{
     RpcId = woody_client:get_rpc_id(Context),
     call_error_handler(State, Function, Reason),
     woody_event_handler:handle_event(EventHandler, ?EV_THRIFT_ERROR,
-        RpcId#{stage => Stage, reason => Reason}),
+        RpcId, #{stage => Stage, reason => Reason}),
     format_protocol_error(Reason, Trans).
 
 call_error_handler(#state{
@@ -304,7 +304,7 @@ call_error_handler(#state{
         Handler:handle_error(Function, Reason, Context, Opts)
     catch
         Class:Error ->
-            woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId#{
+            woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId, #{
                 error => <<"service error handler failed">>,
                 class => Class,
                 reason => Error,

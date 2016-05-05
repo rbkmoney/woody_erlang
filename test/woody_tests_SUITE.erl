@@ -19,7 +19,7 @@
 -export([handle_error/4]).
 
 %% woody_event_handler callbacks
--export([handle_event/2]).
+-export([handle_event/3]).
 
 %% internal API
 -export([call/4, call_safe/4]).
@@ -475,8 +475,8 @@ handle_error(_Function, _Reason,
 %%
 %% woody_event_handler callbacks
 %%
-handle_event(Type, Meta) ->
-    ct:pal(info, "woody event ~p: ~p", [Type, Meta]).
+handle_event(Type, RpcId, Meta) ->
+    ct:pal(info, "woody event ~p for RPC ID: ~p~n~p", [Type, RpcId, Meta]).
 
 %%
 %% internal functions

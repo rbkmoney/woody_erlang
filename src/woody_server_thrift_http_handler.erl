@@ -42,8 +42,8 @@
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
--define(log_event(EventHandler, Event, Status, Meta),
-    woody_event_handler:handle_event(EventHandler, Event, Meta#{
+-define(log_event(EventHandler, Event, Status, RpcId, Meta),
+    woody_event_handler:handle_event(EventHandler, Event, RpcId, Meta#{
         status => Status
     })
 ).
@@ -67,7 +67,7 @@ child_spec(Id, #{
     port          := Port,
     net_opts := NetOpts
 }) ->
-    _ = check_callback(handle_event, 2, EventHandler),
+    _ = check_callback(handle_event, 3, EventHandler),
     AcceptorsPool = genlib_app:env(woody, acceptors_pool_size,
         ?DEFAULT_ACCEPTORS_POOLSIZE
     ),
@@ -117,7 +117,7 @@ enable_debug(true, EventHandler) ->
         {onrequest, fun(Req) ->
                 {Url, Req1} = cowboy_req:url(Req),
                 {Headers, Req2} = cowboy_req:headers(Req1),
-            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, #{
+            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, undefined, #{
                 event => transport_onrequest,
                 url => Url,
                 headers => Headers
@@ -125,7 +125,7 @@ enable_debug(true, EventHandler) ->
             Req2 end
         },
         {onresponse, fun(Code, Headers, _Body, Req) ->
-            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, #{
+            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, undefined, #{
                 event => transport_onresponse,
                 code => Code,
                 headers => Headers
@@ -180,7 +180,7 @@ flush(State = #http_req{
 }) ->
     {Code, Req1} = add_x_error_header(Req),
     ?log_event(EventHandler, ?EV_SERVER_SEND, reply_status(Code),
-        RpcId#{code => Code}),
+        RpcId, #{code => Code}),
     {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
         Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
@@ -210,7 +210,7 @@ init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
             check_headers(set_resp_headers(RpcId, Req2), [Url, RpcId | Opts]);
         {error, ErrorMeta, Req2} ->
             ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-                ErrorMeta#{url => Url, reason => bad_rpc_id}),
+                ErrorMeta, #{url => Url, reason => bad_rpc_id}),
             reply_error_early(400, Req2)
     end.
 
@@ -219,19 +219,19 @@ init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
 handle(Req, [Url, RpcId, EventHandler, ServerOpts, ThriftHandler]) ->
     case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, ok, RpcId#{url => Url}),
+            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, ok, RpcId, #{url => Url}),
             do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
         {ok, <<>>, Req1} ->
             ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId#{url => Url, reason => body_empty}),
+                RpcId, #{url => Url, reason => body_empty}),
             reply_error(400, Req1);
         {error, body_too_large, Req1} ->
             ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId#{url => Url, reason => body_too_large}),
+                RpcId, #{url => Url, reason => body_too_large}),
             reply_error(413, Req1);
         {error, Reason, Req1} ->
             ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId#{url => Url, reason => {body_read_error, Reason}}),
+                RpcId, #{url => Url, reason => {body_read_error, Reason}}),
             reply_error(400, Req1)
     end.
 
@@ -241,7 +241,7 @@ terminate({normal, _}, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, [_, RpcId, EventHandler | _]) ->
     erlang:erase(?THRIFT_ERROR_KEY),
-    woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId, #{
         error => <<"http handler terminated abnormally">>, reason => Reason
     }),
     ok.
@@ -272,14 +272,14 @@ check_method({<<"POST">>, Req}, Opts) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
 check_method({Method, Req}, [Url, RpcId, EventHandler | _]) ->
     ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId#{url => Url, reason => {wrong_method, Method}}),
+        RpcId, #{url => Url, reason => {wrong_method, Method}}),
     reply_error_early(405, cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req)).
 
 check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
     check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
 check_content_type({BadType, Req}, [Url, RpcId, EventHandler | _]) ->
     ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId#{url => Url, reason => {wrong_content_type, BadType}}),
+        RpcId, #{url => Url, reason => {wrong_content_type, BadType}}),
     reply_error_early(415, Req).
 
 check_accept({Accept, Req}, Opts) when
@@ -289,7 +289,7 @@ check_accept({Accept, Req}, Opts) when
     {ok, Req, Opts};
 check_accept({BadType, Req1}, [Url, RpcId, EventHandler | _]) ->
     ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId#{url => Url, reason => {wrong_client_accept, BadType}}),
+        RpcId, #{url => Url, reason => {wrong_client_accept, BadType}}),
     reply_error_early(406, Req1).
 
 get_body(Req, ServerOpts) ->
@@ -323,7 +323,7 @@ handle_error(_Error, RpcId, EventHandler, Req) ->
     reply_error(500, RpcId, EventHandler, Req).
 
 reply_error(Code, RpcId, EventHandler, Req) ->
-    ?log_event(EventHandler, ?EV_SERVER_SEND, error, RpcId#{code => Code}),
+    ?log_event(EventHandler, ?EV_SERVER_SEND, error, RpcId, #{code => Code}),
     {_,  Req1} = add_x_error_header(Req),
     reply_error(Code, Req1).
 

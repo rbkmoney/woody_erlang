@@ -1,7 +1,7 @@
 -module(woody_event_handler).
 
 %% API
--export([handle_event/3]).
+-export([handle_event/4]).
 
 -include("woody_defs.hrl").
 
@@ -16,18 +16,18 @@
 
 -callback handle_event
     %% mandatory
-    (?EV_CALL_SERVICE           , meta_call_service   ()) -> _;
-    (?EV_SERVICE_RESULT         , meta_service_result ()) -> _;
-    (?EV_CLIENT_SEND            , meta_client_send    ()) -> _;
-    (?EV_CLIENT_RECEIVE         , meta_client_receive ()) -> _;
-    (?EV_SERVER_RECEIVE         , meta_server_receive ()) -> _;
-    (?EV_SERVER_SEND            , meta_server_send    ()) -> _;
-    (?EV_INVOKE_SERVICE_HANDLER , meta_invoke_service_handler ()) -> _;
-    (?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result ()) -> _;
+    (?EV_CALL_SERVICE           , woody_t:rpc_id(), meta_call_service   ()) -> _;
+    (?EV_SERVICE_RESULT         , woody_t:rpc_id(), meta_service_result ()) -> _;
+    (?EV_CLIENT_SEND            , woody_t:rpc_id(), meta_client_send    ()) -> _;
+    (?EV_CLIENT_RECEIVE         , woody_t:rpc_id(), meta_client_receive ()) -> _;
+    (?EV_SERVER_RECEIVE         , woody_t:rpc_id(), meta_server_receive ()) -> _;
+    (?EV_SERVER_SEND            , woody_t:rpc_id(), meta_server_send    ()) -> _;
+    (?EV_INVOKE_SERVICE_HANDLER , woody_t:rpc_id(), meta_invoke_service_handler ()) -> _;
+    (?EV_SERVICE_HANDLER_RESULT , woody_t:rpc_id(), meta_service_handler_result ()) -> _;
     %% optional
-    (?EV_THRIFT_ERROR           , meta_thrift_error   ()) -> _;
-    (?EV_INTERNAL_ERROR         , meta_internal_error ()) -> _;
-    (?EV_DEBUG                  , meta_debug          ()) -> _.
+    (?EV_THRIFT_ERROR           , woody_t:rpc_id(), meta_thrift_error   ()) -> _;
+    (?EV_INTERNAL_ERROR         , woody_t:rpc_id(), meta_internal_error ()) -> _;
+    (?EV_DEBUG                  , woody_t:rpc_id()|undefined, meta_debug()) -> _.
 
 -type event_type() :: ?EV_CALL_SERVICE | ?EV_SERVICE_RESULT | ?EV_CLIENT_SEND | ?EV_CLIENT_RECEIVE |
     ?EV_SERVER_RECEIVE | ?EV_SERVER_SEND | ?EV_INVOKE_SERVICE_HANDLER  | ?EV_SERVICE_HANDLER_RESULT |
@@ -45,9 +45,6 @@
 
 -type meta_call_service() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     service   => service(),
     function  => woody_t:func(),
     type      => rpc_type(),
@@ -56,9 +53,6 @@
 }.
 -type meta_service_result() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     status    => status(),
     %% optional
     result    => any()
@@ -66,17 +60,11 @@
 
 -type meta_client_send() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     url       => woody_t:url()
 }.
 
 -type meta_client_receive() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     status    => status(),
     %% optional
     code      => any(),
@@ -85,9 +73,6 @@
 
 -type meta_server_receive() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     url       => woody_t:url(),
     status    => status(),
     %% optional
@@ -96,9 +81,6 @@
 
 -type meta_server_send() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     status    => status(),
     %% optional
     code      => pos_integer()
@@ -106,9 +88,6 @@
 
 -type meta_invoke_service_handler() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     service   => service(),
     function  => woody_t:func(),
     %% optional
@@ -118,9 +97,6 @@
 
 -type meta_service_handler_result() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     status    => status(),
     %% optional
     result    => any(),
@@ -132,18 +108,12 @@
 
 -type meta_thrift_error() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     stage     => thrift_stage(),
     reason    => any()
 }.
 
 -type meta_internal_error() :: #{
     %% mandatory
-    span_id   => woody_t:req_id(),
-    parent_id => woody_t:req_id(),
-    trace_id  => woody_t:req_id(),
     error     => any(),
     reason    => any(),
     %% optional
@@ -160,17 +130,17 @@
 %%
 -spec handle_event
     %% mandatory
-    (woody_t:handler() , ?EV_CALL_SERVICE   , meta_call_service   ()) -> _;
-    (woody_t:handler() , ?EV_SERVICE_RESULT , meta_service_result ()) -> _;
-    (woody_t:handler() , ?EV_CLIENT_SEND    , meta_client_send    ()) -> _;
-    (woody_t:handler() , ?EV_CLIENT_RECEIVE , meta_client_receive ()) -> _;
-    (woody_t:handler() , ?EV_SERVER_RECEIVE , meta_server_receive ()) -> _;
-    (woody_t:handler() , ?EV_SERVER_SEND    , meta_server_send    ()) -> _;
-    (woody_t:handler() , ?EV_INVOKE_SERVICE_HANDLER , meta_invoke_service_handler()) -> _;
-    (woody_t:handler() , ?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result()) -> _;
+    (woody_t:handler() , ?EV_CALL_SERVICE   , woody_t:rpc_id(), meta_call_service   ()) -> _;
+    (woody_t:handler() , ?EV_SERVICE_RESULT , woody_t:rpc_id(), meta_service_result ()) -> _;
+    (woody_t:handler() , ?EV_CLIENT_SEND    , woody_t:rpc_id(), meta_client_send    ()) -> _;
+    (woody_t:handler() , ?EV_CLIENT_RECEIVE , woody_t:rpc_id(), meta_client_receive ()) -> _;
+    (woody_t:handler() , ?EV_SERVER_RECEIVE , woody_t:rpc_id(), meta_server_receive ()) -> _;
+    (woody_t:handler() , ?EV_SERVER_SEND    , woody_t:rpc_id(), meta_server_send    ()) -> _;
+    (woody_t:handler() , ?EV_INVOKE_SERVICE_HANDLER , woody_t:rpc_id(), meta_invoke_service_handler()) -> _;
+    (woody_t:handler() , ?EV_SERVICE_HANDLER_RESULT , woody_t:rpc_id(), meta_service_handler_result()) -> _;
     %% optional
-    (woody_t:handler() , ?EV_THRIFT_ERROR   , meta_thrift_error   ()) -> _;
-    (woody_t:handler() , ?EV_INTERNAL_ERROR , meta_internal_error ()) -> _;
-    (woody_t:handler() , ?EV_DEBUG          , meta_debug          ()) -> _.
-handle_event(Handler, Type, Meta) ->
-    Handler:handle_event(Type, Meta).
+    (woody_t:handler() , ?EV_THRIFT_ERROR   , woody_t:rpc_id(), meta_thrift_error   ()) -> _;
+    (woody_t:handler() , ?EV_INTERNAL_ERROR , woody_t:rpc_id(), meta_internal_error ()) -> _;
+    (woody_t:handler() , ?EV_DEBUG          , woody_t:rpc_id()|undefined, meta_debug()) -> _.
+handle_event(Handler, Type, RpcId, Meta) ->
+    Handler:handle_event(Type, RpcId, Meta).
