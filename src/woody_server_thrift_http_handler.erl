@@ -83,7 +83,7 @@ check_callback(Callback, Module) ->
     proplists:get_value(Callback, Module:module_info(exports)).
 
 validate_handler(Handler) when is_atom(Handler) ->
-    [check_callback(F, 5, Handler) || F <- [handle_function, handle_error]],
+    [check_callback(F, 4, Handler) || F <- [handle_function, handle_error]],
     Handler.
 
 get_socket_transport(Ip, Port, Options) ->
@@ -304,9 +304,9 @@ get_body(Req, ServerOpts) ->
     end.
 
 do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
-    WoodyClient = woody_client:make_child_client(RpcId, EventHandler),
+    Context = woody_client:make_child_context(RpcId, EventHandler),
     Transport   = make_transport(Req, RpcId, Body, EventHandler),
-    case woody_server_thrift_handler:start(Transport, RpcId, WoodyClient, ThriftHander,
+    case woody_server_thrift_handler:start(Transport, Context, ThriftHander,
         EventHandler, ?MODULE)
     of
         {ok, Req1} ->

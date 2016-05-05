@@ -15,8 +15,8 @@
 -export([init/1]).
 
 %% woody_server_thrift_handler callbacks
--export([handle_function/5]).
--export([handle_error/5]).
+-export([handle_function/4]).
+-export([handle_error/4]).
 
 %% woody_event_handler callbacks
 -export([handle_event/2]).
@@ -215,18 +215,18 @@ call_handler_throw_test(_) ->
 call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Client  = get_client(Id),
-    Expect  = {{error, ?error_transport(server_error)}, Client},
-    Expect  = call_safe(Client, weapons, switch_weapon,
+    Context = make_context(Id),
+    Expect  = {{error, ?error_transport(server_error)}, Context},
+    Expect  = call_safe(Context, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
 
 call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Client  = get_client(Id),
-    Expect  = {?error_transport(server_error), Client},
-    try call(Client, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
+    Context = make_context(Id),
+    Expect  = {?error_transport(server_error), Context},
+    try call(Context, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
     end,
@@ -244,26 +244,26 @@ call_handler_error_test(_) ->
 
 call_safe_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
-    Id = <<"call_safe_client_transport_error">>,
-    Client = get_client(Id),
-    {{error, ?error_protocol(_)}, Client} = call_safe(Client,
+    Id  = <<"call_safe_client_transport_error">>,
+    Context = make_context(Id),
+    {{error, ?error_protocol(_)}, Context} = call_safe(Context,
         weapons, get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
-    Id = <<"call_client_transport_error">>,
-    Client = get_client(Id),
-    try call(Client, weapons, get_weapon, [Gun, self_to_bin()])
+    Id  = <<"call_client_transport_error">>,
+    Context = make_context(Id),
+    try call(Context, weapons, get_weapon, [Gun, self_to_bin()])
     catch
-        error:{?error_protocol(_), Client} -> ok
+        error:{?error_protocol(_), Context} -> ok
     end.
 
 call_safe_server_transport_error_test(_) ->
-    Id     = <<"call_safe_server_transport_error">>,
-    Armor  = <<"Helmet">>,
-    Client = get_client(Id),
-    Expect = {{error, ?error_transport(server_error)}, Client},
-    Expect = call_safe(Client, powerups, get_powerup,
+    Id      = <<"call_safe_server_transport_error">>,
+    Armor   = <<"Helmet">>,
+    Context = make_context(Id),
+    Expect  = {{error, ?error_transport(server_error)}, Context},
+    Expect  = call_safe(Context, powerups, get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
@@ -274,10 +274,10 @@ call_handle_error_fails_test(_) ->
     do_call_server_transport_error(<<"call_handle_error_fails">>).
 
 do_call_server_transport_error(Id) ->
-    Armor  = <<"Helmet">>,
-    Client = get_client(Id),
-    Expect = {?error_transport(server_error), Client},
-    try call(Client, powerups, get_powerup, [Armor, self_to_bin()])
+    Armor   = <<"Helmet">>,
+    Context = make_context(Id),
+    Expect  = {?error_transport(server_error), Context},
+    try call(Context, powerups, get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
     end,
@@ -286,9 +286,9 @@ do_call_server_transport_error(Id) ->
 call_oneway_void_test(_) ->
     Id      = <<"call_oneway_void_test">>,
     Armor   = <<"Helmet">>,
-    Client  = get_client(Id),
-    Expect  = {ok, Client},
-    Expect  = call(Client, powerups, like_powerup, [Armor, self_to_bin()]),
+    Context = make_context(Id),
+    Expect  = {ok, Context},
+    Expect  = call(Context, powerups, like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_async_ok_test(C) ->
@@ -296,40 +296,40 @@ call_async_ok_test(C) ->
     Pid        = self(),
     Callback   = fun(Res) -> collect(Res, Pid) end,
     Id1        = <<"call_async_ok1">>,
-    Client1    = get_client(Id1),
-    {ok, Pid1, Client1} = get_weapon(Client1, Sup, Callback, <<"Impact Hammer">>),
+    Context1   = make_context(Id1),
+    {ok, Pid1, Context1} = get_weapon(Context1, Sup, Callback, <<"Impact Hammer">>),
     Id2        = <<"call_async_ok2">>,
-    Client2    = get_client(Id2),
-    {ok, Pid2, Client2} = get_weapon(Client2, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg({Client1,
+    Context2   = make_context(Id2),
+    {ok, Pid2, Context2} = get_weapon(Context2, Sup, Callback, <<"Flak Cannon">>),
+    {ok, Pid1} = receive_msg({Context1,
         genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
-    {ok, Pid2} = receive_msg({Client2,
+    {ok, Pid2} = receive_msg({Context2,
         genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
-get_weapon(Client, Sup, Cb, Gun) ->
-    call_async(Client, weapons, get_weapon, [Gun, <<>>], Sup, Cb).
+get_weapon(Context, Sup, Cb, Gun) ->
+    call_async(Context, weapons, get_weapon, [Gun, <<>>], Sup, Cb).
 
-collect({{ok, Result}, Client}, Pid) ->
-    send_msg(Pid, {Client, Result}).
+collect({{ok, Result}, Context}, Pid) ->
+    send_msg(Pid, {Context, Result}).
 
 span_ids_sequence_test(_) ->
     Id      = <<"span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
-    Client  = get_client(Id),
-    Expect  = {{ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)}, Client},
-    Expect  = call(Client, weapons, switch_weapon,
+    Context = make_context(Id),
+    Expect  = {{ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)}, Context},
+    Expect  = call(Context, weapons, switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
 call_with_client_pool_test(_) ->
     Pool = guns,
-    ok = woody_client_thrift:start_pool(Pool, 10),
-    Id = <<"call_with_client_pool">>,
-    Gun =  <<"Enforcer">>,
-    Client = get_client(Id),
+    ok   = woody_client_thrift:start_pool(Pool, 10),
+    Id   = <<"call_with_client_pool">>,
+    Gun  =  <<"Enforcer">>,
+    Context = make_context(Id),
     {Url, Service} = get_service_endpoint(weapons),
-    Expect = {{ok, genlib_map:get(Gun, ?WEAPONS)}, Client},
+    Expect = {{ok, genlib_map:get(Gun, ?WEAPONS)}, Context},
     Expect = woody_client:call(
-        Client,
+        Context,
         {Service, get_weapon, [Gun, self_to_bin()]},
         #{url => Url, pool => Pool}
     ),
@@ -357,27 +357,27 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
-    {ok, Client} = thrift_client:new(Protocol1, Service),
-    Client.
+    {ok, Context} = thrift_client:new(Protocol1, Service),
+    Context.
 
 allowed_transport_options_test(_) ->
-    Id  = <<"allowed_transport_options">>,
-    Gun =  <<"Enforcer">>,
+    Id   = <<"allowed_transport_options">>,
+    Gun  =  <<"Enforcer">>,
     Args = [Gun, self_to_bin()],
     {Url, Service} = get_service_endpoint(weapons),
     Pool = guns,
     ok = woody_client_thrift:start_pool(Pool, 1),
-    Client = get_client(Id),
+    Context = make_context(Id),
     Options = #{url => Url, pool => Pool, ssl_options => [], connect_timeout => 0},
-    {{error, ?error_transport(connect_timeout)}, Client} = woody_client:call_safe(
-        Client,
+    {{error, ?error_transport(connect_timeout)}, Context} = woody_client:call_safe(
+        Context,
         {Service, get_weapon, Args},
         Options
     ),
     BadOpt = #{custom_option => 'fire!'},
     ErrorBadOpt = {badarg, {unsupported_options, BadOpt}},
-    {{error, {error, ErrorBadOpt, _}}, Client} = woody_client:call_safe(
-        Client,
+    {{error, {error, ErrorBadOpt, _}}, Context} = woody_client:call_safe(
+        Context,
         {Service, get_weapon, Args},
         maps:merge(Options, BadOpt)
     ),
@@ -427,15 +427,15 @@ init(_) ->
 
 %% Weapons
 handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
-    _RpcId    = #{span_id   := SpanId, trace_id := TraceId},
-    WoodyClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    Context = #{  parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, CurrentWeapon}),
-    switch_weapon(CurrentWeapon, Direction, Shift, WoodyClient);
+    switch_weapon(CurrentWeapon, Direction, Shift, Context);
 
 handle_function(get_weapon, {Name, To},
-    #{span_id   := SpanId, trace_id := TraceId},
-    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To,{SpanId, Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
@@ -448,26 +448,26 @@ handle_function(get_weapon, {Name, To},
 
 %% Powerups
 handle_function(get_powerup, {Name, To},
-    #{span_id   := SpanId, trace_id := TraceId},
-    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
     {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
 handle_function(like_powerup, {Name, To},
-    #{span_id   := SpanId, trace_id := TraceId},
-    #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
     ok.
 
 handle_error(get_powerup, _,
-    #{trace_id := TraceId, span_id   := SpanId = <<"call_handle_error_fails">>},
-    #{trace_id := TraceId, parent_id := SpanId}, _Opts)
+    _Context = #{   trace_id := TraceId, span_id   := SpanId = <<"call_handle_error_fails">>,
+        rpc_id := #{trace_id := TraceId, parent_id := SpanId}}, _Opts)
 ->
     error(no_more_powerups);
 handle_error(_Function, _Reason,
-    _RpcId     = #{span_id   := SpanId, trace_id := TraceId},
-    _WoodyClient = #{parent_id := SpanId, trace_id := TraceId}, _Opts)
+    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     ok.
 
@@ -481,27 +481,27 @@ handle_event(Type, Meta) ->
 %%
 %% internal functions
 %%
-get_client(ReqId) ->
-    woody_client:new(ReqId, ?MODULE).
+make_context(ReqId) ->
+    woody_client:new_context(ReqId, ?MODULE).
 
-call(Client, ServiceName, Function, Args) ->
-    do_call(call, Client, ServiceName, Function, Args).
+call(Context, ServiceName, Function, Args) ->
+    do_call(call, Context, ServiceName, Function, Args).
 
-call_safe(Client, ServiceName, Function, Args) ->
-    do_call(call_safe, Client, ServiceName, Function, Args).
+call_safe(Context, ServiceName, Function, Args) ->
+    do_call(call_safe, Context, ServiceName, Function, Args).
 
-do_call(Call, Client, ServiceName, Function, Args) ->
+do_call(Call, Context, ServiceName, Function, Args) ->
     {Url, Service} = get_service_endpoint(ServiceName),
     woody_client:Call(
-        Client,
+        Context,
         {Service, Function, Args},
         #{url => Url}
     ).
 
-call_async(Client, ServiceName, Function, Args, Sup, Callback) ->
+call_async(Context, ServiceName, Function, Args, Sup, Callback) ->
     {Url, Service} = get_service_endpoint(ServiceName),
     woody_client:call_async(Sup, Callback,
-        Client,
+        Context,
         {Service, Function, Args},
         #{url => Url}
     ).
@@ -518,18 +518,18 @@ get_service_endpoint(powerups) ->
     }.
 
 gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
-    Client = get_client(Id),
-    Expect = {{ExpectStatus, ExpectRes}, Client},
-    Expect = ?MODULE:CallFun(Client, weapons, get_weapon, [Gun, self_to_bin()]),
+    Context = make_context(Id),
+    Expect  = {{ExpectStatus, ExpectRes}, Context},
+    Expect  = ?MODULE:CallFun(Context, weapons, get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
         _    -> ok
     end.
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
-    Client = get_client(Id),
-    Expect = {Exception, Client},
-    try call(Client, weapons, get_weapon, [Gun, self_to_bin()])
+    Context = make_context(Id),
+    Expect  = {Exception, Context},
+    try call(Context, weapons, get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok
     end,
@@ -538,8 +538,8 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
         _    -> ok
     end.
 
-switch_weapon(CurrentWeapon, Direction, Shift, WoodyClient) ->
-    case call_safe(WoodyClient, weapons, get_weapon,
+switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
+    case call_safe(Context, weapons, get_weapon,
              [new_weapon_name(CurrentWeapon, Direction, Shift), self_to_bin()])
     of
         {{ok, Weapon}, _} ->
@@ -547,9 +547,9 @@ switch_weapon(CurrentWeapon, Direction, Shift, WoodyClient) ->
         {{exception, #weapon_failure{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
-        }}, NextClient} ->
-            ok = validate_next_client(NextClient, WoodyClient),
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextClient)
+        }}, NextContex} ->
+            ok = validate_next_context(NextContex, Context),
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex)
     end.
 
 new_weapon_name(#weapon{slot_pos = Pos}, next, Shift) ->
@@ -562,7 +562,7 @@ new_weapon_name(Pos) when is_integer(Pos), Pos >= 0, Pos < 10 ->
 new_weapon_name(_) ->
     throw(?pos_error).
 
-validate_next_client(#{seq := NextSeq}, #{seq := Seq}) ->
+validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
     ok.
 

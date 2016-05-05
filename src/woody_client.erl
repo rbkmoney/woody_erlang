@@ -8,15 +8,16 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/2]).
--export([make_child_client/2]).
--export([next/1]).
+-export([new_context/2]).
+-export([get_rpc_id/1]).
+
+-export([make_child_context/2]).
 
 -export([call/3]).
 -export([call_safe/3]).
 -export([call_async/5]).
 
--export_type([client/0, options/0, result_ok/0, result_error/0]).
+-export_type([context/0, options/0, result_ok/0, result_error/0]).
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
 
@@ -27,30 +28,31 @@
 -export([init/1]).
 
 %% behaviour definition
--callback call(client(), request(), options()) -> result_ok() | no_return().
+-callback call(context(), request(), options()) -> result_ok() | no_return().
 
 
 %%
 %% API
 %%
--type client() :: #{  %% all elements are mandatory
+-type context() :: #{  %% all elements are mandatory
     root_rpc      => boolean(),
     span_id       => woody_t:req_id() | undefined,
     trace_id      => woody_t:req_id(),
     parent_id     => woody_t:req_id(),
     event_handler => woody_t:handler(),
-    seq           => non_neg_integer()
+    seq           => non_neg_integer(),
+    rpc_id        => woody_t:rpc_id() | undefined
 }.
 -type class() :: throw | error | exit.
 -type stacktrace() :: list().
 
--type result_ok() :: {ok | {ok, _Response}, client()}.
+-type result_ok() :: {ok | {ok, _Response}, context()}.
 
 -type result_error() ::
-    {{exception , woody_client_thrift:except_thrift()}        , client()} |
-    {{error     , woody_client_thrift:error_protocol()}       , client()} |
-    {{error     , woody_client_thrift_http_transport:error()} , client()} |
-    {{error     , {class(), _Reason, stacktrace()}}           , client()}.
+    {{exception , woody_client_thrift:except_thrift()}        , context()} |
+    {{error     , woody_client_thrift:error_protocol()}       , context()} |
+    {{error     , woody_client_thrift_http_transport:error()} , context()} |
+    {{error     , {class(), _Reason, stacktrace()}}           , context()}.
 
 -type request() :: any().
 
@@ -62,61 +64,62 @@
 
 -type callback() :: fun((result_ok() | result_error()) -> _).
 
--spec new(woody_t:req_id(), woody_t:handler()) -> client().
-new(ReqId, EventHandler) ->
+-spec new_context(woody_t:req_id(), woody_t:handler()) -> context().
+new_context(ReqId, EventHandler) ->
     #{
         root_rpc      => true,
         span_id       => ReqId,
         trace_id      => ReqId,
         parent_id     => ?ROOT_REQ_PARENT_ID,
         seq           => 0,
-        event_handler => EventHandler
+        event_handler => EventHandler,
+        rpc_id        => undefined
     }.
 
--spec make_child_client(woody_t:rpc_id(), woody_t:handler()) -> client().
-make_child_client(#{span_id := ReqId, trace_id := TraceId}, EventHandler) ->
+-spec make_child_context(woody_t:rpc_id(), woody_t:handler()) -> context().
+make_child_context(RpcId = #{span_id := ReqId, trace_id := TraceId}, EventHandler) ->
     #{
         root_rpc      => false,
         span_id       => undefined,
         trace_id      => TraceId,
         parent_id     => ReqId,
         seq           => 0,
-        event_handler => EventHandler
+        event_handler => EventHandler,
+        rpc_id        => RpcId
     }.
 
--spec next(client()) -> client().
-next(Client = #{root_rpc := true}) ->
-    Client;
-next(Client = #{root_rpc := false, seq := Seq}) ->
-    NextSeq = Seq +1,
-    Client#{span_id => make_req_id(NextSeq), seq => NextSeq}.
+-spec get_rpc_id(context()) -> woody_t:rpc_id() | undefined | no_return().
+get_rpc_id(#{rpc_id := RpcId}) ->
+    RpcId;
+get_rpc_id(_) ->
+    error(badarg).
 
--spec call(client(), request(), options()) -> result_ok() | no_return().
-call(Client, Request, Options) ->
+-spec call(context(), request(), options()) -> result_ok() | no_return().
+call(Context, Request, Options) ->
     ProtocolHandler = woody_t:get_protocol_handler(client, Options),
-    ProtocolHandler:call(next(Client), Request, Options).
+    ProtocolHandler:call(next(Context), Request, Options).
 
--spec call_safe(client(), request(), options()) -> result_ok() | result_error().
-call_safe(Client, Request, Options) ->
-    try call(Client, Request, Options)
+-spec call_safe(context(), request(), options()) -> result_ok() | result_error().
+call_safe(Context, Request, Options) ->
+    try call(Context, Request, Options)
     catch
         %% valid thrift exception
-        throw:{Except = ?except_thrift(_), Client1} ->
-            {Except, Client1};
+        throw:{Except = ?except_thrift(_), Context1} ->
+            {Except, Context1};
         %% rpc send failed
-        error:{TError = ?error_transport(_), Client1} ->
-            {{error, TError}, Client1};
+        error:{TError = ?error_transport(_), Context1} ->
+            {{error, TError}, Context1};
         %% thrift protocol error
-        error:{PError = ?error_protocol(_), Client1} ->
-            {{error, PError}, Client1};
+        error:{PError = ?error_protocol(_), Context1} ->
+            {{error, PError}, Context1};
         %% what else could have happened?
         Class:Reason ->
-            {{error, {Class, Reason, erlang:get_stacktrace()}}, Client}
+            {{error, {Class, Reason, erlang:get_stacktrace()}}, Context}
     end.
 
--spec call_async(woody_t:sup_ref(), callback(), client(), request(), options()) ->
-    {ok, pid(), client()} | {error, _}.
-call_async(Sup, Callback, Client, Request, Options) ->
+-spec call_async(woody_t:sup_ref(), callback(), context(), request(), options()) ->
+    {ok, pid(), context()} | {error, _}.
+call_async(Sup, Callback, Context, Request, Options) ->
     _ = woody_t:get_protocol_handler(client, Options),
     SupervisorSpec = #{
         id       => {?MODULE, woody_clients_sup},
@@ -131,19 +134,19 @@ call_async(Sup, Callback, Client, Request, Options) ->
         {error, {already_started, Pid}} -> Pid
     end,
     supervisor:start_child(ClientSup,
-        [Callback, Client, Request, Options]).
+        [Callback, Context, Request, Options]).
 
 %%
 %% Internal API
 %%
--spec init_call_async(callback(), client(), request(), options()) -> {ok, pid(), client()}.
-init_call_async(Callback, Client, Request, Options) ->
-    proc_lib:start_link(?MODULE, do_call_async, [Callback, Client, Request, Options]).
+-spec init_call_async(callback(), context(), request(), options()) -> {ok, pid(), context()}.
+init_call_async(Callback, Context, Request, Options) ->
+    proc_lib:start_link(?MODULE, do_call_async, [Callback, Context, Request, Options]).
 
--spec do_call_async(callback(), client(), request(), options()) -> _.
-do_call_async(Callback, Client, Request, Options) ->
-    proc_lib:init_ack({ok, self(), next(Client)}),
-    Callback(call_safe(Client, Request, Options)).
+-spec do_call_async(callback(), context(), request(), options()) -> _.
+do_call_async(Callback, Context, Request, Options) ->
+    proc_lib:init_ack({ok, self(), next(Context)}),
+    Callback(call_safe(Context, Request, Options)).
 
 %%
 %% Supervisor callbacks
@@ -170,6 +173,13 @@ init(woody_client_sup) ->
 %%
 %% Internal functions
 %%
+-spec next(context()) -> context().
+next(Context = #{root_rpc := true}) ->
+    Context;
+next(Context = #{root_rpc := false, seq := Seq}) ->
+    NextSeq = Seq +1,
+    Context#{span_id => make_req_id(NextSeq), seq => NextSeq}.
+
 -spec make_req_id(non_neg_integer()) -> woody_t:req_id().
 make_req_id(Seq) ->
     BinSeq = genlib:to_binary(Seq),
