@@ -106,10 +106,35 @@ get_cowboy_config(Handlers, EventHandler) ->
         } || {PathMatch, {Service, Handler, Opts}} <- Handlers
     ],
     {ok, _} = application:ensure_all_started(cowboy),
-    [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}].
+    Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
+    [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
 
 config() ->
     [{max_body_length, ?MAX_BODY_LENGTH}].
+
+enable_debug(true, EventHandler) ->
+    [
+        {onrequest, fun(Req) ->
+                {Url, Req1} = cowboy_req:url(Req),
+                {Headers, Req2} = cowboy_req:headers(Req1),
+            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, #{
+                event => transport_onrequest,
+                url => Url,
+                headers => Headers
+            }),
+            Req2 end
+        },
+        {onresponse, fun(Code, Headers, _Body, Req) ->
+            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, #{
+                event => transport_onresponse,
+                code => Code,
+                headers => Headers
+                }),
+            Req end
+        }
+    ];
+enable_debug(_, _) ->
+    [].
 
 
 %%
@@ -163,9 +188,9 @@ flush(State = #http_req{
 reply_status(200) -> ok;
 reply_status(_) -> error.
 
--spec close(state()) -> {state(), ok}.
-close(_State) ->
-    {#http_req{}, ok}.
+-spec close(state()) -> {state(), cowboy_req:req()}.
+close(#http_req{req = Req}) ->
+    {#http_req{}, Req}.
 
 -spec mark_thrift_error(logic | transport, _Error) -> _.
 mark_thrift_error(Type, Error) ->
@@ -284,12 +309,12 @@ do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
     case woody_server_thrift_handler:start(Transport, RpcId, WoodyClient, ThriftHander,
         EventHandler, ?MODULE)
     of
-        ok ->
-            {ok, Req, undefined};
-        {error, Reason} ->
-            handle_error(Reason, RpcId, EventHandler, Req);
-        noreply ->
-            {ok, Req, undefined}
+        {ok, Req1} ->
+            {ok, Req1, undefined};
+        {{error, Reason}, Req1} ->
+            handle_error(Reason, RpcId, EventHandler, Req1);
+        {noreply, Req1} ->
+            {ok, Req1, undefined}
     end.
 
 handle_error(bad_request, RpcId, EventHandler, Req) ->

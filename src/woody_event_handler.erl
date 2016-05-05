@@ -10,7 +10,8 @@
 %%
 -export_type([event_type/0, event_meta_type/0, meta_client_send/0, meta_client_receive/0,
     meta_server_receive/0, meta_server_send/0, meta_invoke_service_handler/0,
-    meta_service_handler_result/0, meta_thrift_error/0, meta_internal_error/0
+    meta_service_handler_result/0, meta_thrift_error/0, meta_internal_error/0,
+    meta_debug/0
 ]).
 
 -callback handle_event
@@ -25,12 +26,12 @@
     (?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result ()) -> _;
     %% optional
     (?EV_THRIFT_ERROR           , meta_thrift_error   ()) -> _;
-    (?EV_INTERNAL_ERROR         , meta_internal_error ()) -> _.
-
+    (?EV_INTERNAL_ERROR         , meta_internal_error ()) -> _;
+    (?EV_DEBUG                  , meta_debug          ()) -> _.
 
 -type event_type() :: ?EV_CALL_SERVICE | ?EV_SERVICE_RESULT | ?EV_CLIENT_SEND | ?EV_CLIENT_RECEIVE |
     ?EV_SERVER_RECEIVE | ?EV_SERVER_SEND | ?EV_INVOKE_SERVICE_HANDLER  | ?EV_SERVICE_HANDLER_RESULT |
-    ?EV_THRIFT_ERROR | ?EV_INTERNAL_ERROR.
+    ?EV_THRIFT_ERROR | ?EV_INTERNAL_ERROR | ?EV_DEBUG.
 
 -type event_meta_type() :: meta_client_send() | meta_client_receive() |
     meta_server_receive() | meta_server_send() | meta_invoke_service_handler() |
@@ -149,6 +150,10 @@
     stack     => any()
 }.
 
+-type meta_debug() :: #{
+    %% mandatory
+    event => atom() | binary()
+}.
 
 %%
 %% API
@@ -165,6 +170,7 @@
     (woody_t:handler() , ?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result()) -> _;
     %% optional
     (woody_t:handler() , ?EV_THRIFT_ERROR   , meta_thrift_error   ()) -> _;
-    (woody_t:handler() , ?EV_INTERNAL_ERROR , meta_internal_error ()) -> _.
+    (woody_t:handler() , ?EV_INTERNAL_ERROR , meta_internal_error ()) -> _;
+    (woody_t:handler() , ?EV_DEBUG          , meta_debug          ()) -> _.
 handle_event(Handler, Type, Meta) ->
     Handler:handle_event(Type, Meta).

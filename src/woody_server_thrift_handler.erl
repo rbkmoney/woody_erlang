@@ -61,7 +61,7 @@
 -spec start(thrift_transport:t_transport(), woody_t:rpc_id(), woody_client:client(),
     thrift_handler(), event_handler(), transport_handler())
 ->
-    ok | noreply | {error, _Reason}.
+    {ok | noreply | {error, _Reason}, cowboy_req:req()}.
 start(Transport, RpcId, WoodyClient, {Service, Handler, Opts},
     EventHandler, TransportHandler)
 ->
@@ -79,8 +79,8 @@ start(Transport, RpcId, WoodyClient, {Service, Handler, Opts},
             event_handler     = EventHandler,
             transport_handler = TransportHandler
     }),
-    thrift_protocol:close_transport(Protocol1),
-    Result.
+    Req = thrift_protocol:close_transport(Protocol1),
+    {Result, Req}.
 
 
 %%

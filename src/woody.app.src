@@ -11,7 +11,8 @@
         thrift
     ]},
     {env, [
-        {acceptors_pool_size, 100}
+        {acceptors_pool_size, 100},
+        {enable_debug, false}
     ]},
     {modules, []},
     {maintainers, [
