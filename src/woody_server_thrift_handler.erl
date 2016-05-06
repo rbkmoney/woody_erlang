@@ -77,7 +77,7 @@ start(Transport, Context, {Service, Handler, Opts},
             event_handler     = EventHandler,
             transport_handler = TransportHandler
     }),
-    Req = thrift_protocol:close_transport(Protocol1),
+    {_, Req} = thrift_protocol:close_transport(Protocol1),
     {Result, Req}.
 
 

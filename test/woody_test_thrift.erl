@@ -38,11 +38,15 @@
     'powerup_failure'/0
 ]).
 
+%%
 %% typedefs
+%%
 -type typedef_name() :: none().
 
 
+%%
 %% enums
+%%
 -type enum_name() ::
     'direction'.
 
@@ -51,7 +55,9 @@
     next |
     prev.
 
+%%
 %% structs, unions and exceptions
+%%
 -type struct_name() ::
     'weapon' |
     'powerup'.
@@ -72,26 +78,40 @@
 %% exception 'powerup_failure'
 -type 'powerup_failure'() :: #'powerup_failure'{}.
 
+%%
+%% services and functions
+%%
 -type service_name() ::
     'weapons' |
     'powerups'.
 
 -type function_name() ::
-    'switch_weapon'|
-    'get_weapon'|
-    'get_powerup'|
+    'weapons_service_functions'() |
+    'powerups_service_functions'().
+
+-type 'weapons_service_functions'() ::
+    'switch_weapon' |
+    'get_weapon'.
+
+-export_type(['weapons_service_functions'/0]).
+
+-type 'powerups_service_functions'() ::
+    'get_powerup' |
     'like_powerup'.
+
+-export_type(['powerups_service_functions'/0]).
+
 
 -type struct_flavour() :: struct | exception | union.
 -type field_num() :: pos_integer().
 -type field_name() :: atom().
 -type field_req() :: required | optional | undefined.
 
--type type_ref(Type) :: {?MODULE, Type}.
+-type type_ref() :: {module(), atom()}.
 -type field_type() ::
     bool | byte | i16 | i32 | i64 | string | double |
-    {enum, type_ref(enum_name())} |
-    {struct, struct_flavour(), type_ref(struct_name() | exception_name())} |
+    {enum, type_ref()} |
+    {struct, struct_flavour(), type_ref()} |
     {list, field_type()} |
     {set, field_type()} |
     {map, field_type(), field_type()}.
@@ -204,7 +224,7 @@ functions(_) -> error(badarg).
 
 function_info('weapons', 'switch_weapon', params_type) ->
     {struct, struct, [
-        {1, undefined, {struct, struct, {woody_test_thrift, 'weapon'}}, 'current_weapon', #'weapon'{}},
+        {1, undefined, {struct, struct, {woody_test_thrift, 'weapon'}}, 'current_weapon', undefined},
         {2, undefined, {enum, {woody_test_thrift, 'direction'}}, 'direction', undefined},
         {3, undefined, i16, 'shift', undefined},
         {4, undefined, string, 'data', undefined}
@@ -213,7 +233,7 @@ function_info('weapons', 'switch_weapon', reply_type) ->
     {struct, struct, {woody_test_thrift, 'weapon'}};
 function_info('weapons', 'switch_weapon', exceptions) ->
     {struct, struct, [
-        {1, undefined, {struct, exception, {woody_test_thrift, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
+        {1, undefined, {struct, exception, {woody_test_thrift, 'weapon_failure'}}, 'error', undefined}
     ]};
 function_info('weapons', 'get_weapon', params_type) ->
     {struct, struct, [
@@ -224,7 +244,7 @@ function_info('weapons', 'get_weapon', reply_type) ->
     {struct, struct, {woody_test_thrift, 'weapon'}};
 function_info('weapons', 'get_weapon', exceptions) ->
     {struct, struct, [
-        {1, undefined, {struct, exception, {woody_test_thrift, 'weapon_failure'}}, 'error', #'weapon_failure'{}}
+        {1, undefined, {struct, exception, {woody_test_thrift, 'weapon_failure'}}, 'error', undefined}
     ]};
 
 function_info('powerups', 'get_powerup', params_type) ->
@@ -236,7 +256,7 @@ function_info('powerups', 'get_powerup', reply_type) ->
     {struct, struct, {woody_test_thrift, 'powerup'}};
 function_info('powerups', 'get_powerup', exceptions) ->
     {struct, struct, [
-        {1, undefined, {struct, exception, {woody_test_thrift, 'powerup_failure'}}, 'error', #'powerup_failure'{}}
+        {1, undefined, {struct, exception, {woody_test_thrift, 'powerup_failure'}}, 'error', undefined}
     ]};
 function_info('powerups', 'like_powerup', params_type) ->
     {struct, struct, [
@@ -249,4 +269,3 @@ function_info('powerups', 'like_powerup', exceptions) ->
     {struct, struct, []};
 
 function_info(_Service, _Function, _InfoType) -> erlang:error(badarg).
-
