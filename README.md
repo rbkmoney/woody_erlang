@@ -13,7 +13,10 @@ Erlang реализация [Библиотеки RPC вызовов для об
 
 ```erlang
 1> EventHandler = my_event_handler.  %% реализует woody_event_handler behaviour
-2> Service = my_money_service.  %% реализует thrift_service behaviour (генерируется из .thrift файла)
+2> Service = {
+2>     my_money_thrift, %% имя модуля, сгенерированного из money.thrift файла
+2>     money %% имя thrift сервиса, заданное в money.thift
+2> }.
 3> ThriftHandler = my_money_thrift_service_handler.  %% реализует woody_server_thrift_handler behaviour
 4> Opts = [].
 5> Handlers = [{"/v1/thrift_money_service",{Service, ThriftHandler, Opts}}].
@@ -41,42 +44,42 @@ Erlang реализация [Библиотеки RPC вызовов для об
 9> Function = give_me_money.  %% thrift метод
 10> Args = [100, <<"rub">>].
 11> Request = {Service, Function, Args}.
-12> Client = woody_client:new(<<"myUniqRequestID1">>, EventHandler).
-13> {{ok, Result}, _NextClient} = woody_client:call(Client, Request, #{url => Url}).
+12> Context = woody_client:new_context(<<"myUniqRequestID1">>, EventHandler).
+13> {{ok, Result}, _NextContext} = woody_client:call(Context, Request, #{url => Url}).
 ```
 
-В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_) `woody_client:call/3` вернет `{ok, NextClient}`.
+В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_) `woody_client:call/3` вернет `{ok, NextContext}`.
 
-Если сервер бросает `Exception`, описанный в _.thrift_ файле сервиса, `woody_client:call/3` бросит это же исключение в виде: `throw:{{exception, Exception}, NextClient}`, а в случае ошибки RPC вызова: `error:{Reason, NextClient}`.
+Если сервер бросает `Exception`, описанный в _.thrift_ файле сервиса, `woody_client:call/3` бросит это же исключение в виде: `throw:{{exception, Exception}, NextContext}`, а в случае ошибки RPC вызова: `error:{Reason, NextContext}`.
 
-`woody_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{{exception | error, Error}, NextClient}` либо `{{error, Error, Stacktace}, NextClient}`.
+`woody_client:call_safe/3` - аналогична `call/3`, но в случае исключений, не бросает их, а возвращает в виде tuple: `{{exception | error, Error}, NextContext}` либо `{{error, Error, Stacktace}, NextContext}`.
 
 ```erlang
 14> Args1 = [1000000, <<"usd">>].
 15> Request1 = {Service, Function, Args1}.
-16> Client1 = woody_client:new(<<"myUniqRequestID2">>, EventHandler).
-17> {{exception, #take_it_easy{}}, _NextClient1} = woody_client:call_safe(Client1, Request1, #{url => Url}).
+16> Context1 = woody_client:new_context(<<"myUniqRequestID2">>, EventHandler).
+17> {{exception, #take_it_easy{}}, _NextContext1} = woody_client:call_safe(Context1, Request1, #{url => Url}).
 ```
 
 `woody_client:call_async/5` позволяет сделать call асинхронно и обработать результат в callback функции. `woody_client:call_async/5` требует также _sup_ref()_ для включения процесса, обрабатывающего RPC вызов, в supervision tree приложения.
 
 ```erlang
-18> Callback = fun({{ok, Res}, _NextClient2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
-18>     ({{exception, Error}, _NextClient2}) -> io:format("Service exception: ~p~n", [Error]);
-18>     ({{error, _} _NextClient2}) -> io:format("Rpc failed")
-18>     ({{error, _, _} _NextClient2}) -> io:format("Rpc failed")
+18> Callback = fun({{ok, Res}, _NextContext2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
+18>     ({{exception, Error}, _NextContext2}) -> io:format("Service exception: ~p~n", [Error]);
+18>     ({{error, _} _NextContext2}) -> io:format("Rpc failed")
+18>     ({{error, _, _} _NextContext2}) -> io:format("Rpc failed")
 18> end.
-19> Client2 = woody_client:new(<<"myUniqRequestID3">>, EventHandler).
-20> {ok, Pid, _NextClient2} = woody_client:call_async(SupRef, Callback, Client2, Request, #{url => Url}).
+19> Context2 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
+20> {ok, Pid, _NextContext2} = woody_client:call_async(SupRef, Callback, Context2, Request, #{url => Url}).
 ```
 
-Можно создать пул соединений для thrift клиента: `woody_client_thrift:start_pool/2` и затем использовать его при работе с `woody_client`:
+Можно создать пул соединений для thrift клиента (например, для установления _keep alive_ соединений с сервером): `woody_client_thrift:start_pool/2` и затем использовать его при работе с `woody_client`:
 
 ```erlang
 21> Pool = my_client_pool.
 22> ok = woody_client_thrift:start_pool(Pool, 10).
-23> Client3 = woody_client:new(<<"myUniqRequestID3">>, EventHandler).
-24> {{ok, Result}, _NextClient3} = woody_client:call(Client, Request, #{url => Url, pool => Pool}).
+23> Context3 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
+24> {{ok, Result}, _NextContext3} = woody_client:call(Context, Request, #{url => Url, pool => Pool}).
 ```
 
 Закрыть пул можно с помошью `woody_client_thrift:stop_pool/1`.
@@ -87,49 +90,53 @@ Erlang реализация [Библиотеки RPC вызовов для об
 -module(my_money_thrift_service_handler).
 -behaviour(woody_server_thrift_handler).
 
-%% Auto-generated Thrift types for my_money_service
--include("my_money_types.hrl").
+%% Auto-generated Thrift types from money.thrift
+-include("my_money_thrift.hrl").
 
--export([handle_function/5, handle_error/5]).
+-export([handle_function/4, handle_error/4]).
 
 -spec handle_function(woody_t:func(), woody_server_thrift_handler:args(),
-    woody_t:rpc_id(), woody_client:client(), woody_server_thrift_handler:handler_opts())
+    woody_client:context(), woody_server_thrift_handler:handler_opts())
 ->
     {ok, woody_server_thrift_handler:result()} |  no_return().
-handle_function(give_me_money, Sum = {Amount, Currency}, RpcId, Client, _Opts) ->
+handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
     Wallet = <<"localhost:8022/v1/thrift_wallet_service">>,
     RequestLimits = {my_wallet_service, check_limits, Sum},
 
-    %% Используется Client, полученный handle_function,
-    %% woody_client:new/2 вызывать не надо.
-    case woody_client:call_safe(Client, RequestLimits, #{url => Wallet}) of
-        {{ok, ok}, Client1} ->
+    %% RpcId можно получить из Context, полученного handle_function,
+    %% для использования при логировании.
+    RpcId = woody_client:get_rpc_id(Context),
 
-            %% Логи следует тэгировать RpcId, полученным handle_function.
+    %% Используется Context, полученный handle_function.
+    %% woody_client:new/2 вызывать не надо.
+    case woody_client:call_safe(Context, RequestLimits, #{url => Wallet}) of
+        {{ok, ok}, Context1} ->
+
+            %% Логи следует тэгировать RpcId.
             lager:info("[~p] giving away ~p ~p",
-                [my_event_handler:format_id(RpcId), Amount, Currency]),
+                [RpcId, Amount, Currency]),
             RequestMoney = {my_wallet_service, get_money, Sum},
 
-            %% Используется новое значение Client1, полученное из предыдущего вызова
+            %% Используется новое значение Context1, полученное из предыдущего вызова
             %% woody_client:call_safe/3 (call/3, call_async/5).
-            {{ok, Money}, _Client2} = woody_client:call(Client1, RequestMoney,
+            {{ok, Money}, _Context2} = woody_client:call(Context1, RequestMoney,
                 #{url => Wallet}),
             {ok, Money};
-        {{exception, #over_limits{}}, _Client1} ->
+        {{exception, #over_limits{}}, _Context1} ->
             lager:info("[~p] ~p ~p is too much",
-                [my_event_handler:format_id(RpcId), Amount, Currency]),
+                [RpcId, Amount, Currency]),
             throw(#take_it_easy{})
     end.
 
 -spec handle_error(woody_t:func(), woody_server_thrift_handler:error_reason(),
-    woody_t:rpc_id(), woody_client:client(), woody_server_thrift_handler:handler_opts())
+    woody_t:rpc_id(), woody_server_thrift_handler:handler_opts())
 -> _.
-handle_error(give_me_money, Error, RpcId, _Client, _Opts) ->
+handle_error(give_me_money, Error, Context, _Opts) ->
     lager:info("[~p] got error from thrift: ~p",
-        [my_event_handler:format_id(RpcId), Error]).
+        [woody_client:get_rpc_id(Context), Error]).
 ```
 
-Показанное в этом наивном примере реализации `my_money_service` использование `Client` и `RpcId` необходимо для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
+Показанное в этом наивном примере реализации сервиса `my_money` использование `Context` и `RpcId` необходимо для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
 
 ### Woody Event Handler
 
@@ -139,12 +146,13 @@ handle_error(give_me_money, Error, RpcId, _Client, _Opts) ->
 -module(my_event_handler).
 -behaviour(woody_event_handler).
 
--export([handle_event/2]).
+-export([handle_event/3]).
 
 -spec handle_event(
     woody_event_handler:event_type(),
+    woody_t:rpc_id(),
     woody_event_handler:event_meta_type()
 ) -> _.
-handle_event(Event, Meta) ->
-    lager:info("woody event ~p: ~p", [Event, Meta]).
+handle_event(Event, RpcId, Meta) ->
+    lager:info("[~p] woody event ~p: ~p", [RpcId, Event, Meta]).
 ```

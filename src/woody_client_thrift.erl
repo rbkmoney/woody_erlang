@@ -20,7 +20,7 @@
 -export_type([except_thrift/0, error_protocol/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
-    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId#{
+    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId, #{
         status => Status, result => Result
     })
 ).
@@ -38,14 +38,14 @@ start_pool(Name, PoolSize) when is_integer(PoolSize) ->
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(woody_client:client(), request(), woody_client:options()) ->
+-spec call(woody_client:context(), request(), woody_client:options()) ->
     woody_client:result_ok() | no_return().
-call(Client = #{event_handler := EventHandler},
-    {Service, Function, Args}, TransportOpts)
+call(Context = #{event_handler := EventHandler},
+    {Service = {_, ServiceName}, Function, Args}, TransportOpts)
 ->
-    RpcId = maps:with([span_id, trace_id, parent_id], Client),
-    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId#{
-        service   => Service,
+    RpcId = maps:with([span_id, trace_id, parent_id], Context),
+    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId, #{
+        service   => ServiceName,
         function  => Function,
         type      => get_rpc_type(Service, Function),
         args      => Args
@@ -54,15 +54,15 @@ call(Client = #{event_handler := EventHandler},
         do_call(
             make_thrift_client(RpcId, Service, TransportOpts, EventHandler),
             Function, Args
-        ), RpcId, Client
+        ), RpcId, Context
     ).
 
 
 %%
 %% Internal functions
 %%
-get_rpc_type(Service, Function) ->
-    try get_rpc_type(Service:function_info(Function, reply_type))
+get_rpc_type({Module, Service}, Function) ->
+    try get_rpc_type(Module:function_info(Service, Function, reply_type))
     catch
         error:_ ->
             error({badarg, {Service,Function}})
@@ -91,40 +91,40 @@ do_call(Client, Function, Args) ->
 
 
 format_return({ok, ok}, RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, ?thrift_cast),
-    {ok, Client};
+    {ok, Context};
 
 format_return({ok, Result}, RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Result),
-    {{ok, Result}, Client};
+    {{ok, Result}, Context};
 
 %% In case a server violates the requirements and sends
 %% #TAppiacationException{} with http status code 200.
 format_return({exception, Result = #'TApplicationException'{}}, RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Result),
-    error({?error_transport(server_error), Client});
+    error({?error_transport(server_error), Context});
 
 %% Service threw valid thrift exception
 format_return(Exception = ?except_thrift(_), RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Exception),
-    throw({Exception, Client});
+    throw({Exception, Context});
 
 format_return({error, Error = ?error_transport(_)}, RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
-    error({Error, Client});
+    error({Error, Context});
 
 format_return({error, Error}, RpcId,
-    Client = #{event_handler := EventHandler})
+    Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
-    error({?error_protocol(Error), Client}).
+    error({?error_protocol(Error), Context}).

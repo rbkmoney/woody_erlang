@@ -30,4 +30,5 @@
 -define(EV_THRIFT_ERROR           , 'thrift error').
 -define(EV_INTERNAL_ERROR         , 'internal error').
 
+-define(EV_DEBUG                  , 'trace_event').
 -endif.

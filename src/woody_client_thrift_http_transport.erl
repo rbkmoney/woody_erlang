@@ -43,9 +43,9 @@
     {error, ?error_transport(Error)}
 ).
 
--define(log_response(EventHandler, Status, Meta),
+-define(log_response(EventHandler, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
-        Meta#{status =>Status})
+        RpcId, #{status =>Status})
 ).
 
 -type woody_transport() :: #{
@@ -133,7 +133,7 @@ flush(Transport = #{
     ],
     RpcId = maps:with([span_id, trace_id, parent_id], Transport),
     woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_SEND,
-        RpcId#{url => Url}),
+        RpcId, #{url => Url}),
     case send(Url, Headers, WBuffer, Options, RpcId, EventHandler) of
         {ok, Response} ->
             {Transport#{
@@ -156,15 +156,15 @@ send(Url, Headers, WBuffer, Options, RpcId, EventHandler) ->
     case hackney:request(post, Url, Headers, WBuffer, maps:to_list(Options)) of
         {ok, ResponseCode, _ResponseHeaders, Ref} ->
             ?log_response(EventHandler, get_response_status(ResponseCode),
-                RpcId#{code => ResponseCode}),
+                RpcId, #{code => ResponseCode}),
             handle_response(ResponseCode, hackney:body(Ref));
         {error, {closed, _}} ->
             ?log_response(EventHandler, error,
-                RpcId#{reason => partial_response}),
+                RpcId, #{reason => partial_response}),
             ?format_error(partial_response);
         {error, Reason} ->
             ?log_response(EventHandler, error,
-                RpcId#{reason => Reason}),
+                RpcId, #{reason => Reason}),
             ?format_error(Reason)
     end.
 
