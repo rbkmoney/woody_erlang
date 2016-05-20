@@ -5,8 +5,6 @@
 -include("woody_test_thrift.hrl").
 -include("src/woody_defs.hrl").
 
--compile(export_all).
-
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
@@ -20,6 +18,32 @@
 
 %% woody_event_handler callbacks
 -export([handle_event/3]).
+
+%% common test API
+-export([all/0,
+    init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
+-export([
+    call_safe_ok_test/1,
+    call_ok_test/1,
+    call_safe_handler_throw_test/1,
+    call_handler_throw_test/1,
+    call_safe_handler_throw_unexpected_test/1,
+    call_handler_throw_unexpected_test/1,
+    call_safe_handler_error_test/1,
+    call_handler_error_test/1,
+    call_safe_client_transport_error_test/1,
+    call_client_transport_error_test/1,
+    call_safe_server_transport_error_test/1,
+    call_server_transport_error_test/1,
+    call_handle_error_fails_test/1,
+    call_oneway_void_test/1,
+    call_async_ok_test/1,
+    span_ids_sequence_test/1,
+    call_with_client_pool_test/1,
+    multiplexed_transport_test/1,
+    allowed_transport_options_test/1,
+    server_http_request_validation_test/1
+]).
 
 %% internal API
 -export([call/4, call_safe/4]).

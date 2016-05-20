@@ -105,7 +105,6 @@ get_cowboy_config(Handlers, EventHandler) ->
             [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
         } || {PathMatch, {Service, Handler, Opts}} <- Handlers
     ],
-    {ok, _} = application:ensure_all_started(cowboy),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
 

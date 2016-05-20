@@ -10,7 +10,7 @@
 %% API
 -export([new_context/2]).
 -export([get_rpc_id/1]).
-
+-export([make_id/1]).
 -export([make_child_context/2]).
 
 -export([call/3]).
@@ -136,6 +136,11 @@ call_async(Sup, Callback, Context, Request, Options) ->
     supervisor:start_child(ClientSup,
         [Callback, Context, Request, Options]).
 
+-spec make_id(binary()) -> woody_t:req_id().
+make_id(Suffix) when is_binary(Suffix) ->
+    SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),
+    <<SnowFlake/binary, $:, Suffix/binary>>.
+
 %%
 %% Internal API
 %%
@@ -178,10 +183,5 @@ next(Context = #{root_rpc := true}) ->
     Context;
 next(Context = #{root_rpc := false, seq := Seq}) ->
     NextSeq = Seq +1,
-    Context#{span_id => make_req_id(NextSeq), seq => NextSeq}.
+    Context#{span_id => make_id(genlib:to_binary(NextSeq)), seq => NextSeq}.
 
--spec make_req_id(non_neg_integer()) -> woody_t:req_id().
-make_req_id(Seq) ->
-    BinSeq = genlib:to_binary(Seq),
-    SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),
-    <<SnowFlake/binary, $:, BinSeq/binary>>.

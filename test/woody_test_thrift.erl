@@ -25,6 +25,8 @@
 -export_type([service_name/0]).
 -export_type([function_name/0]).
 
+-export_type([enum_info/0]).
+-export_type([struct_info/0]).
 
 -export_type([
     'direction'/0
@@ -129,7 +131,7 @@
 -type enum_info() ::
     {enum, [enum_field_info()]}.
 
--spec typedefs() -> [typedef_name()].
+-spec typedefs() -> [].
 
 typedefs() ->
     [].
@@ -157,7 +159,7 @@ services() ->
         'powerups'
     ].
 
--spec typedef_info(typedef_name()) -> field_type() | no_return().
+-spec typedef_info(_) -> no_return().
 
 typedef_info(_) -> erlang:error(badarg).
 
