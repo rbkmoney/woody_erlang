@@ -93,7 +93,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 %% Auto-generated Thrift types from money.thrift
 -include("my_money_thrift.hrl").
 
--export([handle_function/4, handle_error/4]).
+-export([handle_function/4]).
 
 -spec handle_function(woody_t:func(), woody_server_thrift_handler:args(),
     woody_client:context(), woody_server_thrift_handler:handler_opts())
@@ -119,21 +119,18 @@ handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
 
             %% Используется новое значение Context1, полученное из предыдущего вызова
             %% woody_client:call_safe/3 (call/3, call_async/5).
-            {{ok, Money}, _Context2} = woody_client:call(Context1, RequestMoney,
+            {{ok, Money}, Context2} = woody_client:call(Context1, RequestMoney,
                 #{url => Wallet}),
-            {ok, Money};
-        {{exception, #over_limits{}}, _Context1} ->
+
+            %% handle_function/4 должна возвращать текущий Context
+            %% вместе с результатом обработки запроса.
+            {{ok, Money}, Context2};
+        {{exception, #over_limits{}}, Context1} ->
             lager:info("[~p] ~p ~p is too much",
                 [RpcId, Amount, Currency]),
-            throw(#take_it_easy{})
+            %% Текущий контекст должен выбрасываться и вместе с thrift исключением.
+            throw({#take_it_easy{}, Context1})
     end.
-
--spec handle_error(woody_t:func(), woody_server_thrift_handler:error_reason(),
-    woody_t:rpc_id(), woody_server_thrift_handler:handler_opts())
--> _.
-handle_error(give_me_money, Error, Context, _Opts) ->
-    lager:info("[~p] got error from thrift: ~p",
-        [woody_client:get_rpc_id(Context), Error]).
 ```
 
 Показанное в этом наивном примере реализации сервиса `my_money` использование `Context` и `RpcId` необходимо для корректного логирования _RPC ID_ библиотекой, которое позволяет построить полное дерево RPC вызовов между микросервисами в рамках обработки бизнес сценария.
@@ -156,3 +153,4 @@ handle_error(give_me_money, Error, Context, _Opts) ->
 handle_event(Event, RpcId, Meta) ->
     lager:info("[~p] woody event ~p: ~p", [RpcId, Event, Meta]).
 ```
+

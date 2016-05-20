@@ -14,7 +14,6 @@
 
 %% woody_server_thrift_handler callbacks
 -export([handle_function/4]).
--export([handle_error/4]).
 
 %% woody_event_handler callbacks
 -export([handle_event/3]).
@@ -35,7 +34,6 @@
     call_client_transport_error_test/1,
     call_safe_server_transport_error_test/1,
     call_server_transport_error_test/1,
-    call_handle_error_fails_test/1,
     call_oneway_void_test/1,
     call_async_ok_test/1,
     span_ids_sequence_test/1,
@@ -90,7 +88,13 @@
     reason = genlib:to_binary(Reason)
 }).
 
--define(except_weapon_failure(Reason), {exception, ?weapon_failure(Reason)}).
+-define(powerup_failure(Reason), #powerup_failure{
+    code   = <<"powerup_error">>,
+    reason = genlib:to_binary(Reason)
+}).
+
+-define(except_weapon_failure (Reason), {exception, ?weapon_failure (Reason)}).
+-define(except_powerup_failure(Reason), {exception, ?powerup_failure(Reason)}).
 
 -define(pos_error, {pos_error, "pos out of boundaries"}).
 
@@ -132,7 +136,6 @@ all() ->
         call_client_transport_error_test,
         call_safe_server_transport_error_test,
         call_server_transport_error_test,
-        call_handle_error_fails_test,
         call_oneway_void_test,
         call_async_ok_test,
         span_ids_sequence_test,
@@ -162,20 +165,9 @@ application_stop(App=sasl) ->
 application_stop(App) ->
     application:stop(App).
 
-init_per_testcase(Tc, C) when
-    Tc =:= call_safe_server_transport_error_test ;
-    Tc =:= call_server_transport_error_test ;
-    Tc =:= call_handle_error_fails_test ;
-    Tc =:= call_oneway_void_test ;
-    Tc =:= multiplexed_transport_test
-->
-    do_init_per_testcase([powerups], C);
 init_per_testcase(_, C) ->
-    do_init_per_testcase([weapons], C).
-
-do_init_per_testcase(Services, C) ->
     {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    {ok, _}   = start_woody_server(woody_ct, Sup, Services),
+    {ok, _}   = start_woody_server(woody_ct, Sup, [weapons, powerups]),
     [{sup, Sup} | C].
 
 start_woody_server(Id, Sup, Services) ->
@@ -293,9 +285,6 @@ call_safe_server_transport_error_test(_) ->
 
 call_server_transport_error_test(_) ->
     do_call_server_transport_error(<<"call_server_transport_error">>).
-
-call_handle_error_fails_test(_) ->
-    do_call_server_transport_error(<<"call_handle_error_fails">>).
 
 do_call_server_transport_error(Id) ->
     Armor   = <<"Helmet">>,
@@ -455,46 +444,35 @@ handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, CurrentWeapon}),
-    switch_weapon(CurrentWeapon, Direction, Shift, Context);
+    {switch_weapon(CurrentWeapon, Direction, Shift, Context), Context};
 
 handle_function(get_weapon, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To,{SpanId, Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #weapon{ammo = 0}  ->
-            throw(?weapon_failure("out of ammo"));
+            throw({?weapon_failure("out of ammo"), Context});
         Weapon = #weapon{} ->
             Weapon
     end,
-    {ok, Res};
+    {{ok, Res}, Context};
 
 %% Powerups
 handle_function(get_powerup, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
-    {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
+    {{ok, return_powerup(Name, Context)}, Context};
+
 handle_function(like_powerup, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
-    ok.
-
-handle_error(get_powerup, _,
-    _Context = #{   trace_id := TraceId, span_id   := SpanId = <<"call_handle_error_fails">>,
-        rpc_id := #{trace_id := TraceId, parent_id := SpanId}}, _Opts)
-->
-    error(no_more_powerups);
-handle_error(_Function, _Reason,
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    ok.
-
+    {ok, Context}.
 
 %%
 %% woody_event_handler callbacks
@@ -564,7 +542,7 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
 
 switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
     case call_safe(Context, weapons, get_weapon,
-             [new_weapon_name(CurrentWeapon, Direction, Shift), self_to_bin()])
+             [new_weapon_name(CurrentWeapon, Direction, Shift, Context), self_to_bin()])
     of
         {{ok, Weapon}, _} ->
             {ok, Weapon};
@@ -576,19 +554,32 @@ switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
             switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex)
     end.
 
-new_weapon_name(#weapon{slot_pos = Pos}, next, Shift) ->
-    new_weapon_name(Pos + Shift);
-new_weapon_name(#weapon{slot_pos = Pos}, prev, Shift) ->
-    new_weapon_name(Pos - Shift).
+new_weapon_name(#weapon{slot_pos = Pos}, next, Shift, Ctx) ->
+    new_weapon_name(Pos + Shift, Ctx);
+new_weapon_name(#weapon{slot_pos = Pos}, prev, Shift, Ctx) ->
+    new_weapon_name(Pos - Shift, Ctx).
 
-new_weapon_name(Pos) when is_integer(Pos), Pos >= 0, Pos < 10 ->
+new_weapon_name(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
     genlib_map:get(Pos, ?SLOTS, <<"no weapon">>);
-new_weapon_name(_) ->
-    throw(?pos_error).
+new_weapon_name(_, Context) ->
+    throw({?pos_error, Context}).
 
 validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
     ok.
+
+-define(BAD_POWERUP_REPLY, powerup_unknown).
+
+return_powerup(Name, Context) when is_binary(Name) ->
+    return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY), Context);
+return_powerup(#powerup{level = Level}, Context) when Level == 0 ->
+    throw({?powerup_failure("run out"), Context});
+return_powerup(#powerup{time_left = Time}, Context) when Time == 0 ->
+    throw({?powerup_failure("expired"), Context});
+return_powerup(P = #powerup{}, _) ->
+    P;
+return_powerup(P = ?BAD_POWERUP_REPLY, _) ->
+    P.
 
 self_to_bin() ->
     genlib:to_binary(pid_to_list(self())).
@@ -607,3 +598,4 @@ receive_msg(Msg) ->
     after 1000 ->
         error(get_msg_timeout)
     end.
+
