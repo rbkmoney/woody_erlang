@@ -215,6 +215,8 @@ handle_function_catch(State = #state{
             handle_error(State, Function, Reason1, SeqId)
     end.
 
+handle_exception(State, Function, {exception, Exception}, SeqId) ->
+    handle_exception(State, Function, Exception, SeqId);
 handle_exception(State = #state{service = Service, transport_handler = Trans},
     Function, Exception, SeqId)
 ->

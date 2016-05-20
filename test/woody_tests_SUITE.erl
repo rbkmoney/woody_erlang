@@ -36,6 +36,10 @@
     call_server_transport_error_test/1,
     call_oneway_void_test/1,
     call_async_ok_test/1,
+    call_pass_through_ok_test/1,
+    call_pass_through_except_test/1,
+    call_no_pass_through_bad_ok_test/1,
+    call_no_pass_through_bad_except_test/1,
     span_ids_sequence_test/1,
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
@@ -138,6 +142,10 @@ all() ->
         call_server_transport_error_test,
         call_oneway_void_test,
         call_async_ok_test,
+        call_pass_through_ok_test,
+        call_pass_through_except_test,
+        call_no_pass_through_bad_ok_test,
+        call_no_pass_through_bad_except_test,
         span_ids_sequence_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
@@ -159,7 +167,7 @@ application_stop(App=sasl) ->
     %% hack for preventing sasl deadlock
     %% http://erlang.org/pipermail/erlang-questions/2014-May/079012.html
     error_logger:delete_report_handler(cth_log_redirect),
-    application:stop(App),
+    _ = application:stop(App),
     error_logger:add_report_handler(cth_log_redirect),
     ok;
 application_stop(App) ->
@@ -346,7 +354,7 @@ call_with_client_pool_test(_) ->
         {Service, get_weapon, [Gun, self_to_bin()]},
         #{url => Url, pool => Pool}
     ),
-    receive_msg({Id, Gun}),
+    {ok, _} = receive_msg({Id, Gun}),
     ok = woody_client_thrift:stop_pool(Pool).
 
 multiplexed_transport_test(_) ->
@@ -425,6 +433,42 @@ server_http_request_validation_test(_) ->
     {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, [{url, Url}]),
     {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, [{url, Url}]).
 
+call_pass_through_ok_test(_) ->
+    Id      = <<"call_pass_through_ok">>,
+    Armor   = <<"AntiGrav Boots">>,
+    Context = make_context(Id),
+    Expect  = {{ok, genlib_map:get(Armor, ?POWERUPS)}, Context},
+    Expect  = call(Context, powerups, proxy_get_powerup, [Armor, self_to_bin()]).
+
+call_pass_through_except_test(_) ->
+    Id      = <<"call_pass_through_except">>,
+    Armor   = <<"Shield Belt">>,
+    Context = make_context(Id),
+    Expect = {?except_powerup_failure("run out"), Context},
+    try call(Context, powerups, proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        throw:Expect -> ok
+    end.
+
+call_no_pass_through_bad_ok_test(_) ->
+    Id      = <<"call_no_pass_through_bad_ok">>,
+    Armor   = <<"AntiGrav Boots">>,
+    Context = make_context(Id),
+    try call(Context, powerups, bad_proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        error:{?error_transport(server_error), Context} ->
+            ok
+    end.
+
+call_no_pass_through_bad_except_test(_) ->
+    Id      = <<"call_no_pass_through_bad_except">>,
+    Armor   = <<"Shield Belt">>,
+    Context = make_context(Id),
+    try call(Context, powerups, bad_proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        error:{?error_transport(server_error), Context} ->
+            ok
+    end.
 
 %%
 %% supervisor callbacks
@@ -466,6 +510,18 @@ handle_function(get_powerup, {Name, To},
 ->
     send_msg(To, {SpanId, Name}),
     {{ok, return_powerup(Name, Context)}, Context};
+
+handle_function(proxy_get_powerup, {Name, To},
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
+->
+    call(Context, powerups, get_powerup, [Name, To]);
+
+handle_function(bad_proxy_get_powerup, {Name, To},
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
+->
+    call(Context, powerups, get_powerup, [Name, To]);
 
 handle_function(like_powerup, {Name, To},
     Context  = #{ parent_id := SpanId, trace_id := TraceId,
@@ -587,7 +643,8 @@ self_to_bin() ->
 send_msg(<<>>, _) ->
     ok;
 send_msg(To, Msg) when is_pid(To) ->
-    To ! {self(), Msg};
+    To ! {self(), Msg},
+    ok;
 send_msg(To, Msg) when is_binary(To) ->
     send_msg(list_to_pid(genlib:to_list(To)), Msg).
 

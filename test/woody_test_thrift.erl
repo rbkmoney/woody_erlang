@@ -99,6 +99,8 @@
 
 -type 'powerups_service_functions'() ::
     'get_powerup' |
+    'proxy_get_powerup' |
+    'bad_proxy_get_powerup' |
     'like_powerup'.
 
 -export_type(['powerups_service_functions'/0]).
@@ -216,6 +218,8 @@ functions('weapons') ->
 functions('powerups') ->
     [
         'get_powerup',
+        'proxy_get_powerup',
+        'bad_proxy_get_powerup',
         'like_powerup'
     ];
 
@@ -259,6 +263,28 @@ function_info('powerups', 'get_powerup', reply_type) ->
 function_info('powerups', 'get_powerup', exceptions) ->
     {struct, struct, [
         {1, undefined, {struct, exception, {woody_test_thrift, 'powerup_failure'}}, 'error', undefined}
+    ]};
+function_info('powerups', 'proxy_get_powerup', params_type) ->
+    {struct, struct, [
+        {1, undefined, string, 'name', undefined},
+        {2, undefined, string, 'data', undefined}
+    ]};
+function_info('powerups', 'proxy_get_powerup', reply_type) ->
+    {struct, struct, {woody_test_thrift, 'powerup'}};
+function_info('powerups', 'proxy_get_powerup', exceptions) ->
+    {struct, struct, [
+        {1, undefined, {struct, exception, {woody_test_thrift, 'powerup_failure'}}, 'error', undefined}
+    ]};
+function_info('powerups', 'bad_proxy_get_powerup', params_type) ->
+    {struct, struct, [
+        {1, undefined, string, 'name', undefined},
+        {2, undefined, string, 'data', undefined}
+    ]};
+function_info('powerups', 'bad_proxy_get_powerup', reply_type) ->
+    {struct, struct, {woody_test_thrift, 'weapon'}};
+function_info('powerups', 'bad_proxy_get_powerup', exceptions) ->
+    {struct, struct, [
+        {1, undefined, {struct, exception, {woody_test_thrift, 'weapon_failure'}}, 'error', undefined}
     ]};
 function_info('powerups', 'like_powerup', params_type) ->
     {struct, struct, [
