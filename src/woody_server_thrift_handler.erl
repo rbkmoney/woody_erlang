@@ -16,14 +16,13 @@
 -type args()         :: tuple().
 -export_type([handler_opts/0, args/0, result/0, error_reason/0]).
 
+-type except() :: {_ThriftExcept, woody_client:context()}.
+-export_type([except/0]).
+
 -callback handle_function(woody_t:func(), args(),
     woody_client:context(), handler_opts())
 ->
-    ok | {ok, result()} | {error, result()} | no_return().
-
--callback handle_error(woody_t:func(), error_reason(),
-    woody_client:context(), handler_opts())
--> _.
+    {ok | {ok, result()}, woody_client:context()} | no_return().
 
 %%
 %% API
@@ -98,9 +97,9 @@ process(State = #state{protocol = Protocol, service = Service}) ->
                 get_params_type(Service, FunctionName),
                 State2,
                 SeqId
-            ), FunctionName);
+            ));
         {error, Reason} ->
-            handle_protocol_error(State1, undefined, Reason)
+            handle_protocol_error(State1, Reason)
     end.
 
 release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->
@@ -166,12 +165,10 @@ call_handler(Function,Args, #state{
     ?log_rpc_result(EventHandler, ok, RpcId, #{result => Result}),
     Result.
 
-handle_result(ok, State, Function, SeqId) ->
+handle_result({ok, _Context}, State, Function, SeqId) ->
     handle_success(State, Function, ok, SeqId);
-handle_result({ok, Response}, State, Function, SeqId) ->
-    handle_success(State, Function, Response, SeqId);
-handle_result({error, Error}, State, Function, SeqId) ->
-    handle_error(State, Function, Error, SeqId).
+handle_result({{ok, Response}, _Context}, State, Function, SeqId) ->
+    handle_success(State, Function, Response, SeqId).
 
 handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
     ReplyType = get_function_info(Service, Function, reply_type),
@@ -203,10 +200,14 @@ handle_function_catch(State = #state{
             ?log_rpc_result(EventHandler, error, RpcId,
                 #{class => Class, reason => Reason, ignore => true}),
             {State, noreply};
-        {throw, Exception} when is_tuple(Exception), size(Exception) > 0 ->
+        {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
             ?log_rpc_result(EventHandler, error, RpcId,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
+        {throw, Exception} ->
+            ?log_rpc_result(EventHandler, error, RpcId,
+                #{class => throw, reason => Exception, ignore => false}),
+            handle_unknown_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
             ?log_rpc_result(EventHandler, error, RpcId, #{class => error,
                 reason => Reason, stack => Stack, ignore => false}),
@@ -214,6 +215,8 @@ handle_function_catch(State = #state{
             handle_error(State, Function, Reason1, SeqId)
     end.
 
+handle_exception(State, Function, {exception, Exception}, SeqId) ->
+    handle_exception(State, Function, Exception, SeqId);
 handle_exception(State = #state{service = Service, transport_handler = Trans},
     Function, Exception, SeqId)
 ->
@@ -247,7 +250,6 @@ get_except_name(Module, Type) ->
 %% Called
 %% - when an exception has been explicitly thrown by the service, but it was
 %% not one of the exceptions that was defined for the function.
-%% - when the service explicitly returned {error, Reason}
 handle_unknown_exception(State, Function, Exception, SeqId) ->
     handle_error(State, Function, {exception_not_declared_as_thrown, Exception}, SeqId).
 
@@ -274,43 +276,23 @@ send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Repl
             {State, {error, {?error_protocol_send, [Error, erlang:get_stacktrace()]}}}
     end.
 
-prepare_response({State, ok}, _) ->
+prepare_response({State, ok}) ->
     {ok, State#state.protocol};
-prepare_response({State, noreply}, _) ->
+prepare_response({State, noreply}) ->
     {noreply, State#state.protocol};
-prepare_response({State, {error, Reason}}, FunctionName) ->
-    {handle_protocol_error(State, FunctionName, Reason), State#state.protocol}.
+prepare_response({State, {error, Reason}}) ->
+    {handle_protocol_error(State, Reason), State#state.protocol}.
 
-handle_protocol_error(State = #state{
+handle_protocol_error(#state{
     context           = Context,
     protocol_stage    = Stage,
     transport_handler = Trans,
-    event_handler     = EventHandler}, Function, Reason)
+    event_handler     = EventHandler}, Reason)
 ->
     RpcId = woody_client:get_rpc_id(Context),
-    call_error_handler(State, Function, Reason),
     woody_event_handler:handle_event(EventHandler, ?EV_THRIFT_ERROR,
         RpcId, #{stage => Stage, reason => Reason}),
     format_protocol_error(Reason, Trans).
-
-call_error_handler(#state{
-    context        = Context,
-    handler        = Handler,
-    handler_opts   = Opts,
-    event_handler  = EventHandler}, Function, Reason)
-->
-    RpcId = woody_client:get_rpc_id(Context),
-    try
-        Handler:handle_error(Function, Reason, Context, Opts)
-    catch
-        Class:Error ->
-            woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId, #{
-                error => <<"service error handler failed">>,
-                class => Class,
-                reason => Error,
-                stack => erlang:get_stacktrace()
-            })
-    end.
 
 format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
     mark_error_to_transport(Trans, transport, "bad binary protocol version"),
@@ -341,3 +323,4 @@ get_function_info({Module, Service}, Function, Info) ->
 -spec mark_error_to_transport(transport_handler(), transport | logic, _Error) -> _.
 mark_error_to_transport(TransportHandler, Type, Error) ->
     TransportHandler:mark_thrift_error(Type, Error).
+

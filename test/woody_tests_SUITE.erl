@@ -5,8 +5,6 @@
 -include("woody_test_thrift.hrl").
 -include("src/woody_defs.hrl").
 
--compile(export_all).
-
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
@@ -16,10 +14,38 @@
 
 %% woody_server_thrift_handler callbacks
 -export([handle_function/4]).
--export([handle_error/4]).
 
 %% woody_event_handler callbacks
 -export([handle_event/3]).
+
+%% common test API
+-export([all/0,
+    init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
+-export([
+    call_safe_ok_test/1,
+    call_ok_test/1,
+    call_safe_handler_throw_test/1,
+    call_handler_throw_test/1,
+    call_safe_handler_throw_unexpected_test/1,
+    call_handler_throw_unexpected_test/1,
+    call_safe_handler_error_test/1,
+    call_handler_error_test/1,
+    call_safe_client_transport_error_test/1,
+    call_client_transport_error_test/1,
+    call_safe_server_transport_error_test/1,
+    call_server_transport_error_test/1,
+    call_oneway_void_test/1,
+    call_async_ok_test/1,
+    call_pass_through_ok_test/1,
+    call_pass_through_except_test/1,
+    call_no_pass_through_bad_ok_test/1,
+    call_no_pass_through_bad_except_test/1,
+    span_ids_sequence_test/1,
+    call_with_client_pool_test/1,
+    multiplexed_transport_test/1,
+    allowed_transport_options_test/1,
+    server_http_request_validation_test/1
+]).
 
 %% internal API
 -export([call/4, call_safe/4]).
@@ -41,7 +67,7 @@
     0 => <<"Sniper Rifle">>
 }).
 
--define(weapon(Name, Pos, Ammo), Name => #weapon{
+-define(weapon(Name, Pos, Ammo), Name => #'Weapon'{
     name     = Name,
     slot_pos = Pos,
     ammo     = Ammo
@@ -61,18 +87,24 @@
     ?weapon(<<"Sniper Rifle">>    , 0, 20)
 }).
 
--define(weapon_failure(Reason), #weapon_failure{
+-define(weapon_failure(Reason), #'WeaponFailure'{
     code   = <<"weapon_error">>,
     reason = genlib:to_binary(Reason)
 }).
 
--define(except_weapon_failure(Reason), {exception, ?weapon_failure(Reason)}).
+-define(powerup_failure(Reason), #'PowerupFailure'{
+    code   = <<"powerup_error">>,
+    reason = genlib:to_binary(Reason)
+}).
+
+-define(except_weapon_failure (Reason), {exception, ?weapon_failure (Reason)}).
+-define(except_powerup_failure(Reason), {exception, ?powerup_failure(Reason)}).
 
 -define(pos_error, {pos_error, "pos out of boundaries"}).
 
 %% Powerup service
 -define(powerup(Name, Params),
-    Name => #powerup{name = Name, Params}
+    Name => #'Powerup'{name = Name, Params}
 ).
 
 -define(POWERUPS, #{
@@ -108,9 +140,12 @@ all() ->
         call_client_transport_error_test,
         call_safe_server_transport_error_test,
         call_server_transport_error_test,
-        call_handle_error_fails_test,
         call_oneway_void_test,
         call_async_ok_test,
+        call_pass_through_ok_test,
+        call_pass_through_except_test,
+        call_no_pass_through_bad_ok_test,
+        call_no_pass_through_bad_except_test,
         span_ids_sequence_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
@@ -132,26 +167,15 @@ application_stop(App=sasl) ->
     %% hack for preventing sasl deadlock
     %% http://erlang.org/pipermail/erlang-questions/2014-May/079012.html
     error_logger:delete_report_handler(cth_log_redirect),
-    application:stop(App),
+    _ = application:stop(App),
     error_logger:add_report_handler(cth_log_redirect),
     ok;
 application_stop(App) ->
     application:stop(App).
 
-init_per_testcase(Tc, C) when
-    Tc =:= call_safe_server_transport_error_test ;
-    Tc =:= call_server_transport_error_test ;
-    Tc =:= call_handle_error_fails_test ;
-    Tc =:= call_oneway_void_test ;
-    Tc =:= multiplexed_transport_test
-->
-    do_init_per_testcase([powerups], C);
 init_per_testcase(_, C) ->
-    do_init_per_testcase([weapons], C).
-
-do_init_per_testcase(Services, C) ->
     {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    {ok, _}   = start_woody_server(woody_ct, Sup, Services),
+    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C].
 
 start_woody_server(Id, Sup, Services) ->
@@ -164,15 +188,15 @@ start_woody_server(Id, Sup, Services) ->
     }),
     {ok, _} = supervisor:start_child(Sup, Server).
 
-get_handler(powerups) ->
+get_handler('Powerups') ->
     {
         ?PATH_POWERUPS,
-        {{?THRIFT_DEFS, powerups}, ?MODULE, []}
+        {{?THRIFT_DEFS, 'Powerups'}, ?MODULE, []}
     };
-get_handler(weapons) ->
+get_handler('Weapons') ->
     {
         ?PATH_WEAPONS,
-        {{?THRIFT_DEFS, weapons}, ?MODULE, []}
+        {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, []}
     }.
 
 end_per_test_case(_,C) ->
@@ -217,7 +241,7 @@ call_safe_handler_throw_unexpected_test(_) ->
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
     Expect  = {{error, ?error_transport(server_error)}, Context},
-    Expect  = call_safe(Context, weapons, switch_weapon,
+    Expect  = call_safe(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
 
@@ -226,7 +250,7 @@ call_handler_throw_unexpected_test(_) ->
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
     Expect  = {?error_transport(server_error), Context},
-    try call(Context, weapons, switch_weapon, [Current, next, 1, self_to_bin()])
+    try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
     end,
@@ -247,13 +271,13 @@ call_safe_client_transport_error_test(_) ->
     Id  = <<"call_safe_client_transport_error">>,
     Context = make_context(Id),
     {{error, ?error_protocol(_)}, Context} = call_safe(Context,
-        weapons, get_weapon, [Gun, self_to_bin()]).
+        'Weapons', get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_client_transport_error">>,
     Context = make_context(Id),
-    try call(Context, weapons, get_weapon, [Gun, self_to_bin()])
+    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
         error:{?error_protocol(_), Context} -> ok
     end.
@@ -263,21 +287,18 @@ call_safe_server_transport_error_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(Id),
     Expect  = {{error, ?error_transport(server_error)}, Context},
-    Expect  = call_safe(Context, powerups, get_powerup,
+    Expect  = call_safe(Context, 'Powerups', get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_server_transport_error_test(_) ->
     do_call_server_transport_error(<<"call_server_transport_error">>).
 
-call_handle_error_fails_test(_) ->
-    do_call_server_transport_error(<<"call_handle_error_fails">>).
-
 do_call_server_transport_error(Id) ->
     Armor   = <<"Helmet">>,
     Context = make_context(Id),
     Expect  = {?error_transport(server_error), Context},
-    try call(Context, powerups, get_powerup, [Armor, self_to_bin()])
+    try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
     end,
@@ -288,7 +309,7 @@ call_oneway_void_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(Id),
     Expect  = {ok, Context},
-    Expect  = call(Context, powerups, like_powerup, [Armor, self_to_bin()]),
+    Expect  = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_async_ok_test(C) ->
@@ -307,7 +328,7 @@ call_async_ok_test(C) ->
         genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
 get_weapon(Context, Sup, Cb, Gun) ->
-    call_async(Context, weapons, get_weapon, [Gun, <<>>], Sup, Cb).
+    call_async(Context, 'Weapons', get_weapon, [Gun, <<>>], Sup, Cb).
 
 collect({{ok, Result}, Context}, Pid) ->
     send_msg(Pid, {Context, Result}).
@@ -317,7 +338,7 @@ span_ids_sequence_test(_) ->
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Context = make_context(Id),
     Expect  = {{ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)}, Context},
-    Expect  = call(Context, weapons, switch_weapon,
+    Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
 call_with_client_pool_test(_) ->
@@ -326,21 +347,21 @@ call_with_client_pool_test(_) ->
     Id   = <<"call_with_client_pool">>,
     Gun  =  <<"Enforcer">>,
     Context = make_context(Id),
-    {Url, Service} = get_service_endpoint(weapons),
+    {Url, Service} = get_service_endpoint('Weapons'),
     Expect = {{ok, genlib_map:get(Gun, ?WEAPONS)}, Context},
     Expect = woody_client:call(
         Context,
         {Service, get_weapon, [Gun, self_to_bin()]},
         #{url => Url, pool => Pool}
     ),
-    receive_msg({Id, Gun}),
+    {ok, _} = receive_msg({Id, Gun}),
     ok = woody_client_thrift:stop_pool(Pool).
 
 multiplexed_transport_test(_) ->
     Id  = <<"multiplexed_transport">>,
     {Client1, {error, ?error_transport(bad_request)}} = thrift_client:call(
         make_thrift_multiplexed_client(Id, "powerups",
-            get_service_endpoint(powerups)),
+            get_service_endpoint('Powerups')),
         get_powerup,
         [<<"Body Armor">>, self_to_bin()]
     ),
@@ -364,7 +385,7 @@ allowed_transport_options_test(_) ->
     Id   = <<"allowed_transport_options">>,
     Gun  =  <<"Enforcer">>,
     Args = [Gun, self_to_bin()],
-    {Url, Service} = get_service_endpoint(weapons),
+    {Url, Service} = get_service_endpoint('Weapons'),
     Pool = guns,
     ok = woody_client_thrift:start_pool(Pool, 1),
     Context = make_context(Id),
@@ -385,7 +406,7 @@ allowed_transport_options_test(_) ->
 
 server_http_request_validation_test(_) ->
     Id  = <<"server_http_request_validation">>,
-    {Url, _Service} = get_service_endpoint(weapons),
+    {Url, _Service} = get_service_endpoint('Weapons'),
     Headers = [
         {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(Id)},
         {?HEADER_NAME_RPC_ID        , genlib:to_binary(Id)},
@@ -412,6 +433,42 @@ server_http_request_validation_test(_) ->
     {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, [{url, Url}]),
     {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, [{url, Url}]).
 
+call_pass_through_ok_test(_) ->
+    Id      = <<"call_pass_through_ok">>,
+    Armor   = <<"AntiGrav Boots">>,
+    Context = make_context(Id),
+    Expect  = {{ok, genlib_map:get(Armor, ?POWERUPS)}, Context},
+    Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]).
+
+call_pass_through_except_test(_) ->
+    Id      = <<"call_pass_through_except">>,
+    Armor   = <<"Shield Belt">>,
+    Context = make_context(Id),
+    Expect = {?except_powerup_failure("run out"), Context},
+    try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        throw:Expect -> ok
+    end.
+
+call_no_pass_through_bad_ok_test(_) ->
+    Id      = <<"call_no_pass_through_bad_ok">>,
+    Armor   = <<"AntiGrav Boots">>,
+    Context = make_context(Id),
+    try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        error:{?error_transport(server_error), Context} ->
+            ok
+    end.
+
+call_no_pass_through_bad_except_test(_) ->
+    Id      = <<"call_no_pass_through_bad_except">>,
+    Armor   = <<"Shield Belt">>,
+    Context = make_context(Id),
+    try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+    catch
+        error:{?error_transport(server_error), Context} ->
+            ok
+    end.
 
 %%
 %% supervisor callbacks
@@ -431,46 +488,47 @@ handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, CurrentWeapon}),
-    switch_weapon(CurrentWeapon, Direction, Shift, Context);
+    {switch_weapon(CurrentWeapon, Direction, Shift, Context), Context};
 
 handle_function(get_weapon, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To,{SpanId, Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
-        #weapon{ammo = 0}  ->
-            throw(?weapon_failure("out of ammo"));
-        Weapon = #weapon{} ->
+        #'Weapon'{ammo = 0}  ->
+            throw({?weapon_failure("out of ammo"), Context});
+        Weapon = #'Weapon'{} ->
             Weapon
     end,
-    {ok, Res};
+    {{ok, Res}, Context};
 
 %% Powerups
 handle_function(get_powerup, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
-    {ok, genlib_map:get(Name, ?POWERUPS, powerup_unknown)};
+    {{ok, return_powerup(Name, Context)}, Context};
+
+handle_function(proxy_get_powerup, {Name, To},
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
+->
+    call(Context, 'Powerups', get_powerup, [Name, To]);
+
+handle_function(bad_proxy_get_powerup, {Name, To},
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
+        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
+->
+    call(Context, 'Powerups', get_powerup, [Name, To]);
+
 handle_function(like_powerup, {Name, To},
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
+    Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
-    ok.
-
-handle_error(get_powerup, _,
-    _Context = #{   trace_id := TraceId, span_id   := SpanId = <<"call_handle_error_fails">>,
-        rpc_id := #{trace_id := TraceId, parent_id := SpanId}}, _Opts)
-->
-    error(no_more_powerups);
-handle_error(_Function, _Reason,
-    _Context = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    ok.
-
+    {ok, Context}.
 
 %%
 %% woody_event_handler callbacks
@@ -506,21 +564,21 @@ call_async(Context, ServiceName, Function, Args, Sup, Callback) ->
         #{url => Url}
     ).
 
-get_service_endpoint(weapons) ->
+get_service_endpoint('Weapons') ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_WEAPONS),
-        {?THRIFT_DEFS, weapons}
+        {?THRIFT_DEFS, 'Weapons'}
     };
-get_service_endpoint(powerups) ->
+get_service_endpoint('Powerups') ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_POWERUPS),
-        {?THRIFT_DEFS, powerups}
+        {?THRIFT_DEFS, 'Powerups'}
     }.
 
 gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
     Context = make_context(Id),
     Expect  = {{ExpectStatus, ExpectRes}, Context},
-    Expect  = ?MODULE:CallFun(Context, weapons, get_weapon, [Gun, self_to_bin()]),
+    Expect  = ?MODULE:CallFun(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
         _    -> ok
@@ -529,7 +587,7 @@ gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     Context = make_context(Id),
     Expect  = {Exception, Context},
-    try call(Context, weapons, get_weapon, [Gun, self_to_bin()])
+    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok
     end,
@@ -539,12 +597,12 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     end.
 
 switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
-    case call_safe(Context, weapons, get_weapon,
-             [new_weapon_name(CurrentWeapon, Direction, Shift), self_to_bin()])
+    case call_safe(Context, 'Weapons', get_weapon,
+             [new_weapon_name(CurrentWeapon, Direction, Shift, Context), self_to_bin()])
     of
         {{ok, Weapon}, _} ->
             {ok, Weapon};
-        {{exception, #weapon_failure{
+        {{exception, #'WeaponFailure'{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }}, NextContex} ->
@@ -552,19 +610,32 @@ switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
             switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex)
     end.
 
-new_weapon_name(#weapon{slot_pos = Pos}, next, Shift) ->
-    new_weapon_name(Pos + Shift);
-new_weapon_name(#weapon{slot_pos = Pos}, prev, Shift) ->
-    new_weapon_name(Pos - Shift).
+new_weapon_name(#'Weapon'{slot_pos = Pos}, next, Shift, Ctx) ->
+    new_weapon_name(Pos + Shift, Ctx);
+new_weapon_name(#'Weapon'{slot_pos = Pos}, prev, Shift, Ctx) ->
+    new_weapon_name(Pos - Shift, Ctx).
 
-new_weapon_name(Pos) when is_integer(Pos), Pos >= 0, Pos < 10 ->
+new_weapon_name(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
     genlib_map:get(Pos, ?SLOTS, <<"no weapon">>);
-new_weapon_name(_) ->
-    throw(?pos_error).
+new_weapon_name(_, Context) ->
+    throw({?pos_error, Context}).
 
 validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
     ok.
+
+-define(BAD_POWERUP_REPLY, powerup_unknown).
+
+return_powerup(Name, Context) when is_binary(Name) ->
+    return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY), Context);
+return_powerup(#'Powerup'{level = Level}, Context) when Level == 0 ->
+    throw({?powerup_failure("run out"), Context});
+return_powerup(#'Powerup'{time_left = Time}, Context) when Time == 0 ->
+    throw({?powerup_failure("expired"), Context});
+return_powerup(P = #'Powerup'{}, _) ->
+    P;
+return_powerup(P = ?BAD_POWERUP_REPLY, _) ->
+    P.
 
 self_to_bin() ->
     genlib:to_binary(pid_to_list(self())).
@@ -572,7 +643,8 @@ self_to_bin() ->
 send_msg(<<>>, _) ->
     ok;
 send_msg(To, Msg) when is_pid(To) ->
-    To ! {self(), Msg};
+    To ! {self(), Msg},
+    ok;
 send_msg(To, Msg) when is_binary(To) ->
     send_msg(list_to_pid(genlib:to_list(To)), Msg).
 
@@ -583,3 +655,4 @@ receive_msg(Msg) ->
     after 1000 ->
         error(get_msg_timeout)
     end.
+

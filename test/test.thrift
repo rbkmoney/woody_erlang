@@ -47,8 +47,17 @@ service Powerups {
         1: string name
         2: binary data
     ) throws(1: PowerupFailure error)
+    Powerup proxy_get_powerup(
+        1: string name
+        2: binary data
+    ) throws(1: PowerupFailure error)
+    Weapon bad_proxy_get_powerup(
+        1: string name
+        2: binary data
+    ) throws(1: WeaponFailure error)
     oneway void like_powerup(
         1: string name
         2: binary data
     )
 }
+

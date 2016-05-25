@@ -25,6 +25,8 @@
     })
 ).
 
+-define(WOODY_OPTS, [protocol, transport]).
+
 -define(thrift_cast, oneway_void).
 
 %%
@@ -52,7 +54,7 @@ call(Context = #{event_handler := EventHandler},
     }),
     format_return(
         do_call(
-            make_thrift_client(RpcId, Service, TransportOpts, EventHandler),
+            make_thrift_client(RpcId, Service, clean_opts(TransportOpts), EventHandler),
             Function, Args
         ), RpcId, Context
     ).
@@ -70,6 +72,9 @@ get_rpc_type({Module, Service}, Function) ->
 
 get_rpc_type(?thrift_cast) -> cast;
 get_rpc_type(_) -> call.
+
+clean_opts(Options) ->
+    maps:without(?WOODY_OPTS, Options).
 
 make_thrift_client(RpcId, Service, TransportOpts, EventHandler) ->
     {ok, Protocol} = thrift_binary_protocol:new(
