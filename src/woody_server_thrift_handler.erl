@@ -233,12 +233,13 @@ handle_exception(State = #state{service = Service, transport_handler = Trans},
                 {ReplySpec, ExceptionTuple}, SeqId)
     end.
 
-get_except(Exception, {_Fid, _, {struct, exception, {Module, Type}}, _, _}, _) when
-    element(1, Exception) =:= Type
-->
-    {Exception, {Module, Type}};
-get_except(_, _, TypesModule) ->
-    {undefined, TypesModule}.
+get_except(Exception, {_Fid, _, {struct, exception, {Module, Type}}, _, _}, TypesModule) ->
+    case Module:record_name(Type) of
+        Name when Name =:= element(1, Exception) ->
+            {Exception, {Module, Type}};
+        _ ->
+            {undefined, TypesModule}
+    end.
 
 get_except_name(Module, Type) ->
     {struct, exception, Fields} = Module:struct_info(Type),
