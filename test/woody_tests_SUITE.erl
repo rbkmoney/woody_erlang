@@ -487,7 +487,7 @@ try_bad_handler_spec(_) ->
             net_opts      => []
         })
     catch
-        error:{bad_handler_spec, NaugtyHandler} ->
+        error:{bad_handler_spec, NaughtyHandler} ->
             ok
     end.
 
