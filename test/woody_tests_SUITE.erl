@@ -477,12 +477,9 @@ call_no_pass_through_bad_except_test(_) ->
     end.
 
 try_bad_handler_spec(_) ->
-    NaughtyHandler = {
-        ?PATH_POWERUPS,
-        {{'I', 'am'}, 'naughty'}
-    },
+    NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
     try
-        woody_server:child_spec(Id, #{
+        woody_server:child_spec('bad_spec', #{
             handlers      => [get_handler('Powerups'), NaughtyHandler],
             event_handler => ?MODULE,
             ip            => ?SERVER_IP,
