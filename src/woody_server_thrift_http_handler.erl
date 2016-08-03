@@ -109,7 +109,7 @@ get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T],
     get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE, 
         [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
     } | Paths]);
-get_paths(_, _, Handler, _) -> 
+get_paths(_, _, [Handler | _], _) -> 
     error({bad_handler_spec, Handler}).
 
 config() ->
