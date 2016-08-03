@@ -99,14 +99,20 @@ get_socket_transport(Ip, Port, Options) ->
     end.
 
 get_cowboy_config(Handlers, EventHandler) ->
-    ServerOpts = config(),
-    Paths = [
-        {PathMatch, ?MODULE,
-            [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
-        } || {PathMatch, {Service, Handler, Opts}} <- Handlers
-    ],
+    Paths = (config(), EventHandler, Handlers, []),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
+    
+get_paths(ServerOpts, EventHandler, [], Paths) ->
+    Paths;
+get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T], Paths) ->
+    get_paths(ServerOpts, EventHandler, T, [{
+        PathMatch,
+        ?MODULE, 
+        [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
+    } | Paths];
+get_paths(_,_,Handler,_) -> 
+    error({bad_handler_spec, Handler}).
 
 config() ->
     [{max_body_length, ?MAX_BODY_LENGTH}].
