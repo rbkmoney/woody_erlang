@@ -99,7 +99,7 @@ get_socket_transport(Ip, Port, Options) ->
     end.
 
 get_cowboy_config(Handlers, EventHandler) ->
-    Paths = (config(), EventHandler, Handlers, []),
+    Paths = get_paths(config(), EventHandler, Handlers, []),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
     
@@ -110,7 +110,7 @@ get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T],
         PathMatch,
         ?MODULE, 
         [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
-    } | Paths];
+    } | Paths]);
 get_paths(_,_,Handler,_) -> 
     error({bad_handler_spec, Handler}).
 
