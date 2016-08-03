@@ -44,7 +44,8 @@
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
     allowed_transport_options_test/1,
-    server_http_request_validation_test/1
+    server_http_request_validation_test/1,
+    try_bad_handler_spec/1
 ]).
 
 %% internal API
@@ -150,7 +151,8 @@ all() ->
         call_with_client_pool_test,
         multiplexed_transport_test,
         allowed_transport_options_test,
-        server_http_request_validation_test
+        server_http_request_validation_test,
+        try_bad_handler_spec
     ].
 
 %%
@@ -173,6 +175,10 @@ application_stop(App=sasl) ->
 application_stop(App) ->
     application:stop(App).
 
+init_per_testcase(Tc, C) when
+    Tc =:= try_bad_handler_spec
+->
+    C;
 init_per_testcase(_, C) ->
     {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
@@ -467,6 +473,24 @@ call_no_pass_through_bad_except_test(_) ->
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
         error:{?error_transport(server_error), Context} ->
+            ok
+    end.
+
+try_bad_handler_spec(_) ->
+    NaughtyHandler = {
+        ?PATH_POWERUPS,
+        {{'I', 'am'}, 'naughty'}
+    },
+    try
+        woody_server:child_spec(Id, #{
+            handlers      => [get_handler('Powerups'), NaughtyHandler],
+            event_handler => ?MODULE,
+            ip            => ?SERVER_IP,
+            port          => ?SERVER_PORT,
+            net_opts      => []
+        })
+    catch
+        error:{bad_handler_spec, NaugtyHandler} ->
             ok
     end.
 
