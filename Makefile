@@ -1,34 +1,38 @@
 REBAR := $(shell which rebar3 2>/dev/null || which ./rebar3)
-ORG_NAME := rbkmoney
+SUBMODULES = build_utils
+SUBTARGETS = $(patsubst %,%/.git,$(SUBMODULES))
 
-# Note: RELNAME should match the name of
-# the first service in docker-compose.yml
-RELNAME := dev
-BASE_IMAGE := "$(ORG_NAME)/build:latest"
+UTILS_PATH := build_utils
+# ToDo: remove unused TEMPLATES_PATH here, when the bug
+# with handling of the varriable in build_utils is fixed
+TEMPLATES_PATH := .
+SERVICE_NAME := woody
+BUILD_IMAGE_TAG := 753126790c9ecd763840d9fe58507335af02b875
 
-CALL_ANYWHERE := rebar-update compile xref lint test dialyze clean distclean
+CALL_W_CONTAINER := all submodules rebar-update compile xref lint test dialyze clean distclean
 
-CALL_W_CONTAINER := $(CALL_ANYWHERE)
-
-include utils.mk
-
-.PHONY: $(CALL_W_CONTAINER) all $(UTIL_TARGETS)
-
-
-.PHONY: all compile test clean distclean dialyze
+.PHONY: $(CALL_W_CONTAINER)
 
 all: compile
+
+-include $(UTILS_PATH)/make_lib/utils_container.mk
+
+$(SUBTARGETS): %/.git: %
+	git submodule update --init $<
+	touch $@
+
+submodules: $(SUBTARGETS)
 
 rebar-update:
 	$(REBAR) update
 
-compile: rebar-update
+compile: submodules rebar-update
 	$(REBAR) compile
 
-test:
+test: submodules
 	$(REBAR) ct
 
-xref:
+xref: submodules
 	$(REBAR) xref
 
 lint: compile
