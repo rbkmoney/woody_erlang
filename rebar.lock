@@ -11,7 +11,7 @@
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.0.2">>},1},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.2.1">>},1},
  {<<"snowflake">>,
-  {git,"git@github.com:rbkmoney/snowflake.git",
+  {git,"https://github.com/rbkmoney/snowflake.git",
        {ref,"36b978a3ad711c9d9349b799a24c5499a95ae29a"}},
   0},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.0">>},1},
