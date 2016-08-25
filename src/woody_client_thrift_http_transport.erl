@@ -30,7 +30,7 @@
     ?CODE_400 | ?CODE_403 | ?CODE_408 | ?CODE_413 | ?CODE_429 |
     ?CODE_500 | ?CODE_503 | {http_code, pos_integer()}.
 -type error_transport(A) ::
-    ?error_transport(A).
+    ?ERROR_TRANSPORT(A).
 -type hackney_other_error() :: term().
 -type error() ::
     error_transport(error_code())     |
@@ -40,7 +40,7 @@
 -export_type([error/0]).
 
 -define(RETURN_ERROR(Error),
-    {error, ?error_transport(Error)}
+    {error, ?ERROR_TRANSPORT(Error)}
 ).
 
 -define(LOG_RESPONSE(EventHandler, Status, RpcId, Meta),

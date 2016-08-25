@@ -16,7 +16,7 @@
 -type request() :: {woody_t:service(), woody_t:func(), args()}.
 
 -type except_thrift()  :: _OkException.
--type error_protocol() :: ?error_protocol(_).
+-type error_protocol() :: ?ERROR_PROTOCOL(_).
 -export_type([except_thrift/0, error_protocol/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
@@ -113,16 +113,16 @@ handle_result({exception, Result = #'TApplicationException'{}}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Result),
-    error({?error_transport(server_error), Context});
+    error({?ERROR_TRANSPORT(server_error), Context});
 
 %% Service threw valid thrift exception
-handle_result(Exception = ?except_thrift(_), RpcId,
+handle_result(Exception = ?EXCEPT_THRIFT(_), RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Exception),
     throw({Exception, Context});
 
-handle_result({error, Error = ?error_transport(_)}, RpcId,
+handle_result({error, Error = ?ERROR_TRANSPORT(_)}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
@@ -132,5 +132,5 @@ handle_result({error, Error}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
-    error({?error_protocol(Error), Context}).
+    error({?ERROR_PROTOCOL(Error), Context}).
 

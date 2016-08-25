@@ -110,13 +110,13 @@ call_safe(Context, Request, Options) ->
     try call(Context, Request, Options)
     catch
         %% valid thrift exception
-        throw:{Except = ?except_thrift(_), Context1} ->
+        throw:{Except = ?EXCEPT_THRIFT(_), Context1} ->
             {Except, Context1};
         %% rpc send failed
-        error:{TError = ?error_transport(_), Context1} ->
+        error:{TError = ?ERROR_TRANSPORT(_), Context1} ->
             {{error, TError}, Context1};
         %% thrift protocol error
-        error:{PError = ?error_protocol(_), Context1} ->
+        error:{PError = ?ERROR_PROTOCOL(_), Context1} ->
             {{error, PError}, Context1};
         %% what else could have happened?
         Class:Reason ->

@@ -245,7 +245,7 @@ call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
-    Expect  = {{error, ?error_transport(server_error)}, Context},
+    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context},
     Expect  = call_safe(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
@@ -254,7 +254,7 @@ call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
-    Expect  = {?error_transport(server_error), Context},
+    Expect  = {?ERROR_TRANSPORT(server_error), Context},
     try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -264,18 +264,18 @@ call_handler_throw_unexpected_test(_) ->
 call_safe_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
     gun_test_basic(call_safe, <<"call_safe_handler_error">>, Gun,
-        {error, ?error_transport(server_error)}, true).
+        {error, ?ERROR_TRANSPORT(server_error)}, true).
 
 call_handler_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
     gun_catch_test_basic(<<"call_handler_error">>, Gun,
-        {error, ?error_transport(server_error)}, true).
+        {error, ?ERROR_TRANSPORT(server_error)}, true).
 
 call_safe_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_safe_client_transport_error">>,
     Context = make_context(Id),
-    {{error, ?error_protocol(_)}, Context} = call_safe(Context,
+    {{error, ?ERROR_PROTOCOL(_)}, Context} = call_safe(Context,
         'Weapons', get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
@@ -284,14 +284,14 @@ call_client_transport_error_test(_) ->
     Context = make_context(Id),
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
-        error:{?error_protocol(_), Context} -> ok
+        error:{?ERROR_PROTOCOL(_), Context} -> ok
     end.
 
 call_safe_server_transport_error_test(_) ->
     Id      = <<"call_safe_server_transport_error">>,
     Armor   = <<"Helmet">>,
     Context = make_context(Id),
-    Expect  = {{error, ?error_transport(server_error)}, Context},
+    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context},
     Expect  = call_safe(Context, 'Powerups', get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
@@ -302,7 +302,7 @@ call_server_transport_error_test(_) ->
 do_call_server_transport_error(Id) ->
     Armor   = <<"Helmet">>,
     Context = make_context(Id),
-    Expect  = {?error_transport(server_error), Context},
+    Expect  = {?ERROR_TRANSPORT(server_error), Context},
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
@@ -364,7 +364,7 @@ call_with_client_pool_test(_) ->
 
 multiplexed_transport_test(_) ->
     Id  = <<"multiplexed_transport">>,
-    {Client1, {error, ?error_transport(bad_request)}} = thrift_client:call(
+    {Client1, {error, ?ERROR_TRANSPORT(bad_request)}} = thrift_client:call(
         make_thrift_multiplexed_client(Id, "powerups",
             get_service_endpoint('Powerups')),
         get_powerup,
@@ -395,7 +395,7 @@ allowed_transport_options_test(_) ->
     ok = woody_client_thrift:start_pool(Pool, 1),
     Context = make_context(Id),
     Options = #{url => Url, pool => Pool, ssl_options => [], connect_timeout => 0},
-    {{error, ?error_transport(connect_timeout)}, Context} = woody_client:call_safe(
+    {{error, ?ERROR_TRANSPORT(connect_timeout)}, Context} = woody_client:call_safe(
         Context,
         {Service, get_weapon, Args},
         Options
@@ -461,7 +461,7 @@ call_no_pass_through_bad_ok_test(_) ->
     Context = make_context(Id),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{?error_transport(server_error), Context} ->
+        error:{?ERROR_TRANSPORT(server_error), Context} ->
             ok
     end.
 
@@ -471,7 +471,7 @@ call_no_pass_through_bad_except_test(_) ->
     Context = make_context(Id),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{?error_transport(server_error), Context} ->
+        error:{?ERROR_TRANSPORT(server_error), Context} ->
             ok
     end.
 
