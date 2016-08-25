@@ -22,13 +22,9 @@ build('woody_erlang', 'docker-host', finalHook) {
         sh 'make wc_compile'
       }
     }
-    // ToDo: Uncomment the stage as soon as Elvis is in the build image!
-    // runStage('lint') {
-    //   sh 'make w_container_lint'
-    // }
-    //runStage('lint') {
-    //  sh 'make wc_lint'
-    //}
+    runStage('lint') {
+      sh 'make wc_lint'
+    }
     runStage('xref') {
       sh 'make wc_xref'
     }

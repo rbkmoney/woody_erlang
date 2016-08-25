@@ -18,17 +18,17 @@
 
 
 %% Error types and defs
--define(code400, bad_request).
--define(code403, forbidden).
--define(code408, request_timeout).
--define(code413, body_too_large).
--define(code429, too_many_requests).
--define(code500, server_error).
--define(code503, service_unavailable).
+-define(CODE_400, bad_request).
+-define(CODE_403, forbidden).
+-define(CODE_408, request_timeout).
+-define(CODE_413, body_too_large).
+-define(CODE_429, too_many_requests).
+-define(CODE_500, server_error).
+-define(CODE_503, service_unavailable).
 
 -type error_code() ::
-    ?code400 | ?code403 | ?code408 | ?code413 | ?code429 |
-    ?code500 | ?code503 | {http_code, pos_integer()}.
+    ?CODE_400 | ?CODE_403 | ?CODE_408 | ?CODE_413 | ?CODE_429 |
+    ?CODE_500 | ?CODE_503 | {http_code, pos_integer()}.
 -type error_transport(A) ::
     ?error_transport(A).
 -type hackney_other_error() :: term().
@@ -39,11 +39,11 @@
 
 -export_type([error/0]).
 
--define(format_error(Error),
+-define(RETURN_ERROR(Error),
     {error, ?error_transport(Error)}
 ).
 
--define(log_response(EventHandler, Status, RpcId, Meta),
+-define(LOG_RESPONSE(EventHandler, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
         RpcId, Meta#{status =>Status})
 ).
@@ -155,17 +155,17 @@ close(Transport) ->
 send(Url, Headers, WBuffer, Options, RpcId, EventHandler) ->
     case hackney:request(post, Url, Headers, WBuffer, maps:to_list(Options)) of
         {ok, ResponseCode, _ResponseHeaders, Ref} ->
-            ?log_response(EventHandler, get_response_status(ResponseCode),
+            ?LOG_RESPONSE(EventHandler, get_response_status(ResponseCode),
                 RpcId, #{code => ResponseCode}),
             handle_response(ResponseCode, hackney:body(Ref));
         {error, {closed, _}} ->
-            ?log_response(EventHandler, error,
+            ?LOG_RESPONSE(EventHandler, error,
                 RpcId, #{reason => partial_response}),
-            ?format_error(partial_response);
+            ?RETURN_ERROR(partial_response);
         {error, Reason} ->
-            ?log_response(EventHandler, error,
+            ?LOG_RESPONSE(EventHandler, error,
                 RpcId, #{reason => Reason}),
-            ?format_error(Reason)
+            ?RETURN_ERROR(Reason)
     end.
 
 get_response_status(200) -> ok;
@@ -174,18 +174,18 @@ get_response_status(_)   -> error.
 handle_response(200, {ok, Body}) ->
     {ok, Body};
 handle_response(400, _) ->
-    ?format_error(?code400);
+    ?RETURN_ERROR(?CODE_400);
 handle_response(403, _) ->
-    ?format_error(?code403);
+    ?RETURN_ERROR(?CODE_403);
 handle_response(408, _) ->
-    ?format_error(?code408);
+    ?RETURN_ERROR(?CODE_408);
 handle_response(413, _) ->
-    ?format_error(?code413);
+    ?RETURN_ERROR(?CODE_413);
 handle_response(429, _) ->
-    ?format_error(?code429);
+    ?RETURN_ERROR(?CODE_429);
 handle_response(500, _) ->
-    ?format_error(?code500);
+    ?RETURN_ERROR(?CODE_500);
 handle_response(503, _) ->
-    ?format_error(?code503);
+    ?RETURN_ERROR(?CODE_503);
 handle_response(Code, _) ->
-    ?format_error({http_code, Code}).
+    ?RETURN_ERROR({http_code, Code}).

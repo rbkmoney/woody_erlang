@@ -68,57 +68,56 @@
     0 => <<"Sniper Rifle">>
 }).
 
--define(weapon(Name, Pos, Ammo), Name => #'Weapon'{
+-define(WEAPON(Name, Pos, Ammo), Name => #'Weapon'{
     name     = Name,
     slot_pos = Pos,
     ammo     = Ammo
 }).
--define(weapon(Name, Pos), ?weapon(Name, Pos, undefined)).
+-define(WEAPON(Name, Pos), ?WEAPON(Name, Pos, undefined)).
 
 -define(WEAPONS, #{
-    ?weapon(<<"Impact Hammer">>   , 1),
-    ?weapon(<<"Enforcer">>        , 2, 25),
-    ?weapon(<<"Bio Rifle">>       , 3, 0),
-    ?weapon(<<"Shock Rifle">>     , 4, 0),
-    ?weapon(<<"Pulse Gun">>       , 5, 0),
-    ?weapon(<<"Ripper">>          , 6, 16),
-    ?weapon(<<"Minigun">>         , 7, 0),
-    ?weapon(<<"Flak Cannon">>     , 8, 30),
-    ?weapon(<<"Rocket Launcher">> , 9, 6),
-    ?weapon(<<"Sniper Rifle">>    , 0, 20)
+    ?WEAPON(<<"Impact Hammer">>   , 1),
+    ?WEAPON(<<"Enforcer">>        , 2, 25),
+    ?WEAPON(<<"Bio Rifle">>       , 3, 0),
+    ?WEAPON(<<"Shock Rifle">>     , 4, 0),
+    ?WEAPON(<<"Pulse Gun">>       , 5, 0),
+    ?WEAPON(<<"Ripper">>          , 6, 16),
+    ?WEAPON(<<"Minigun">>         , 7, 0),
+    ?WEAPON(<<"Flak Cannon">>     , 8, 30),
+    ?WEAPON(<<"Rocket Launcher">> , 9, 6),
+    ?WEAPON(<<"Sniper Rifle">>    , 0, 20)
 }).
 
--define(weapon_failure(Reason), #'WeaponFailure'{
+-define(WEAPON_FAILURE(Reason), #'WeaponFailure'{
     code   = <<"weapon_error">>,
     reason = genlib:to_binary(Reason)
 }).
 
--define(powerup_failure(Reason), #'PowerupFailure'{
+-define(POWERUP_FAILURE(Reason), #'PowerupFailure'{
     code   = <<"powerup_error">>,
     reason = genlib:to_binary(Reason)
 }).
 
--define(except_weapon_failure (Reason), {exception, ?weapon_failure (Reason)}).
--define(except_powerup_failure(Reason), {exception, ?powerup_failure(Reason)}).
+-define(EXCEPT_WEAPON_FAILURE (Reason), {exception, ?WEAPON_FAILURE (Reason)}).
+-define(EXCEPT_POWERUP_FAILURE(Reason), {exception, ?POWERUP_FAILURE(Reason)}).
 
--define(pos_error, {pos_error, "pos out of boundaries"}).
+-define(POS_ERROR, {pos_error, "pos out of boundaries"}).
 
 %% Powerup service
--define(powerup(Name, Params),
+-define(POWERUP(Name, Params),
     Name => #'Powerup'{name = Name, Params}
 ).
 
 -define(POWERUPS, #{
-    ?powerup(<<"Thigh Pads">>       , level = 23),
-    ?powerup(<<"Body Armor">>       , level = 82),
-    ?powerup(<<"Shield Belt">>      , level = 0),
-    ?powerup(<<"AntiGrav Boots">>   , level = 2),
-    ?powerup(<<"Damage Amplifier">> , time_left = 0),
-    ?powerup(<<"Invisibility">>     , time_left = 0)
+    ?POWERUP(<<"Thigh Pads">>       , level = 23),
+    ?POWERUP(<<"Body Armor">>       , level = 82),
+    ?POWERUP(<<"Shield Belt">>      , level = 0),
+    ?POWERUP(<<"AntiGrav Boots">>   , level = 2),
+    ?POWERUP(<<"Damage Amplifier">> , time_left = 0),
+    ?POWERUP(<<"Invisibility">>     , time_left = 0)
 }).
 
-
--define(SERVER_IP     , {0,0,0,0}).
+-define(SERVER_IP     , {0, 0, 0, 0}).
 -define(SERVER_PORT   , 8085).
 -define(URL_BASE      , "0.0.0.0:8085").
 -define(PATH_WEAPONS  , "/v1/woody/test/weapons").
@@ -205,7 +204,7 @@ get_handler('Weapons') ->
         {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, []}
     }.
 
-end_per_test_case(_,C) ->
+end_per_test_case(_, C) ->
     Sup = proplists:get_value(sup, C),
     exit(Sup, shutdown),
     Ref = monitor(process, Sup),
@@ -214,7 +213,7 @@ end_per_test_case(_,C) ->
             demonitor(Ref),
             ok
     after 1000 ->
-        demonitor(Ref,[flush]),
+        demonitor(Ref, [flush]),
         error(exit_timeout)
     end.
 
@@ -235,12 +234,12 @@ call_ok_test(_) ->
 call_safe_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
     gun_test_basic(call_safe, <<"call_safe_handler_throw">>, Gun,
-        ?except_weapon_failure("out of ammo"), true).
+        ?EXCEPT_WEAPON_FAILURE("out of ammo"), true).
 
 call_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
     gun_catch_test_basic(<<"call_handler_throw">>, Gun,
-        {throw, ?except_weapon_failure("out of ammo")}, true).
+        {throw, ?EXCEPT_WEAPON_FAILURE("out of ammo")}, true).
 
 call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
@@ -425,7 +424,7 @@ server_http_request_validation_test(_) ->
     %% as missing Accept is allowed
     lists:foreach(fun({C, H}) ->
         {ok, C, _, _} = hackney:request(post, Url, Headers -- [H], <<>>, [{url, Url}])
-        end, lists:zip([400,400,400,415,400], Headers)),
+        end, lists:zip([400, 400, 400, 415, 400], Headers)),
 
     %% Check wrong Accept
     {ok, 406, _, _} = hackney:request(post, Url,
@@ -450,7 +449,7 @@ call_pass_through_except_test(_) ->
     Id      = <<"call_pass_through_except">>,
     Armor   = <<"Shield Belt">>,
     Context = make_context(Id),
-    Expect = {?except_powerup_failure("run out"), Context},
+    Expect = {?EXCEPT_POWERUP_FAILURE("run out"), Context},
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
         throw:Expect -> ok
@@ -515,10 +514,10 @@ handle_function(get_weapon, {Name, To},
     Context  = #{ parent_id := SpanId, trace_id := TraceId,
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
-    send_msg(To,{SpanId, Name}),
+    send_msg(To, {SpanId, Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #'Weapon'{ammo = 0}  ->
-            throw({?weapon_failure("out of ammo"), Context});
+            throw({?WEAPON_FAILURE("out of ammo"), Context});
         Weapon = #'Weapon'{} ->
             Weapon
     end,
@@ -600,10 +599,7 @@ gun_test_basic(CallFun, Id, Gun, ExpectRes, WithMsg) ->
     Context = make_context(Id),
     Expect  = {ExpectRes, Context},
     Expect  = ?MODULE:CallFun(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]),
-    case WithMsg of
-        true -> {ok, _} = receive_msg({Id, Gun});
-        _    -> ok
-    end.
+    check_msg(WithMsg, Id, Gun).
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     Context = make_context(Id),
@@ -612,10 +608,12 @@ gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
     catch
         Class:Expect -> ok
     end,
-    case WithMsg of
-        true -> {ok, _} = receive_msg({Id, Gun});
-        _    -> ok
-    end.
+    check_msg(WithMsg, Id, Gun).
+
+check_msg(true, Id, Gun) ->
+    {ok, _} = receive_msg({Id, Gun});
+check_msg(false, _, _) ->
+    ok.
 
 switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
     case call_safe(Context, 'Weapons', get_weapon,
@@ -639,7 +637,7 @@ new_weapon_name(#'Weapon'{slot_pos = Pos}, prev, Shift, Ctx) ->
 new_weapon_name(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
     genlib_map:get(Pos, ?SLOTS, <<"no weapon">>);
 new_weapon_name(_, Context) ->
-    throw({?pos_error, Context}).
+    throw({?POS_ERROR, Context}).
 
 validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
@@ -650,9 +648,9 @@ validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
 return_powerup(Name, Context) when is_binary(Name) ->
     return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY), Context);
 return_powerup(#'Powerup'{level = Level}, Context) when Level == 0 ->
-    throw({?powerup_failure("run out"), Context});
+    throw({?POWERUP_FAILURE("run out"), Context});
 return_powerup(#'Powerup'{time_left = Time}, Context) when Time == 0 ->
-    throw({?powerup_failure("expired"), Context});
+    throw({?POWERUP_FAILURE("expired"), Context});
 return_powerup(P = #'Powerup'{}, _) ->
     P;
 return_powerup(P = ?BAD_POWERUP_REPLY, _) ->

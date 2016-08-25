@@ -27,17 +27,17 @@
 %%
 %% API
 %%
--define(log_rpc_result(EventHandler, Status, RpcId, Meta),
+-define(LOG_RPC_RESULT(EventHandler, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_HANDLER_RESULT,
         RpcId, Meta#{status => Status})
 ).
 
--define(stage_read  , protocol_read).
--define(stage_write , protocol_write).
+-define(STAGE_READ  , protocol_read).
+-define(STAGE_WRITE , protocol_write).
 
--define(error_unknown_function , no_function).
--define(error_multiplexed_req  , multiplexed_request).
--define(error_protocol_send    , send_error).
+-define(ERROR_UNKNOWN_FUNCTION , no_function).
+-define(ERROR_MILTIPLEXED_REQ  , multiplexed_request).
+-define(ERROR_PROTOCOL_SEND    , send_error).
 
 -record(state, {
     context           :: woody_client:context(),
@@ -45,7 +45,7 @@
     handler           :: woody_t:handler(),
     handler_opts      :: handler_opts(),
     protocol          :: any(),
-    protocol_stage    :: ?stage_read | ?stage_write,
+    protocol_stage    :: ?STAGE_READ | ?STAGE_WRITE,
     event_handler     :: woody_t:handler(),
     transport_handler :: woody_t:handler()
 }).
@@ -72,7 +72,7 @@ start(Transport, Context, {Service, Handler, Opts},
             handler           = Handler,
             handler_opts      = Opts,
             protocol          = Protocol,
-            protocol_stage    = ?stage_read,
+            protocol_stage    = ?STAGE_READ,
             event_handler     = EventHandler,
             transport_handler = TransportHandler
     }),
@@ -111,25 +111,25 @@ release_oneway(_, State) ->
 get_function_name(Function) ->
     case string:tokens(Function, ?MULTIPLEXED_SERVICE_SEPARATOR) of
         [_ServiceName, _FunctionName] ->
-            {error, ?error_multiplexed_req};
+            {error, ?ERROR_MILTIPLEXED_REQ};
         _ ->
             try list_to_existing_atom(Function)
             catch
-                error:badarg -> {error, ?error_unknown_function}
+                error:badarg -> {error, ?ERROR_UNKNOWN_FUNCTION}
             end
     end.
 
 get_params_type(Service, Function) ->
     try get_function_info(Service, Function, params_type)
     catch
-        error:badarg -> ?error_unknown_function
+        error:badarg -> ?ERROR_UNKNOWN_FUNCTION
     end.
 
 handle_function(Error = {error, _}, _, State, _SeqId) ->
     {State, Error};
 
-handle_function(_, ?error_unknown_function, State, _SeqId) ->
-    {State, {error, ?error_unknown_function}};
+handle_function(_, ?ERROR_UNKNOWN_FUNCTION, State, _SeqId) ->
+    {State, {error, ?ERROR_UNKNOWN_FUNCTION}};
 
 handle_function(Function, InParams, State = #state{protocol = Protocol}, SeqId) ->
     {Protocol1, ReadResult} = thrift_protocol:read(Protocol, InParams),
@@ -137,7 +137,7 @@ handle_function(Function, InParams, State = #state{protocol = Protocol}, SeqId) 
     case ReadResult of
         {ok, Args} ->
             try_call_handler(Function, Args,
-                State1#state{protocol_stage = ?stage_write}, SeqId);
+                State1#state{protocol_stage = ?STAGE_WRITE}, SeqId);
         Error = {error, _} ->
             {State1, Error}
     end.
@@ -150,7 +150,7 @@ try_call_handler(Function, Args, State, SeqId) ->
                 erlang:get_stacktrace(), SeqId)
     end.
 
-call_handler(Function,Args, #state{
+call_handler(Function, Args, #state{
     context       = Context,
     handler       = Handler,
     handler_opts  = Opts,
@@ -162,7 +162,7 @@ call_handler(Function,Args, #state{
         service => ServiceName, function => Function, args => Args, options => Opts
     }),
     Result = Handler:handle_function(Function, Args, Context, Opts),
-    ?log_rpc_result(EventHandler, ok, RpcId, #{result => Result}),
+    ?LOG_RPC_RESULT(EventHandler, ok, RpcId, #{result => Result}),
     Result.
 
 handle_result({ok, _Context}, State, Function, SeqId) ->
@@ -197,23 +197,28 @@ handle_function_catch(State = #state{
     ReplyType = get_function_info(Service, Function, reply_type),
     case {Class, Reason} of
         _Error when ReplyType =:= oneway_void ->
-            ?log_rpc_result(EventHandler, error, RpcId,
+            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
                 #{class => Class, reason => Reason, ignore => true}),
             {State, noreply};
         {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
-            ?log_rpc_result(EventHandler, error, RpcId,
+            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
         {throw, Exception} ->
-            ?log_rpc_result(EventHandler, error, RpcId,
+            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_unknown_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
-            ?log_rpc_result(EventHandler, error, RpcId, #{class => error,
+            ?LOG_RPC_RESULT(EventHandler, error, RpcId, #{class => error,
                 reason => Reason, stack => Stack, ignore => false}),
-            Reason1 = if is_tuple(Reason) -> element(1, Reason); true -> Reason end,
+            Reason1 = short_reason(Reason),
             handle_error(State, Function, Reason1, SeqId)
     end.
+
+short_reason(Reason) when is_tuple(Reason) ->
+    element(1, Reason);
+short_reason(Reason) ->
+    Reason.
 
 handle_exception(State, Function, {exception, Exception}, SeqId) ->
     handle_exception(State, Function, Exception, SeqId);
@@ -274,7 +279,7 @@ send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Repl
         {State#state{protocol = Protocol4}, ok}
     catch
         error:{badmatch, {_, {error, _} = Error}} ->
-            {State, {error, {?error_protocol_send, [Error, erlang:get_stacktrace()]}}}
+            {State, {error, {?ERROR_PROTOCOL_SEND, [Error, erlang:get_stacktrace()]}}}
     end.
 
 prepare_response({State, ok}) ->
@@ -301,13 +306,13 @@ format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
 format_protocol_error(no_binary_protocol_version, Trans) ->
     mark_error_to_transport(Trans, transport, "no binary protocol version"),
     {error, bad_request};
-format_protocol_error({?error_unknown_function, _Fun}, Trans) ->
+format_protocol_error({?ERROR_UNKNOWN_FUNCTION, _Fun}, Trans) ->
     mark_error_to_transport(Trans, transport, "unknown method"),
     {error, bad_request};
-format_protocol_error({?error_multiplexed_req, _Fun}, Trans) ->
+format_protocol_error({?ERROR_MILTIPLEXED_REQ, _Fun}, Trans) ->
     mark_error_to_transport(Trans, transport, "multiplexing not supported"),
     {error, bad_request};
-format_protocol_error({?error_protocol_send, _}, Trans) ->
+format_protocol_error({?ERROR_PROTOCOL_SEND, _}, Trans) ->
     mark_error_to_transport(Trans, transport, "internal error"),
     {error, server_error};
 format_protocol_error(_Reason, Trans) ->
