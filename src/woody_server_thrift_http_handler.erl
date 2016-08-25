@@ -32,17 +32,18 @@
     woody_server_thrift_handler:thrift_handler()
 }.
 
--export_type([server_handler/0]).
-
 -type ssl_opts() :: list(ranch_ssl:ssl_opt()).
+-type net_opts() :: list({ssl, ssl_opts()}).
 
 -type options() :: #{
     handlers      => list(server_handler()),
     event_handler => woody_t:handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
-    net_opts      => list({ssl, ssl_opts()})
+    net_opts      => net_opts()
 }.
+
+-export_type([server_handler/0, options/0, net_opts/0]).
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
