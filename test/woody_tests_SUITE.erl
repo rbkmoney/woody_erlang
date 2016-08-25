@@ -225,12 +225,12 @@ end_per_test_case(_,C) ->
 call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
     gun_test_basic(call_safe, <<"call_safe_ok">>, Gun,
-        {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+        genlib_map:get(Gun, ?WEAPONS), true).
 
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
     gun_test_basic(call, <<"call_ok">>, Gun,
-        {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+        genlib_map:get(Gun, ?WEAPONS), true).
 
 call_safe_handler_throw_test(_) ->
     Gun = <<"Bio Rifle">>,
@@ -336,14 +336,14 @@ call_async_ok_test(C) ->
 get_weapon(Context, Sup, Cb, Gun) ->
     call_async(Context, 'Weapons', get_weapon, [Gun, <<>>], Sup, Cb).
 
-collect({{ok, Result}, Context}, Pid) ->
+collect({Result, Context}, Pid) ->
     send_msg(Pid, {Context, Result}).
 
 span_ids_sequence_test(_) ->
     Id      = <<"span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Context = make_context(Id),
-    Expect  = {{ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)}, Context},
+    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
@@ -354,7 +354,7 @@ call_with_client_pool_test(_) ->
     Gun  =  <<"Enforcer">>,
     Context = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
-    Expect = {{ok, genlib_map:get(Gun, ?WEAPONS)}, Context},
+    Expect = {genlib_map:get(Gun, ?WEAPONS), Context},
     Expect = woody_client:call(
         Context,
         {Service, get_weapon, [Gun, self_to_bin()]},
@@ -443,7 +443,7 @@ call_pass_through_ok_test(_) ->
     Id      = <<"call_pass_through_ok">>,
     Armor   = <<"AntiGrav Boots">>,
     Context = make_context(Id),
-    Expect  = {{ok, genlib_map:get(Armor, ?POWERUPS)}, Context},
+    Expect  = {genlib_map:get(Armor, ?POWERUPS), Context},
     Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]).
 
 call_pass_through_except_test(_) ->
@@ -509,7 +509,7 @@ handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, CurrentWeapon}),
-    {switch_weapon(CurrentWeapon, Direction, Shift, Context), Context};
+    switch_weapon(CurrentWeapon, Direction, Shift, Context);
 
 handle_function(get_weapon, {Name, To},
     Context  = #{ parent_id := SpanId, trace_id := TraceId,
@@ -522,7 +522,7 @@ handle_function(get_weapon, {Name, To},
         Weapon = #'Weapon'{} ->
             Weapon
     end,
-    {{ok, Res}, Context};
+    {Res, Context};
 
 %% Powerups
 handle_function(get_powerup, {Name, To},
@@ -530,7 +530,7 @@ handle_function(get_powerup, {Name, To},
         rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
 ->
     send_msg(To, {SpanId, Name}),
-    {{ok, return_powerup(Name, Context)}, Context};
+    {return_powerup(Name, Context), Context};
 
 handle_function(proxy_get_powerup, {Name, To},
     Context  = #{ parent_id := SpanId, trace_id := TraceId,
@@ -596,9 +596,9 @@ get_service_endpoint('Powerups') ->
         {?THRIFT_DEFS, 'Powerups'}
     }.
 
-gun_test_basic(CallFun, Id, Gun, {ExpectStatus, ExpectRes}, WithMsg) ->
+gun_test_basic(CallFun, Id, Gun, ExpectRes, WithMsg) ->
     Context = make_context(Id),
-    Expect  = {{ExpectStatus, ExpectRes}, Context},
+    Expect  = {ExpectRes, Context},
     Expect  = ?MODULE:CallFun(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]),
     case WithMsg of
         true -> {ok, _} = receive_msg({Id, Gun});
@@ -621,14 +621,14 @@ switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
     case call_safe(Context, 'Weapons', get_weapon,
              [new_weapon_name(CurrentWeapon, Direction, Shift, Context), self_to_bin()])
     of
-        {{ok, Weapon}, _} ->
-            {ok, Weapon};
         {{exception, #'WeaponFailure'{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }}, NextContex} ->
             ok = validate_next_context(NextContex, Context),
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex)
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex);
+        ResultOk = {_Weapon, _NextContext} ->
+            ResultOk
     end.
 
 new_weapon_name(#'Weapon'{slot_pos = Pos}, next, Shift, Ctx) ->

@@ -17,7 +17,7 @@
 -export([call_safe/3]).
 -export([call_async/5]).
 
--export_type([context/0, options/0, result_ok/0, result_error/0]).
+-export_type([context/0, options/0, result_ok/0, result_error/0, exception/0, error/0]).
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
 
@@ -43,16 +43,21 @@
     seq           => non_neg_integer(),
     rpc_id        => woody_t:rpc_id() | undefined
 }.
--type class() :: throw | error | exit.
--type stacktrace() :: list().
 
--type result_ok() :: {ok | {ok, _Response}, context()}.
+-type result_ok() :: {ok | _Response, context()}.
 
 -type result_error() ::
-    {{exception , woody_client_thrift:except_thrift()}        , context()} |
-    {{error     , woody_client_thrift:error_protocol()}       , context()} |
-    {{error     , woody_client_thrift_http_transport:error()} , context()} |
-    {{error     , {class(), _Reason, stacktrace()}}           , context()}.
+    {{exception, exception()}, context()} |
+    {{error    , error()}    , context()}.
+
+-type exception() :: woody_client_thrift:except_thrift().
+-type error() ::
+    woody_client_thrift:error_protocol() |
+    woody_client_thrift_http_transport:error() |
+    {class(), _Reason, stacktrace()}.
+
+-type class() :: throw | error | exit.
+-type stacktrace() :: list().
 
 -type request() :: any().
 
@@ -138,8 +143,9 @@ call_async(Sup, Callback, Context, Request, Options) ->
 
 -spec make_id(binary()) -> woody_t:req_id().
 make_id(Suffix) when is_binary(Suffix) ->
-    SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),
-    <<SnowFlake/binary, $:, Suffix/binary>>.
+    <<SfInt:64>> = snowflake:new(?MODULE),
+    SfBin = genlib:to_binary(SfInt),
+    <<SfBin/binary, $:, Suffix/binary>>.
 
 %%
 %% Internal API

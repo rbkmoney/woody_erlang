@@ -45,7 +45,7 @@
 
 -define(log_response(EventHandler, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
-        RpcId, #{status =>Status})
+        RpcId, Meta#{status =>Status})
 ).
 
 -type woody_transport() :: #{

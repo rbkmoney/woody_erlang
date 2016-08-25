@@ -32,12 +32,16 @@
     woody_server_thrift_handler:thrift_handler()
 }.
 
+-export_type([server_handler/0]).
+
+-type ssl_opts() :: list(ranch_ssl:ssl_opt()).
+
 -type options() :: #{
     handlers      => list(server_handler()),
     event_handler => woody_t:handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
-    net_opts      => list()
+    net_opts      => list({ssl, ssl_opts()})
 }.
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
@@ -102,14 +106,14 @@ get_cowboy_config(Handlers, EventHandler) ->
     Paths = get_paths(config(), EventHandler, Handlers, []),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
-    
+
 get_paths(_, _, [], Paths) ->
     Paths;
 get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T], Paths) ->
-    get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE, 
+    get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE,
         [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
     } | Paths]);
-get_paths(_, _, [Handler | _], _) -> 
+get_paths(_, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 config() ->

@@ -22,7 +22,7 @@
 -callback handle_function(woody_t:func(), args(),
     woody_client:context(), handler_opts())
 ->
-    {ok | {ok, result()}, woody_client:context()} | no_return().
+    {ok | result(), woody_client:context()} | no_return().
 
 %%
 %% API
@@ -167,7 +167,7 @@ call_handler(Function,Args, #state{
 
 handle_result({ok, _Context}, State, Function, SeqId) ->
     handle_success(State, Function, ok, SeqId);
-handle_result({{ok, Response}, _Context}, State, Function, SeqId) ->
+handle_result({Response, _Context}, State, Function, SeqId) ->
     handle_success(State, Function, Response, SeqId).
 
 handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
