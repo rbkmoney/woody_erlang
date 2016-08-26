@@ -11,7 +11,7 @@
 -export([new_context/2]).
 -export([get_rpc_id/1]).
 -export([make_id/1]).
--export([make_id_int/0]).
+-export([make_unique_int/0]).
 -export([make_child_context/2]).
 
 -export([call/3]).
@@ -142,14 +142,14 @@ call_async(Sup, Callback, Context, Request, Options) ->
     supervisor:start_child(ClientSup,
         [Callback, Context, Request, Options]).
 
--spec make_id_int() -> pos_integer().
-make_id_int() ->
+-spec make_unique_int() -> pos_integer().
+make_unique_int() ->
     <<Id:64>> = snowflake:new(?MODULE),
     Id.
 
 -spec make_id(binary()) -> woody_t:req_id().
 make_id(Suffix) when is_binary(Suffix) ->
-    IdInt = make_id_int(),
+    IdInt = make_unique_int(),
     IdBin = genlib:to_binary(IdInt),
     <<IdBin/binary, $:, Suffix/binary>>.
 
