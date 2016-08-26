@@ -16,7 +16,7 @@
 -type request() :: {woody_t:service(), woody_t:func(), args()}.
 
 -type except_thrift()  :: _OkException.
--type error_protocol() :: ?error_protocol(_).
+-type error_protocol() :: ?ERROR_PROTOCOL(_).
 -export_type([except_thrift/0, error_protocol/0]).
 
 -define(log_rpc_result(EventHandler, RpcId, Status, Result),
@@ -52,7 +52,7 @@ call(Context = #{event_handler := EventHandler},
         type      => get_rpc_type(Service, Function),
         args      => Args
     }),
-    format_return(
+    handle_result(
         do_call(
             make_thrift_client(RpcId, Service, clean_opts(TransportOpts), EventHandler),
             Function, Args
@@ -95,41 +95,42 @@ do_call(Client, Function, Args) ->
     do_call(Client, Function, [Args]).
 
 
-format_return({ok, ok}, RpcId,
+handle_result({ok, ok}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, ?thrift_cast),
     {ok, Context};
 
-format_return({ok, Result}, RpcId,
+handle_result({ok, Result}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Result),
-    {{ok, Result}, Context};
+    {Result, Context};
 
 %% In case a server violates the requirements and sends
 %% #TAppiacationException{} with http status code 200.
-format_return({exception, Result = #'TApplicationException'{}}, RpcId,
+handle_result({exception, Result = #'TApplicationException'{}}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Result),
-    error({?error_transport(server_error), Context});
+    error({?ERROR_TRANSPORT(server_error), Context});
 
 %% Service threw valid thrift exception
-format_return(Exception = ?except_thrift(_), RpcId,
+handle_result(Exception = ?EXCEPT_THRIFT(_), RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, ok, Exception),
     throw({Exception, Context});
 
-format_return({error, Error = ?error_transport(_)}, RpcId,
+handle_result({error, Error = ?ERROR_TRANSPORT(_)}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
     error({Error, Context});
 
-format_return({error, Error}, RpcId,
+handle_result({error, Error}, RpcId,
     Context = #{event_handler := EventHandler})
 ->
     ?log_rpc_result(EventHandler, RpcId, error, Error),
-    error({?error_protocol(Error), Context}).
+    error({?ERROR_PROTOCOL(Error), Context}).
+

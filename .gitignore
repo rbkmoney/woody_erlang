@@ -5,11 +5,6 @@ log
 erl_crash.dump
 .tags*
 *.sublime-workspace
+.edts
 .DS_Store
 
-# wercker
-/_builds/
-/_cache/
-/_projects/
-/_steps/
-/_temp/

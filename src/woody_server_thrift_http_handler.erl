@@ -32,17 +32,22 @@
     woody_server_thrift_handler:thrift_handler()
 }.
 
+-type ssl_opts() :: list(ranch_ssl:ssl_opt()).
+-type net_opts() :: list({ssl, ssl_opts()}).
+
 -type options() :: #{
     handlers      => list(server_handler()),
     event_handler => woody_t:handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
-    net_opts      => list()
+    net_opts      => net_opts()
 }.
+
+-export_type([server_handler/0, options/0, net_opts/0]).
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
--define(log_event(EventHandler, Event, Status, RpcId, Meta),
+-define(LOG_EVENT(EventHandler, Event, Status, RpcId, Meta),
     woody_event_handler:handle_event(EventHandler, Event, RpcId, Meta#{
         status => Status
     })
@@ -102,14 +107,14 @@ get_cowboy_config(Handlers, EventHandler) ->
     Paths = get_paths(config(), EventHandler, Handlers, []),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
-    
+
 get_paths(_, _, [], Paths) ->
     Paths;
 get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T], Paths) ->
-    get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE, 
+    get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE,
         [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
     } | Paths]);
-get_paths(_, _, [Handler | _], _) -> 
+get_paths(_, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 config() ->
@@ -182,7 +187,7 @@ flush(State = #http_req{
     event_handler = EventHandler
 }) ->
     {Code, Req1} = add_x_error_header(Req),
-    ?log_event(EventHandler, ?EV_SERVER_SEND, reply_status(Code),
+    ?LOG_EVENT(EventHandler, ?EV_SERVER_SEND, reply_status(Code),
         RpcId, #{code => Code}),
     {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
         Body, Req1),
@@ -212,7 +217,7 @@ init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
         {ok, RpcId, Req2} ->
             check_headers(set_resp_headers(RpcId, Req2), [Url, RpcId | Opts]);
         {error, ErrorMeta, Req2} ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
                 ErrorMeta, #{url => Url, reason => bad_rpc_id}),
             reply_error_early(400, Req2)
     end.
@@ -222,18 +227,18 @@ init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
 handle(Req, [Url, RpcId, EventHandler, ServerOpts, ThriftHandler]) ->
     case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, ok, RpcId, #{url => Url}),
+            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, ok, RpcId, #{url => Url}),
             do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
         {ok, <<>>, Req1} ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
                 RpcId, #{url => Url, reason => body_empty}),
             reply_error(400, Req1);
         {error, body_too_large, Req1} ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
                 RpcId, #{url => Url, reason => body_too_large}),
             reply_error(413, Req1);
         {error, Reason, Req1} ->
-            ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
                 RpcId, #{url => Url, reason => {body_read_error, Reason}}),
             reply_error(400, Req1)
     end.
@@ -274,14 +279,14 @@ check_headers(Req, Opts) ->
 check_method({<<"POST">>, Req}, Opts) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
 check_method({Method, Req}, [Url, RpcId, EventHandler | _]) ->
-    ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
         RpcId, #{url => Url, reason => {wrong_method, Method}}),
     reply_error_early(405, cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req)).
 
 check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
     check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
 check_content_type({BadType, Req}, [Url, RpcId, EventHandler | _]) ->
-    ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
         RpcId, #{url => Url, reason => {wrong_content_type, BadType}}),
     reply_error_early(415, Req).
 
@@ -291,7 +296,7 @@ check_accept({Accept, Req}, Opts) when
 ->
     {ok, Req, Opts};
 check_accept({BadType, Req1}, [Url, RpcId, EventHandler | _]) ->
-    ?log_event(EventHandler, ?EV_SERVER_RECEIVE, error,
+    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
         RpcId, #{url => Url, reason => {wrong_client_accept, BadType}}),
     reply_error_early(406, Req1).
 
@@ -326,7 +331,7 @@ handle_error(_Error, RpcId, EventHandler, Req) ->
     reply_error(500, RpcId, EventHandler, Req).
 
 reply_error(Code, RpcId, EventHandler, Req) ->
-    ?log_event(EventHandler, ?EV_SERVER_SEND, error, RpcId, #{code => Code}),
+    ?LOG_EVENT(EventHandler, ?EV_SERVER_SEND, error, RpcId, #{code => Code}),
     {_,  Req1} = add_x_error_header(Req),
     reply_error(Code, Req1).
 

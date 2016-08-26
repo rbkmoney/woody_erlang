@@ -45,7 +45,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 10> Args = [100, <<"rub">>].
 11> Request = {Service, Function, Args}.
 12> Context = woody_client:new_context(<<"myUniqRequestID1">>, EventHandler).
-13> {{ok, Result}, _NextContext} = woody_client:call(Context, Request, #{url => Url}).
+13> {Result, _NextContext} = woody_client:call(Context, Request, #{url => Url}).
 ```
 
 В случае вызова _thrift_ `oneway` функции (_thrift_ реализация _cast_) `woody_client:call/3` вернет `{ok, NextContext}`.
@@ -64,10 +64,9 @@ Erlang реализация [Библиотеки RPC вызовов для об
 `woody_client:call_async/5` позволяет сделать call асинхронно и обработать результат в callback функции. `woody_client:call_async/5` требует также _sup_ref()_ для включения процесса, обрабатывающего RPC вызов, в supervision tree приложения.
 
 ```erlang
-18> Callback = fun({{ok, Res}, _NextContext2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
+18> Callback = fun({Res, _NextContext2}) -> io:format("Rpc succeeded: ~p~n", [Res]);
 18>     ({{exception, Error}, _NextContext2}) -> io:format("Service exception: ~p~n", [Error]);
-18>     ({{error, _} _NextContext2}) -> io:format("Rpc failed")
-18>     ({{error, _, _} _NextContext2}) -> io:format("Rpc failed")
+18>     ({{error, _}, _NextContext2}) -> io:format("Rpc failed")
 18> end.
 19> Context2 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
 20> {ok, Pid, _NextContext2} = woody_client:call_async(SupRef, Callback, Context2, Request, #{url => Url}).
@@ -79,7 +78,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 21> Pool = my_client_pool.
 22> ok = woody_client_thrift:start_pool(Pool, 10).
 23> Context3 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
-24> {{ok, Result}, _NextContext3} = woody_client:call(Context, Request, #{url => Url, pool => Pool}).
+24> {Result, _NextContext3} = woody_client:call(Context, Request, #{url => Url, pool => Pool}).
 ```
 
 Закрыть пул можно с помошью `woody_client_thrift:stop_pool/1`.
@@ -98,7 +97,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 -spec handle_function(woody_t:func(), woody_server_thrift_handler:args(),
     woody_client:context(), woody_server_thrift_handler:handler_opts())
 ->
-    {ok, woody_server_thrift_handler:result()} |  no_return().
+    {woody_server_thrift_handler:result(), woody_client:context()} | no_return().
 handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
     Wallet = <<"localhost:8022/v1/thrift_wallet_service">>,
     RequestLimits = {my_wallet_service, check_limits, Sum},
@@ -110,7 +109,7 @@ handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
     %% Используется Context, полученный handle_function.
     %% woody_client:new/2 вызывать не надо.
     case woody_client:call_safe(Context, RequestLimits, #{url => Wallet}) of
-        {{ok, ok}, Context1} ->
+        {ok, Context1} ->
 
             %% Логи следует тэгировать RpcId.
             lager:info("[~p] giving away ~p ~p",
@@ -119,12 +118,10 @@ handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
 
             %% Используется новое значение Context1, полученное из предыдущего вызова
             %% woody_client:call_safe/3 (call/3, call_async/5).
-            {{ok, Money}, Context2} = woody_client:call(Context1, RequestMoney,
-                #{url => Wallet}),
-
             %% handle_function/4 должна возвращать текущий Context
-            %% вместе с результатом обработки запроса.
-            {{ok, Money}, Context2};
+            %% вместе с результатом обработки запроса. Таким образом,
+            %% тут можно просто вернуть результат дочернего call.
+            woody_client:call(Context1, RequestMoney, #{url => Wallet});
         {{exception, #over_limits{}}, Context1} ->
             lager:info("[~p] ~p ~p is too much",
                 [RpcId, Amount, Currency]),

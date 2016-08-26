@@ -11,13 +11,14 @@
 -export([new_context/2]).
 -export([get_rpc_id/1]).
 -export([make_id/1]).
+-export([make_unique_int/0]).
 -export([make_child_context/2]).
 
 -export([call/3]).
 -export([call_safe/3]).
 -export([call_async/5]).
 
--export_type([context/0, options/0, result_ok/0, result_error/0]).
+-export_type([context/0, options/0, result_ok/0, result_error/0, exception/0, error/0]).
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
 
@@ -43,16 +44,21 @@
     seq           => non_neg_integer(),
     rpc_id        => woody_t:rpc_id() | undefined
 }.
--type class() :: throw | error | exit.
--type stacktrace() :: list().
 
--type result_ok() :: {ok | {ok, _Response}, context()}.
+-type result_ok() :: {ok | _Response, context()}.
 
 -type result_error() ::
-    {{exception , woody_client_thrift:except_thrift()}        , context()} |
-    {{error     , woody_client_thrift:error_protocol()}       , context()} |
-    {{error     , woody_client_thrift_http_transport:error()} , context()} |
-    {{error     , {class(), _Reason, stacktrace()}}           , context()}.
+    {{exception, exception()}, context()} |
+    {{error    , error()}    , context()}.
+
+-type exception() :: woody_client_thrift:except_thrift().
+-type error() ::
+    woody_client_thrift:error_protocol() |
+    woody_client_thrift_http_transport:error() |
+    {class(), _Reason, stacktrace()}.
+
+-type class() :: throw | error | exit.
+-type stacktrace() :: list().
 
 -type request() :: any().
 
@@ -104,13 +110,13 @@ call_safe(Context, Request, Options) ->
     try call(Context, Request, Options)
     catch
         %% valid thrift exception
-        throw:{Except = ?except_thrift(_), Context1} ->
+        throw:{Except = ?EXCEPT_THRIFT(_), Context1} ->
             {Except, Context1};
         %% rpc send failed
-        error:{TError = ?error_transport(_), Context1} ->
+        error:{TError = ?ERROR_TRANSPORT(_), Context1} ->
             {{error, TError}, Context1};
         %% thrift protocol error
-        error:{PError = ?error_protocol(_), Context1} ->
+        error:{PError = ?ERROR_PROTOCOL(_), Context1} ->
             {{error, PError}, Context1};
         %% what else could have happened?
         Class:Reason ->
@@ -136,10 +142,16 @@ call_async(Sup, Callback, Context, Request, Options) ->
     supervisor:start_child(ClientSup,
         [Callback, Context, Request, Options]).
 
+-spec make_unique_int() -> pos_integer().
+make_unique_int() ->
+    <<Id:64>> = snowflake:new(?MODULE),
+    Id.
+
 -spec make_id(binary()) -> woody_t:req_id().
 make_id(Suffix) when is_binary(Suffix) ->
-    SnowFlake = snowflake:serialize(snowflake:new(?MODULE)),
-    <<SnowFlake/binary, $:, Suffix/binary>>.
+    IdInt = make_unique_int(),
+    IdBin = genlib:to_binary(IdInt),
+    <<IdBin/binary, $:, Suffix/binary>>.
 
 %%
 %% Internal API

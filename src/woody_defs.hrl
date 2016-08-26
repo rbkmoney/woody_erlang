@@ -10,9 +10,9 @@
 -define(HEADER_NAME_ERROR_LOGIC     , <<"x-rbk-rpc-error-logic">>).
 
 %% Errors & exceptions
--define(except_thrift(Exception) , {exception, Exception}).
--define(error_protocol(Reason)   , {protocol_error, Reason}).
--define(error_transport(Reason)  , {transport_error, Reason}).
+-define(EXCEPT_THRIFT(Exception) , {exception, Exception}).
+-define(ERROR_PROTOCOL(Reason)   , {protocol_error, Reason}).
+-define(ERROR_TRANSPORT(Reason)  , {transport_error, Reason}).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
