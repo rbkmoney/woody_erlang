@@ -75,7 +75,7 @@ new(RpcId, TransportOpts = #{url := Url}, EventHandler) ->
     }),
     Transport.
 
-validate_options(Opts) ->
+validate_options(_Opts) ->
     # Shit gates are open
     ok.
 
