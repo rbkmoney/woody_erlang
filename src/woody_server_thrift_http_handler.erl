@@ -26,6 +26,7 @@
 
 %% nginx should be configured to take care of various limits
 -define(MAX_BODY_LENGTH, infinity).
+-define(DEFAULT_TIMEOUT, 60000).
 
 -type server_handler() :: {
     '_' | iodata(), %% cowboy_router:route_match()
@@ -106,7 +107,10 @@ get_socket_transport(Ip, Port, Options) ->
 get_cowboy_config(Handlers, EventHandler) ->
     Paths = get_paths(config(), EventHandler, Handlers, []),
     Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
-    [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
+    [
+        {env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]},
+        {timeout, ?DEFAULT_TIMEOUT}
+    ] ++ Debug.
 
 get_paths(_, _, [], Paths) ->
     Paths;
