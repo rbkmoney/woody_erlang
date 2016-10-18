@@ -99,7 +99,7 @@ process(State = #state{protocol = Protocol, service = Service}) ->
                 SeqId
             ));
         {error, Reason} ->
-            handle_protocol_error(State1, Reason)
+            {handle_protocol_error(State1, Reason), State1#state.protocol}
     end.
 
 release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->

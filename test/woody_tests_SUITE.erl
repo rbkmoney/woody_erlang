@@ -43,7 +43,6 @@
     span_ids_sequence_test/1,
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
-    allowed_transport_options_test/1,
     server_http_request_validation_test/1,
     try_bad_handler_spec/1
 ]).
@@ -149,7 +148,6 @@ all() ->
         span_ids_sequence_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
-        allowed_transport_options_test,
         server_http_request_validation_test,
         try_bad_handler_spec
     ].
@@ -385,29 +383,6 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
     {ok, Context} = thrift_client:new(Protocol1, Service),
     Context.
-
-allowed_transport_options_test(_) ->
-    Id   = <<"allowed_transport_options">>,
-    Gun  =  <<"Enforcer">>,
-    Args = [Gun, self_to_bin()],
-    {Url, Service} = get_service_endpoint('Weapons'),
-    Pool = guns,
-    ok = woody_client_thrift:start_pool(Pool, 1),
-    Context = make_context(Id),
-    Options = #{url => Url, pool => Pool, ssl_options => [], connect_timeout => 0},
-    {{error, ?ERROR_TRANSPORT(connect_timeout)}, Context} = woody_client:call_safe(
-        Context,
-        {Service, get_weapon, Args},
-        Options
-    ),
-    BadOpt = #{custom_option => 'fire!'},
-    ErrorBadOpt = {badarg, {unsupported_options, BadOpt}},
-    {{error, {error, ErrorBadOpt, _}}, Context} = woody_client:call_safe(
-        Context,
-        {Service, get_weapon, Args},
-        maps:merge(Options, BadOpt)
-    ),
-    ok = woody_client_thrift:stop_pool(Pool).
 
 server_http_request_validation_test(_) ->
     Id  = <<"server_http_request_validation">>,
