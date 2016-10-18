@@ -5,8 +5,6 @@
 
 -include("woody_defs.hrl").
 
--define(SUPPORTED_TRANSPORT_OPTS, [pool, ssl_options, connect_timeout]).
-
 %% API
 -export([new/3]).
 
@@ -77,9 +75,9 @@ new(RpcId, TransportOpts = #{url := Url}, EventHandler) ->
     }),
     Transport.
 
-validate_options(Opts) ->
-    BadOpts = maps:without(?SUPPORTED_TRANSPORT_OPTS, Opts),
-    map_size(BadOpts) =:= 0 orelse error({badarg, {unsupported_options, BadOpts}}).
+validate_options(_Opts) ->
+    %% Shit gates are open
+    ok.
 
 -spec start_client_pool(any(), pos_integer()) -> ok.
 start_client_pool(Name, Size) ->
