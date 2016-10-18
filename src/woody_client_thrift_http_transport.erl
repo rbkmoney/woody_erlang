@@ -76,7 +76,7 @@ new(RpcId, TransportOpts = #{url := Url}, EventHandler) ->
     Transport.
 
 validate_options(_Opts) ->
-    # Shit gates are open
+    %% Shit gates are open
     ok.
 
 -spec start_client_pool(any(), pos_integer()) -> ok.
