@@ -242,8 +242,8 @@ call_handler_throw_test(_) ->
 call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Context = make_context(Id),
-    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context#{child_rpc_id => RpcId}},
     Expect  = call_safe(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]),
     {ok, _} = receive_msg({Id, Current}).
@@ -251,8 +251,8 @@ call_safe_handler_throw_unexpected_test(_) ->
 call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Context = make_context(Id),
-    Expect  = {?ERROR_TRANSPORT(server_error), Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_rpc_id => RpcId}},
     try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -272,24 +272,26 @@ call_handler_error_test(_) ->
 call_safe_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_safe_client_transport_error">>,
-    Context = make_context(Id),
-    {{error, ?ERROR_PROTOCOL(_)}, Context} = call_safe(Context,
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Context1 = Context#{child_rpc_id => RpcId},
+    {{error, ?ERROR_PROTOCOL(_)}, Context1} = call_safe(Context,
         'Weapons', get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_client_transport_error">>,
-    Context = make_context(Id),
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Context1 = Context#{child_rpc_id => RpcId},
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
-        error:{?ERROR_PROTOCOL(_), Context} -> ok
+        error:{?ERROR_PROTOCOL(_), Context1} -> ok
     end.
 
 call_safe_server_transport_error_test(_) ->
     Id      = <<"call_safe_server_transport_error">>,
     Armor   = <<"Helmet">>,
-    Context = make_context(Id),
-    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context#{child_rpc_id => RpcId}},
     Expect  = call_safe(Context, 'Powerups', get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
@@ -299,8 +301,8 @@ call_server_transport_error_test(_) ->
 
 do_call_server_transport_error(Id) ->
     Armor   = <<"Helmet">>,
-    Context = make_context(Id),
-    Expect  = {?ERROR_TRANSPORT(server_error), Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_rpc_id => RpcId}},
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
@@ -310,8 +312,8 @@ do_call_server_transport_error(Id) ->
 call_oneway_void_test(_) ->
     Id      = <<"call_oneway_void_test">>,
     Armor   = <<"Helmet">>,
-    Context = make_context(Id),
-    Expect  = {ok, Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {ok, Context#{child_rpc_id => RpcId}},
     Expect  = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
@@ -320,14 +322,17 @@ call_async_ok_test(C) ->
     Pid        = self(),
     Callback   = fun(Res) -> collect(Res, Pid) end,
     Id1        = <<"call_async_ok1">>,
-    Context1   = make_context(Id1),
-    {ok, Pid1, Context1} = get_weapon(Context1, Sup, Callback, <<"Impact Hammer">>),
+    Context1   =  #{rpc_id := RpcId1} = make_context(Id1),
+    Context1Exp =  Context1#{child_rpc_id => RpcId1},
+    {ok, Pid1, Context1Exp} = get_weapon(Context1, Sup, Callback, <<"Impact Hammer">>),
     Id2        = <<"call_async_ok2">>,
     Context2   = make_context(Id2),
-    {ok, Pid2, Context2} = get_weapon(Context2, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg({Context1,
+    Context2   =  #{rpc_id := RpcId2} = make_context(Id2),
+    Context2Exp =  Context2#{child_rpc_id => RpcId2},
+    {ok, Pid2, Context2Exp} = get_weapon(Context2, Sup, Callback, <<"Flak Cannon">>),
+    {ok, Pid1} = receive_msg({Context1Exp,
         genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
-    {ok, Pid2} = receive_msg({Context2,
+    {ok, Pid2} = receive_msg({Context2Exp,
         genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
 get_weapon(Context, Sup, Cb, Gun) ->
@@ -339,8 +344,8 @@ collect({Result, Context}, Pid) ->
 span_ids_sequence_test(_) ->
     Id      = <<"span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
-    Context = make_context(Id),
-    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
@@ -349,9 +354,9 @@ call_with_client_pool_test(_) ->
     ok   = woody_client_thrift:start_pool(Pool, 10),
     Id   = <<"call_with_client_pool">>,
     Gun  =  <<"Enforcer">>,
-    Context = make_context(Id),
+    Context = #{rpc_id := RpcId} = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
-    Expect = {genlib_map:get(Gun, ?WEAPONS), Context},
+    Expect = {genlib_map:get(Gun, ?WEAPONS), Context#{child_rpc_id => RpcId}},
     Expect = woody_client:call(
         Context,
         {Service, get_weapon, [Gun, self_to_bin()]},
@@ -416,15 +421,15 @@ server_http_request_validation_test(_) ->
 call_pass_through_ok_test(_) ->
     Id      = <<"call_pass_through_ok">>,
     Armor   = <<"AntiGrav Boots">>,
-    Context = make_context(Id),
-    Expect  = {genlib_map:get(Armor, ?POWERUPS), Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {genlib_map:get(Armor, ?POWERUPS), Context#{child_rpc_id => RpcId}},
     Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]).
 
 call_pass_through_except_test(_) ->
     Id      = <<"call_pass_through_except">>,
     Armor   = <<"Shield Belt">>,
-    Context = make_context(Id),
-    Expect = {?EXCEPT_POWERUP_FAILURE("run out"), Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect = {?EXCEPT_POWERUP_FAILURE("run out"), Context#{child_rpc_id => RpcId}},
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
         throw:Expect -> ok
@@ -433,20 +438,22 @@ call_pass_through_except_test(_) ->
 call_no_pass_through_bad_ok_test(_) ->
     Id      = <<"call_no_pass_through_bad_ok">>,
     Armor   = <<"AntiGrav Boots">>,
-    Context = make_context(Id),
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Context1 = Context#{child_rpc_id => RpcId},
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{?ERROR_TRANSPORT(server_error), Context} ->
+        error:{?ERROR_TRANSPORT(server_error), Context1} ->
             ok
     end.
 
 call_no_pass_through_bad_except_test(_) ->
     Id      = <<"call_no_pass_through_bad_except">>,
     Armor   = <<"Shield Belt">>,
-    Context = make_context(Id),
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Context1 = Context#{child_rpc_id => RpcId},
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{?ERROR_TRANSPORT(server_error), Context} ->
+        error:{?ERROR_TRANSPORT(server_error), Context1} ->
             ok
     end.
 
@@ -478,18 +485,12 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To},
-    Context = #{  parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    send_msg(To, {SpanId, CurrentWeapon}),
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, _Opts) ->
+    send_msg(To, {woody_context:get_rpc_id(span_id, Context), CurrentWeapon}),
     switch_weapon(CurrentWeapon, Direction, Shift, Context);
 
-handle_function(get_weapon, {Name, To},
-    Context  = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    send_msg(To, {SpanId, Name}),
+handle_function(get_weapon, {Name, To}, Context, _Opts) ->
+    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #'Weapon'{ammo = 0}  ->
             throw({?WEAPON_FAILURE("out of ammo"), Context});
@@ -499,30 +500,18 @@ handle_function(get_weapon, {Name, To},
     {Res, Context};
 
 %% Powerups
-handle_function(get_powerup, {Name, To},
-    Context  = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    send_msg(To, {SpanId, Name}),
+handle_function(get_powerup, {Name, To}, Context, _Opts) ->
+    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     {return_powerup(Name, Context), Context};
 
-handle_function(proxy_get_powerup, {Name, To},
-    Context  = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
+handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
+    ProxyGetPowerup =:= proxy_get_powerup orelse
+    ProxyGetPowerup =:= bad_proxy_get_powerup
 ->
     call(Context, 'Powerups', get_powerup, [Name, To]);
 
-handle_function(bad_proxy_get_powerup, {Name, To},
-    Context  = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    call(Context, 'Powerups', get_powerup, [Name, To]);
-
-handle_function(like_powerup, {Name, To},
-    Context  = #{ parent_id := SpanId, trace_id := TraceId,
-        rpc_id := #{span_id := SpanId, trace_id := TraceId}}, _Opts)
-->
-    send_msg(To, {SpanId, Name}),
+handle_function(like_powerup, {Name, To}, Context, _Opts) ->
+    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     {ok, Context}.
 
 %%
@@ -535,7 +524,7 @@ handle_event(Type, RpcId, Meta) ->
 %% internal functions
 %%
 make_context(ReqId) ->
-    woody_client:new_context(ReqId, ?MODULE).
+    woody_context:new(true, ReqId, ?MODULE).
 
 call(Context, ServiceName, Function, Args) ->
     do_call(call, Context, ServiceName, Function, Args).
@@ -571,14 +560,14 @@ get_service_endpoint('Powerups') ->
     }.
 
 gun_test_basic(CallFun, Id, Gun, ExpectRes, WithMsg) ->
-    Context = make_context(Id),
-    Expect  = {ExpectRes, Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {ExpectRes, Context#{child_rpc_id => RpcId}},
     Expect  = ?MODULE:CallFun(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]),
     check_msg(WithMsg, Id, Gun).
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
-    Context = make_context(Id),
-    Expect  = {Exception, Context},
+    Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {Exception, Context#{child_rpc_id => RpcId}},
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok

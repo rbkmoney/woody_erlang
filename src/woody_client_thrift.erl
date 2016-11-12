@@ -40,12 +40,12 @@ start_pool(Name, PoolSize) when is_integer(PoolSize) ->
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(woody_client:context(), request(), woody_client:options()) ->
+-spec call(woody_context:ctx(), request(), woody_client:options()) ->
     woody_client:result_ok() | no_return().
 call(Context = #{event_handler := EventHandler},
     {Service = {_, ServiceName}, Function, Args}, TransportOpts)
 ->
-    RpcId = maps:with([span_id, trace_id, parent_id], Context),
+    RpcId = woody_context:get_child_rpc_id(Context),
     woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId, #{
         service   => ServiceName,
         function  => Function,

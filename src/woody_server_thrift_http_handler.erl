@@ -312,7 +312,7 @@ get_body(Req, ServerOpts) ->
     end.
 
 do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
-    Context = woody_client:make_child_context(RpcId, EventHandler),
+    Context = woody_context:new(false, RpcId, EventHandler),
     Transport   = make_transport(Req, RpcId, Body, EventHandler),
     case woody_server_thrift_handler:start(Transport, Context, ThriftHander,
         EventHandler, ?MODULE)
