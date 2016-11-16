@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/3]).
+-export([new/2]).
 
 -export([start_client_pool/2]).
 -export([stop_client_pool/1]).
@@ -41,18 +41,9 @@
     {error, ?ERROR_TRANSPORT(Error)}
 ).
 
--define(LOG_RESPONSE(EventHandler, Status, RpcId, Meta),
-    woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_RECEIVE,
-        RpcId, Meta#{status =>Status})
-).
-
 -type woody_transport() :: #{
-    span_id       => woody_t:req_id(),
-    trace_id      => woody_t:req_id(),
-    parent_id     => woody_t:req_id(),
-    url           => woody_t:url(),
+    context       => woody_context:ctx(),
     options       => map(),
-    event_handler => woody_t:handler(),
     write_buffer  => binary(),
     read_buffer   => binary()
 }.
@@ -61,23 +52,16 @@
 %%
 %% API
 %%
--spec new(woody_t:rpc_id(), woody_client:options(), woody_t:handler()) ->
+-spec new(woody_context:ctx(), woody_client:options()) ->
     thrift_transport:t_transport() | no_return().
-new(RpcId, TransportOpts = #{url := Url}, EventHandler) ->
-    TransportOpts1 = maps:remove(url, TransportOpts),
-    _ = validate_options(TransportOpts1),
-    {ok, Transport} = thrift_transport:new(?MODULE, RpcId#{
-        url           => Url,
-        options       => TransportOpts1,
-        event_handler => EventHandler,
+new(Context, TransportOpts = #{url := _Url}) ->
+    {ok, Transport} = thrift_transport:new(?MODULE, Context#{
+        context       => Context,
+        options       => TransportOpts,
         write_buffer  => <<>>,
         read_buffer   => <<>>
     }),
     Transport.
-
-validate_options(_Opts) ->
-    %% Shit gates are open
-    ok.
 
 -spec start_client_pool(any(), pos_integer()) -> ok.
 start_client_pool(Name, Size) ->
@@ -110,29 +94,27 @@ read(Transport = #{read_buffer := RBuffer}, Len) when
 
 -spec flush(woody_transport()) -> {woody_transport(), ok | {error, error()}}.
 flush(Transport = #{
-    url           := Url,
-    span_id       := SpanId,
-    trace_id      := TraceId,
-    parent_id     := ParentId,
-    options       := Options,
-    event_handler := EventHandler,
+    context       := Context,
+    options       := Options = #{url := Url},
     write_buffer  := WBuffer,
     read_buffer   := RBuffer
 }) when
     is_binary(WBuffer),
     is_binary(RBuffer)
 ->
-    Headers = [
+    Headers = add_extension_headers(Context, [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(TraceId)},
-        {?HEADER_NAME_RPC_ID        , genlib:to_binary(SpanId)},
-        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(ParentId)}
-    ],
-    RpcId = maps:with([span_id, trace_id, parent_id], Transport),
-    woody_event_handler:handle_event(EventHandler, ?EV_CLIENT_SEND,
-        RpcId, #{url => Url}),
-    case send(Url, Headers, WBuffer, Options, RpcId, EventHandler) of
+        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(woody_context:get_child_rpc_id(trace_id,  Transport))},
+        {?HEADER_NAME_RPC_ID        , genlib:to_binary(woody_context:get_child_rpc_id(span_id,   Transport))},
+        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(woody_context:get_child_rpc_id(parent_id, Transport))}
+    ]),
+    _ = woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        ?EV_CLIENT_SEND,
+        woody_context:get_child_rpc_id(Transport),
+        #{url => Url}),
+    case send(Url, Headers, WBuffer, maps:without([url], Options), Context) of
         {ok, Response} ->
             {Transport#{
                 read_buffer  => <<RBuffer/binary, Response/binary>>,
@@ -150,19 +132,17 @@ close(Transport) ->
 %%
 %% Internal functions
 %%
-send(Url, Headers, WBuffer, Options, RpcId, EventHandler) ->
+send(Url, Headers, WBuffer, Options, Context) ->
     case hackney:request(post, Url, Headers, WBuffer, maps:to_list(Options)) of
         {ok, ResponseCode, _ResponseHeaders, Ref} ->
-            ?LOG_RESPONSE(EventHandler, get_response_status(ResponseCode),
-                RpcId, #{code => ResponseCode}),
+            _ = log_response(get_response_status(ResponseCode), Context,
+                #{code => ResponseCode}),
             handle_response(ResponseCode, hackney:body(Ref));
         {error, {closed, _}} ->
-            ?LOG_RESPONSE(EventHandler, error,
-                RpcId, #{reason => partial_response}),
+            _ = log_response(error, Context, #{reason => partial_response}),
             ?RETURN_ERROR(partial_response);
         {error, Reason} ->
-            ?LOG_RESPONSE(EventHandler, error,
-                RpcId, #{reason => Reason}),
+            _ = log_response(error, Context, #{reason => Reason}),
             ?RETURN_ERROR(Reason)
     end.
 
@@ -187,3 +167,18 @@ handle_response(503, _) ->
     ?RETURN_ERROR(?CODE_503);
 handle_response(Code, _) ->
     ?RETURN_ERROR({http_code, Code}).
+
+add_extension_headers(Context, Headers) ->
+    maps:fold(
+        fun(H, V, Acc) when is_binary(H) and is_binary(V) -> [{<< ?HEADER_NAME_PREFIX/binary, H/binary >>, V} | Acc];
+           (H, V, _) -> error({badarg, {H, V}}) end,
+        Headers,
+        woody_context:get_ext(Context)
+    ).
+
+log_response(Status, Context, Meta) ->
+    woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        ?EV_CLIENT_RECEIVE,
+        woody_context:get_child_rpc_id(Context),
+        Meta#{status =>Status}).

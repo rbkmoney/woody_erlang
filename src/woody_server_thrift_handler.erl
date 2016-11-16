@@ -1,7 +1,7 @@
 -module(woody_server_thrift_handler).
 
 %% API
--export([start/5]).
+-export([start/4]).
 
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
@@ -27,11 +27,6 @@
 %%
 %% API
 %%
--define(LOG_RPC_RESULT(EventHandler, Status, RpcId, Meta),
-    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_HANDLER_RESULT,
-        RpcId, Meta#{status => Status})
-).
-
 -define(STAGE_READ  , protocol_read).
 -define(STAGE_WRITE , protocol_write).
 
@@ -46,23 +41,18 @@
     handler_opts      :: handler_opts(),
     protocol          :: any(),
     protocol_stage    :: ?STAGE_READ | ?STAGE_WRITE,
-    event_handler     :: woody_t:handler(),
     transport_handler :: woody_t:handler()
 }).
 
 -type thrift_handler() :: {woody_t:service(), woody_t:handler(), handler_opts()}.
 -export_type([thrift_handler/0]).
 
--type event_handler() :: woody_t:handler().
 -type transport_handler() :: woody_t:handler().
 
--spec start(thrift_transport:t_transport(), woody_context:ctx(),
-    thrift_handler(), event_handler(), transport_handler())
+-spec start(thrift_transport:t_transport(), thrift_handler(), transport_handler(), woody_context:ctx())
 ->
     {ok | noreply | {error, _Reason}, cowboy_req:req()}.
-start(Transport, Context, {Service, Handler, Opts},
-    EventHandler, TransportHandler)
-->
+start(Transport, {Service, Handler, Opts}, TransportHandler, Context) ->
     {ok, Protocol} = thrift_binary_protocol:new(Transport,
         [{strict_read, true}, {strict_write, true}]
     ),
@@ -73,7 +63,6 @@ start(Transport, Context, {Service, Handler, Opts},
             handler_opts      = Opts,
             protocol          = Protocol,
             protocol_stage    = ?STAGE_READ,
-            event_handler     = EventHandler,
             transport_handler = TransportHandler
     }),
     {_, Req} = thrift_protocol:close_transport(Protocol1),
@@ -154,15 +143,15 @@ call_handler(Function, Args, #state{
     context       = Context,
     handler       = Handler,
     handler_opts  = Opts,
-    service       = {_, ServiceName},
-    event_handler = EventHandler})
+    service       = {_, ServiceName}})
 ->
-    RpcId = woody_context:get_rpc_id(Context),
-    woody_event_handler:handle_event(EventHandler, ?EV_INVOKE_SERVICE_HANDLER, RpcId, #{
-        service => ServiceName, function => Function, args => Args, options => Opts
-    }),
+    _ = woody_event_handler:handle_event(
+         woody_context:get_ev_handler(Context),
+         ?EV_INVOKE_SERVICE_HANDLER,
+         woody_context:get_rpc_id(Context),
+         #{service => ServiceName, function => Function, args => Args, options => Opts, context => Context}),
     Result = Handler:handle_function(Function, Args, Context, Opts),
-    ?LOG_RPC_RESULT(EventHandler, ok, RpcId, #{result => Result}),
+    _ = log_rpc_result(ok, Context, #{result => Result}),
     Result.
 
 handle_result({ok, _Context}, State, Function, SeqId) ->
@@ -189,28 +178,26 @@ handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
 
 handle_function_catch(State = #state{
         context       = Context,
-        service       = Service,
-        event_handler = EventHandler
+        service       = Service
     }, Function, Class, Reason, Stack, SeqId)
 ->
-    RpcId = woody_context:get_rpc_id(Context),
     ReplyType = get_function_info(Service, Function, reply_type),
     case {Class, Reason} of
         _Error when ReplyType =:= oneway_void ->
-            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
+            _ = log_rpc_result(error, Context,
                 #{class => Class, reason => Reason, ignore => true}),
             {State, noreply};
         {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
-            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
+            _ = log_rpc_result(error, Context,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_exception(State, Function, Exception, SeqId);
         {throw, Exception} ->
-            ?LOG_RPC_RESULT(EventHandler, error, RpcId,
+            _ = log_rpc_result(error, Context,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_unknown_exception(State, Function, Exception, SeqId);
         {error, Reason} ->
-            ?LOG_RPC_RESULT(EventHandler, error, RpcId, #{class => error,
-                reason => Reason, stack => Stack, ignore => false}),
+            _ = log_rpc_result(error, Context,
+                #{class => error, reason => Reason, stack => Stack, ignore => false}),
             Reason1 = short_reason(Reason),
             handle_error(State, Function, Reason1, SeqId)
     end.
@@ -292,12 +279,13 @@ prepare_response({State, {error, Reason}}) ->
 handle_protocol_error(#state{
     context           = Context,
     protocol_stage    = Stage,
-    transport_handler = Trans,
-    event_handler     = EventHandler}, Reason)
+    transport_handler = Trans}, Reason)
 ->
-    RpcId = woody_context:get_rpc_id(Context),
-    woody_event_handler:handle_event(EventHandler, ?EV_THRIFT_ERROR,
-        RpcId, #{stage => Stage, reason => Reason}),
+    _ = woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        ?EV_THRIFT_ERROR,
+        woody_context:get_rpc_id(Context),
+        #{stage => Stage, reason => Reason}),
     format_protocol_error(Reason, Trans).
 
 format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
@@ -330,3 +318,9 @@ get_function_info({Module, Service}, Function, Info) ->
 mark_error_to_transport(TransportHandler, Type, Error) ->
     TransportHandler:mark_thrift_error(Type, Error).
 
+log_rpc_result(Status, Context, Meta) ->
+    woody_event_handler:handle_event(
+      woody_context:get_ev_handler(Context),
+      ?EV_SERVICE_HANDLER_RESULT,
+      woody_context:get_rpc_id(Context),
+      Meta#{status => Status}).

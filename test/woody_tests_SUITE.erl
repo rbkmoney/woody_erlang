@@ -22,6 +22,10 @@
 -export([all/0,
     init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
 -export([
+    context_non_root_test/1,
+    context_root_with_given_req_id_test/1,
+    context_root_with_given_rpc_id_test/1,
+    context_root_with_generated_rpc_id_test/1,
     call_safe_ok_test/1,
     call_ok_test/1,
     call_safe_handler_throw_test/1,
@@ -41,6 +45,7 @@
     call_no_pass_through_bad_ok_test/1,
     call_no_pass_through_bad_except_test/1,
     span_ids_sequence_test/1,
+    span_ids_sequence_with_context_ext_test/1,
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
     server_http_request_validation_test/1,
@@ -127,6 +132,10 @@
 %%
 all() ->
     [
+        context_non_root_test,
+        context_root_with_given_req_id_test,
+        context_root_with_given_rpc_id_test,
+        context_root_with_generated_rpc_id_test,
         call_safe_ok_test,
         call_ok_test,
         call_safe_handler_throw_test,
@@ -146,6 +155,7 @@ all() ->
         call_no_pass_through_bad_ok_test,
         call_no_pass_through_bad_except_test,
         span_ids_sequence_test,
+        span_ids_sequence_with_context_ext_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
         server_http_request_validation_test,
@@ -196,10 +206,13 @@ get_handler('Powerups') ->
         ?PATH_POWERUPS,
         {{?THRIFT_DEFS, 'Powerups'}, ?MODULE, []}
     };
+
 get_handler('Weapons') ->
     {
         ?PATH_WEAPONS,
-        {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, []}
+        {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, #{
+            extension_test_id => <<"span_ids_sequence_with_context_ext">>}
+        }
     }.
 
 end_per_test_case(_, C) ->
@@ -219,6 +232,55 @@ end_per_test_case(_, C) ->
 %%
 %% tests
 %%
+context_non_root_test(_) ->
+    ReqId = <<"context_non_root">>,
+    RpcId = woody_context:make_rpc_id(ReqId, ReqId, ReqId),
+    IsRoot = false,
+    Expect = #{
+        root_rpc => IsRoot,
+        rpc_id => RpcId,
+        seq => 0,
+        event_handler => ?MODULE
+    },
+    Expect = woody_context:new(IsRoot, RpcId, ?MODULE).
+
+context_root_with_given_req_id_test(_) ->
+    ReqId = <<"context_root_with_given_req_id">>,
+    IsRoot = true,
+    Expect = #{
+        root_rpc => IsRoot,
+        rpc_id => #{parent_id => <<"undefined">>, span_id => ReqId, trace_id => ReqId},
+        seq => 0,
+        event_handler => ?MODULE
+    },
+    Expect = woody_context:new(IsRoot, ReqId, ?MODULE).
+
+context_root_with_given_rpc_id_test(_) ->
+    ReqId = <<"context_root_with_given_rpc_id">>,
+    RpcId = woody_context:make_rpc_id(<<"undefined">>, ReqId, ReqId),
+    IsRoot = true,
+    Expect = #{
+        root_rpc => IsRoot,
+        rpc_id => RpcId,
+        seq => 0,
+        event_handler => ?MODULE
+    },
+    Expect = woody_context:new(IsRoot, RpcId, ?MODULE).
+
+context_root_with_generated_rpc_id_test(_) ->
+    ReqId = undefined,
+    IsRoot = true,
+    #{
+        root_rpc      := true,
+        event_handler := ?MODULE,
+        seq           := 0,
+        rpc_id        := #{
+            parent_id := <<"undefined">>,
+            span_id   := Generated,
+            trace_id  := Generated
+        }
+    } = woody_context:new(IsRoot, ReqId, ?MODULE).
+
 call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
     gun_test_basic(call_safe, <<"call_safe_ok">>, Gun,
@@ -339,12 +401,22 @@ get_weapon(Context, Sup, Cb, Gun) ->
     call_async(Context, 'Weapons', get_weapon, [Gun, <<>>], Sup, Cb).
 
 collect({Result, Context}, Pid) ->
-    send_msg(Pid, {Context, Result}).
+    ok = send_msg(Pid, {Context, Result}).
 
 span_ids_sequence_test(_) ->
     Id      = <<"span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
     Context = #{rpc_id := RpcId} = make_context(Id),
+    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
+    Expect  = call(Context, 'Weapons', switch_weapon,
+        [Current, next, 1, self_to_bin()]).
+
+span_ids_sequence_with_context_ext_test(_) ->
+    Id      = <<"span_ids_sequence_with_context_ext">>,
+    Gun     = <<"Enforcer">>,
+    Current = genlib_map:get(Gun, ?WEAPONS),
+    Context = #{rpc_id := RpcId} = woody_context:new(
+        true, Id, ?MODULE, #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
     Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
@@ -378,10 +450,8 @@ multiplexed_transport_test(_) ->
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
         woody_client_thrift_http_transport:new(
-            #{
-                span_id => Id, trace_id => Id, parent_id => Id
-            },
-           #{url => Url}, ?MODULE
+            woody_context:next(woody_context:new(true, Id, ?MODULE)),
+            #{url => Url}
         ),
         [{strict_read, true}, {strict_write, true}]
     ),
@@ -472,6 +542,7 @@ try_bad_handler_spec(_) ->
             ok
     end.
 
+
 %%
 %% supervisor callbacks
 %%
@@ -485,12 +556,14 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, _Opts) ->
-    send_msg(To, {woody_context:get_rpc_id(span_id, Context), CurrentWeapon}),
-    switch_weapon(CurrentWeapon, Direction, Shift, Context);
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{extension_test_id := ExtTestId}) ->
+    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), CurrentWeapon}),
+    CheckExt = is_ext_check_required(ExtTestId, woody_context:get_rpc_id(trace_id, Context)),
+    ok = check_extension(CheckExt, Context, CurrentWeapon),
+    switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckExt);
 
 handle_function(get_weapon, {Name, To}, Context, _Opts) ->
-    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #'Weapon'{ammo = 0}  ->
             throw({?WEAPON_FAILURE("out of ammo"), Context});
@@ -501,7 +574,7 @@ handle_function(get_weapon, {Name, To}, Context, _Opts) ->
 
 %% Powerups
 handle_function(get_powerup, {Name, To}, Context, _Opts) ->
-    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     {return_powerup(Name, Context), Context};
 
 handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
@@ -511,7 +584,7 @@ handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
     call(Context, 'Powerups', get_powerup, [Name, To]);
 
 handle_function(like_powerup, {Name, To}, Context, _Opts) ->
-    send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
     {ok, Context}.
 
 %%
@@ -579,31 +652,42 @@ check_msg(true, Id, Gun) ->
 check_msg(false, _, _) ->
     ok.
 
-switch_weapon(CurrentWeapon, Direction, Shift, Context) ->
-    case call_safe(Context, 'Weapons', get_weapon,
-             [new_weapon_name(CurrentWeapon, Direction, Shift, Context), self_to_bin()])
+switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckExt) ->
+    {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift, Context),
+    ContextExt = extend_weapon_context(CheckExt, Context, NextWName, NextWPos),
+    case call_safe(ContextExt, 'Weapons', get_weapon,
+             [NextWName, self_to_bin()])
     of
         {{exception, #'WeaponFailure'{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }}, NextContex} ->
-            ok = validate_next_context(NextContex, Context),
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex);
+            ok = validate_next_context(CheckExt, NextContex, Context),
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex, CheckExt);
         ResultOk = {_Weapon, _NextContext} ->
             ResultOk
     end.
 
-new_weapon_name(#'Weapon'{slot_pos = Pos}, next, Shift, Ctx) ->
-    new_weapon_name(Pos + Shift, Ctx);
-new_weapon_name(#'Weapon'{slot_pos = Pos}, prev, Shift, Ctx) ->
-    new_weapon_name(Pos - Shift, Ctx).
+extend_weapon_context(true, Context, WName, WPos) ->
+    woody_context:extend(Context, #{genlib:to_binary(WPos) => WName});
+extend_weapon_context(_, Context, _, _) ->
+    Context.
 
-new_weapon_name(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
-    genlib_map:get(Pos, ?SLOTS, <<"no weapon">>);
-new_weapon_name(_, Context) ->
+next_weapon(#'Weapon'{slot_pos = Pos}, next, Shift, Ctx) ->
+    next_weapon(Pos + Shift, Ctx);
+next_weapon(#'Weapon'{slot_pos = Pos}, prev, Shift, Ctx) ->
+    next_weapon(Pos - Shift, Ctx).
+
+next_weapon(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
+    {genlib_map:get(Pos, ?SLOTS, <<"no weapon">>), Pos};
+next_weapon(_, Context) ->
     throw({?POS_ERROR, Context}).
 
-validate_next_context(#{seq := NextSeq}, #{seq := Seq}) ->
+validate_next_context(true, #{seq := NextSeq, extension := NextExt}, #{seq := Seq, extension := Ext}) ->
+    NextSeq = Seq + 1,
+    NextExt = maps:merge(NextExt, Ext), %% check that Ext map is a submap of NextExt
+    ok;
+validate_next_context(false, #{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
     ok.
 
@@ -639,3 +723,14 @@ receive_msg(Msg) ->
         error(get_msg_timeout)
     end.
 
+is_ext_check_required(ExtTestId, ExtTestId) ->
+    true;
+is_ext_check_required(_, _) ->
+    false.
+
+check_extension(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
+    WSlotBin = genlib:to_binary(WSlot),
+    WName = woody_context:get_ext(WSlotBin, Context),
+    ok;
+check_extension(_, _, _) ->
+    ok.
