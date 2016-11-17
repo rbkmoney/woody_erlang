@@ -195,7 +195,7 @@ handle_function_catch(State = #state{
             _ = log_rpc_result(error, Context,
                 #{class => throw, reason => Exception, ignore => false}),
             handle_unknown_exception(State, Function, Exception, SeqId);
-        {error, Reason} ->
+        {Error, Reason} when Error =:= error orelse Error =:= exit ->
             _ = log_rpc_result(error, Context,
                 #{class => error, reason => Reason, stack => Stack, ignore => false}),
             Reason1 = short_reason(Reason),
