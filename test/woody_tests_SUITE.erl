@@ -45,7 +45,7 @@
     call_no_pass_through_bad_ok_test/1,
     call_no_pass_through_bad_except_test/1,
     span_ids_sequence_test/1,
-    span_ids_sequence_with_context_ext_test/1,
+    span_ids_sequence_with_context_annotation_test/1,
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
     server_http_request_validation_test/1,
@@ -155,7 +155,7 @@ all() ->
         call_no_pass_through_bad_ok_test,
         call_no_pass_through_bad_except_test,
         span_ids_sequence_test,
-        span_ids_sequence_with_context_ext_test,
+        span_ids_sequence_with_context_annotation_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
         server_http_request_validation_test,
@@ -211,7 +211,7 @@ get_handler('Weapons') ->
     {
         ?PATH_WEAPONS,
         {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, #{
-            extension_test_id => <<"span_ids_sequence_with_context_ext">>}
+            annotation_test_id => <<"span_ids_sequence_with_context_annotation">>}
         }
     }.
 
@@ -235,41 +235,37 @@ end_per_test_case(_, C) ->
 context_non_root_test(_) ->
     ReqId = <<"context_non_root">>,
     RpcId = woody_context:make_rpc_id(ReqId, ReqId, ReqId),
-    IsRoot = false,
     Expect = #{
-        root_rpc => IsRoot,
+        root_rpc => false,
         rpc_id => RpcId,
         seq => 0,
         event_handler => ?MODULE
     },
-    Expect = woody_context:new(IsRoot, RpcId, ?MODULE).
+    Expect = woody_context:new(RpcId, ?MODULE).
 
 context_root_with_given_req_id_test(_) ->
     ReqId = <<"context_root_with_given_req_id">>,
-    IsRoot = true,
     Expect = #{
-        root_rpc => IsRoot,
+        root_rpc => true,
         rpc_id => #{parent_id => <<"undefined">>, span_id => ReqId, trace_id => ReqId},
         seq => 0,
         event_handler => ?MODULE
     },
-    Expect = woody_context:new(IsRoot, ReqId, ?MODULE).
+    Expect = woody_context:new(ReqId, ?MODULE).
 
 context_root_with_given_rpc_id_test(_) ->
     ReqId = <<"context_root_with_given_rpc_id">>,
     RpcId = woody_context:make_rpc_id(<<"undefined">>, ReqId, ReqId),
-    IsRoot = true,
     Expect = #{
-        root_rpc => IsRoot,
+        root_rpc => true,
         rpc_id => RpcId,
         seq => 0,
         event_handler => ?MODULE
     },
-    Expect = woody_context:new(IsRoot, RpcId, ?MODULE).
+    Expect = woody_context:new(RpcId, ?MODULE).
 
 context_root_with_generated_rpc_id_test(_) ->
     ReqId = undefined,
-    IsRoot = true,
     #{
         root_rpc      := true,
         event_handler := ?MODULE,
@@ -279,7 +275,7 @@ context_root_with_generated_rpc_id_test(_) ->
             span_id   := Generated,
             trace_id  := Generated
         }
-    } = woody_context:new(IsRoot, ReqId, ?MODULE).
+    } = woody_context:new(ReqId, ?MODULE).
 
 call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
@@ -411,12 +407,12 @@ span_ids_sequence_test(_) ->
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
-span_ids_sequence_with_context_ext_test(_) ->
-    Id      = <<"span_ids_sequence_with_context_ext">>,
+span_ids_sequence_with_context_annotation_test(_) ->
+    Id      = <<"span_ids_sequence_with_context_annotation">>,
     Gun     = <<"Enforcer">>,
     Current = genlib_map:get(Gun, ?WEAPONS),
     Context = #{rpc_id := RpcId} = woody_context:new(
-        true, Id, ?MODULE, #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
+        Id, ?MODULE, #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
     Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
@@ -450,7 +446,7 @@ multiplexed_transport_test(_) ->
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
         woody_client_thrift_http_transport:new(
-            woody_context:next(woody_context:new(true, Id, ?MODULE)),
+            woody_context:next(woody_context:new(Id, ?MODULE)),
             #{url => Url}
         ),
         [{strict_read, true}, {strict_write, true}]
@@ -556,11 +552,11 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{extension_test_id := ExtTestId}) ->
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{annotation_test_id := AnnotTestId}) ->
     ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), CurrentWeapon}),
-    CheckExt = is_ext_check_required(ExtTestId, woody_context:get_rpc_id(trace_id, Context)),
-    ok = check_extension(CheckExt, Context, CurrentWeapon),
-    switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckExt);
+    CheckAnnot = is_annotation_check_required(AnnotTestId, woody_context:get_rpc_id(trace_id, Context)),
+    ok = check_annotation(CheckAnnot, Context, CurrentWeapon),
+    switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot);
 
 handle_function(get_weapon, {Name, To}, Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
@@ -597,7 +593,7 @@ handle_event(Type, RpcId, Meta) ->
 %% internal functions
 %%
 make_context(ReqId) ->
-    woody_context:new(true, ReqId, ?MODULE).
+    woody_context:new(ReqId, ?MODULE).
 
 call(Context, ServiceName, Function, Args) ->
     do_call(call, Context, ServiceName, Function, Args).
@@ -652,25 +648,25 @@ check_msg(true, Id, Gun) ->
 check_msg(false, _, _) ->
     ok.
 
-switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckExt) ->
+switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift, Context),
-    ContextExt = extend_weapon_context(CheckExt, Context, NextWName, NextWPos),
-    case call_safe(ContextExt, 'Weapons', get_weapon,
+    ContextAnnot = annotate_weapon(CheckAnnot, Context, NextWName, NextWPos),
+    case call_safe(ContextAnnot, 'Weapons', get_weapon,
              [NextWName, self_to_bin()])
     of
         {{exception, #'WeaponFailure'{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
         }}, NextContex} ->
-            ok = validate_next_context(CheckExt, NextContex, Context),
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex, CheckExt);
+            ok = validate_next_context(CheckAnnot, NextContex, Context),
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, NextContex, CheckAnnot);
         ResultOk = {_Weapon, _NextContext} ->
             ResultOk
     end.
 
-extend_weapon_context(true, Context, WName, WPos) ->
-    woody_context:extend(Context, #{genlib:to_binary(WPos) => WName});
-extend_weapon_context(_, Context, _, _) ->
+annotate_weapon(true, Context, WName, WPos) ->
+    woody_context:annotate(Context, #{genlib:to_binary(WPos) => WName});
+annotate_weapon(_, Context, _, _) ->
     Context.
 
 next_weapon(#'Weapon'{slot_pos = Pos}, next, Shift, Ctx) ->
@@ -683,9 +679,9 @@ next_weapon(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
 next_weapon(_, Context) ->
     throw({?POS_ERROR, Context}).
 
-validate_next_context(true, #{seq := NextSeq, extension := NextExt}, #{seq := Seq, extension := Ext}) ->
+validate_next_context(true, #{seq := NextSeq, annotation := NextAnnot}, #{seq := Seq, annotation := Annot}) ->
     NextSeq = Seq + 1,
-    NextExt = maps:merge(NextExt, Ext), %% check that Ext map is a submap of NextExt
+    NextAnnot = maps:merge(NextAnnot, Annot), %% check that Annot map is a submap of NextAnnot
     ok;
 validate_next_context(false, #{seq := NextSeq}, #{seq := Seq}) ->
     NextSeq = Seq + 1,
@@ -723,14 +719,14 @@ receive_msg(Msg) ->
         error(get_msg_timeout)
     end.
 
-is_ext_check_required(ExtTestId, ExtTestId) ->
+is_annotation_check_required(AnnotTestId, AnnotTestId) ->
     true;
-is_ext_check_required(_, _) ->
+is_annotation_check_required(_, _) ->
     false.
 
-check_extension(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
+check_annotation(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
     WSlotBin = genlib:to_binary(WSlot),
-    WName = woody_context:get_ext(WSlotBin, Context),
+    WName = woody_context:annotation(WSlotBin, Context),
     ok;
-check_extension(_, _, _) ->
+check_annotation(_, _, _) ->
     ok.

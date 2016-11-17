@@ -102,7 +102,7 @@ flush(Transport = #{
     is_binary(WBuffer),
     is_binary(RBuffer)
 ->
-    Headers = add_extension_headers(Context, [
+    Headers = add_annotation_headers(Context, [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
         {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(woody_context:get_child_rpc_id(trace_id,  Transport))},
@@ -168,12 +168,12 @@ handle_response(503, _) ->
 handle_response(Code, _) ->
     ?RETURN_ERROR({http_code, Code}).
 
-add_extension_headers(Context, Headers) ->
+add_annotation_headers(Context, Headers) ->
     maps:fold(
         fun(H, V, Acc) when is_binary(H) and is_binary(V) -> [{<< ?HEADER_NAME_PREFIX/binary, H/binary >>, V} | Acc];
            (H, V, _) -> error({badarg, {H, V}}) end,
         Headers,
-        woody_context:get_ext(Context)
+        woody_context:annotation(Context)
     ).
 
 log_response(Status, Context, Meta) ->

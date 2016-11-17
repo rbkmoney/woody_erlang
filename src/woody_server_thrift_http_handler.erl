@@ -113,7 +113,7 @@ get_paths(_, _, [Handler | _], _) ->
 config() ->
     #{
        max_body_length => ?MAX_BODY_LENGTH,
-       regexp_ext => compile_extensions_filter()
+       regexp_annotation => compile_annotation_filter()
     }.
 
 transport_traces(EvHandler, ServerOpts) ->
@@ -214,7 +214,7 @@ init({_Transport, http}, Req, [EvHandler | Opts]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            Context = woody_context:new(false, RpcId, EvHandler),
+            Context = woody_context:new_incoming(RpcId, EvHandler),
             check_headers(set_resp_headers(RpcId, Req2), [Url, Context | Opts]);
         {error, ErrorMeta, Req2} ->
             _ = woody_event_handler:handle_event(
@@ -299,25 +299,25 @@ check_accept({Accept, Req}, Opts) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
-    check_extension_headers(cowboy_req:headers(Req), Opts);
+    check_annotations_headers(cowboy_req:headers(Req), Opts);
 check_accept({BadType, Req1}, [Url, Context | _]) ->
     _ = log_event(?EV_SERVER_RECEIVE, error, Context,
         #{url => Url, reason => {wrong_client_accept, BadType}}),
     reply_error_early(406, Req1).
 
-check_extension_headers({Headers, Req}, [Url, Context, ServerOpts | Rest]) ->
+check_annotations_headers({Headers, Req}, [Url, Context, ServerOpts | Rest]) ->
     {ok, Req, [
         Url,
-        extend_context(Context, find_extensions(Headers, ServerOpts)),
+        annotate_context(Context, find_annotations(Headers, ServerOpts)),
         ServerOpts | Rest]
     }.
 
-extend_context(Context, Ext) when map_size(Ext) > 0 ->
-    woody_context:extend(Context, Ext);
-extend_context(Context, _) ->
+annotate_context(Context, Annot) when map_size(Annot) > 0 ->
+    woody_context:annotate(Context, Annot);
+annotate_context(Context, _) ->
     Context.
 
-find_extensions(Headers, #{regexp_ext := Re}) ->
+find_annotations(Headers, #{regexp_annotation := Re}) ->
     lists:foldl(
         fun({H, V}, Acc) when
             H =/= ?HEADER_NAME_RPC_ID andalso
@@ -326,13 +326,13 @@ find_extensions(Headers, #{regexp_ext := Re}) ->
         ->
             case re:replace(H, Re, "", [{return, binary}, anchored]) of
                 H -> Acc;
-                ExtHeader -> Acc#{ExtHeader => V}
+                AnnotHeader -> Acc#{AnnotHeader => V}
             end;
            (_, Acc) -> Acc
         end,
       #{}, Headers).
 
-compile_extensions_filter() ->
+compile_annotation_filter() ->
     {ok, Re} = re:compile([?HEADER_NAME_PREFIX], [unicode, caseless]),
     Re.
 
