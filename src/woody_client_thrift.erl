@@ -38,16 +38,17 @@ stop_pool(Name) ->
     woody_client:result_ok() | no_return().
 call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
     _ = woody_event_handler:handle_event(
-        woody_context:get_ev_handler(Context),
-        ?EV_CALL_SERVICE,
-        woody_context:get_child_rpc_id(Context),
-        #{
-            service  => ServiceName,
-            function => Function,
-            type     => get_rpc_type(Service, Function),
-            args     => Args,
-            context  => Context
-        }),
+            woody_context:get_ev_handler(Context),
+            ?EV_CALL_SERVICE,
+            woody_context:get_child_rpc_id(Context),
+            #{
+                service  => ServiceName,
+                function => Function,
+                type     => get_rpc_type(Service, Function),
+                args     => Args,
+                context  => Context
+            }
+        ),
     handle_result(do_call(
         make_thrift_client(Context, Service, clean_opts(TransportOpts)),
         Function, Args

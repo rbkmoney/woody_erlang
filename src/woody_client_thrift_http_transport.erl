@@ -170,11 +170,15 @@ handle_response(Code, _) ->
 
 add_annotation_headers(Context, Headers) ->
     maps:fold(
-        fun(H, V, Acc) when is_binary(H) and is_binary(V) -> [{<< ?HEADER_NAME_PREFIX/binary, H/binary >>, V} | Acc];
-           (H, V, _) -> error({badarg, {H, V}}) end,
+        fun add_annotation_header/3,
         Headers,
         woody_context:annotation(Context)
     ).
+
+add_annotation_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
+    [{<< ?HEADER_NAME_PREFIX/binary, H/binary >>, V} | Headers];
+add_annotation_header(H, V, Headers) ->
+    error(badarg, [H, V, Headers]).
 
 log_response(Status, Context, Meta) ->
     woody_event_handler:handle_event(
