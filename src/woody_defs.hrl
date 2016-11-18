@@ -3,11 +3,12 @@
 
 %% Http headers
 -define(CONTENT_TYPE_THRIFT         , <<"application/x-thrift">>).
--define(HEADER_NAME_RPC_ID          , <<"x-rbk-span-id">>).
--define(HEADER_NAME_RPC_PARENT_ID   , <<"x-rbk-parent-id">>).
--define(HEADER_NAME_RPC_ROOT_ID     , <<"x-rbk-trace-id">>).
--define(HEADER_NAME_ERROR_TRANSPORT , <<"x-rbk-rpc-error-thrift">>).
--define(HEADER_NAME_ERROR_LOGIC     , <<"x-rbk-rpc-error-logic">>).
+-define(HEADER_NAME_PREFIX          , <<"x-rbk-">>).
+-define(HEADER_NAME_RPC_ID          , << ?HEADER_NAME_PREFIX/binary, "span-id">>).
+-define(HEADER_NAME_RPC_PARENT_ID   , << ?HEADER_NAME_PREFIX/binary, "parent-id">>).
+-define(HEADER_NAME_RPC_ROOT_ID     , << ?HEADER_NAME_PREFIX/binary, "trace-id">>).
+-define(HEADER_NAME_ERROR_TRANSPORT , << ?HEADER_NAME_PREFIX/binary, "rpc-error-thrift">>).
+-define(HEADER_NAME_ERROR_LOGIC     , << ?HEADER_NAME_PREFIX/binary, "rpc-error-logic">>).
 
 %% Errors & exceptions
 -define(EXCEPT_THRIFT(Exception) , {exception, Exception}).

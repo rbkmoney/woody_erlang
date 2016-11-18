@@ -6,12 +6,21 @@
 %% API
 -export([get_protocol_handler/2]).
 
--type req_id() :: binary().
+-type req_id()    :: binary().
+-type span_id()   :: req_id() | undefined.
+-type trace_id()  :: req_id().
+-type parent_id() :: req_id().
+
 -type rpc_id() :: #{
-    span_id   => req_id(),
-    trace_id  => req_id(),
-    parent_id => req_id()
+    span_id   => span_id(),
+    trace_id  => trace_id(),
+    parent_id => parent_id()
 }.
+
+-type dapper_id() :: span_id | trace_id | parent_id.
+
+-export_type([dapper_id/0, span_id/0, parent_id/0, trace_id/0]).
+-export_type([req_id/0, rpc_id/0]).
 
 -type options() :: map().
 -type handler() :: module().
@@ -29,7 +38,7 @@
                   | {'via', Module :: module(), Name :: any()}
                   | pid().
 
--export_type([req_id/0, rpc_id/0, service/0, service_name/0, func/0, options/0,
+-export_type([service/0, service_name/0, func/0, options/0,
     handler/0, url/0, role/0, sup_ref/0]).
 
 

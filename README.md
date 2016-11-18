@@ -44,7 +44,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 9> Function = give_me_money.  %% thrift метод
 10> Args = [100, <<"rub">>].
 11> Request = {Service, Function, Args}.
-12> Context = woody_client:new_context(<<"myUniqRequestID1">>, EventHandler).
+12> Context = woody_context:new(<<"myUniqRequestID">>, EventHandler).
 13> {Result, _NextContext} = woody_client:call(Context, Request, #{url => Url}).
 ```
 
@@ -57,7 +57,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 ```erlang
 14> Args1 = [1000000, <<"usd">>].
 15> Request1 = {Service, Function, Args1}.
-16> Context1 = woody_client:new_context(<<"myUniqRequestID2">>, EventHandler).
+16> Context1 = woody_context:new(<<"myUniqRequestID1">>, EventHandler).
 17> {{exception, #take_it_easy{}}, _NextContext1} = woody_client:call_safe(Context1, Request1, #{url => Url}).
 ```
 
@@ -68,7 +68,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 18>     ({{exception, Error}, _NextContext2}) -> io:format("Service exception: ~p~n", [Error]);
 18>     ({{error, _}, _NextContext2}) -> io:format("Rpc failed")
 18> end.
-19> Context2 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
+19> Context2 = woody_context:new(<<"myUniqRequestID2">>, EventHandler).
 20> {ok, Pid, _NextContext2} = woody_client:call_async(SupRef, Callback, Context2, Request, #{url => Url}).
 ```
 
@@ -77,11 +77,26 @@ Erlang реализация [Библиотеки RPC вызовов для об
 ```erlang
 21> Pool = my_client_pool.
 22> ok = woody_client_thrift:start_pool(Pool, 10).
-23> Context3 = woody_client:new_context(<<"myUniqRequestID3">>, EventHandler).
+23> Context3 = woody_context:new(<<"myUniqRequestID3">>, EventHandler).
 24> {Result, _NextContext3} = woody_client:call(Context, Request, #{url => Url, pool => Pool}).
 ```
 
 Закрыть пул можно с помошью `woody_client_thrift:stop_pool/1`.
+
+`Context` также позволяет аннотировать RPC запросы дополнительными мета данными в виде _key-value_. `Context` передается только в запросах и его расширение возможно только в режиме _append-only_ (т.е. на попытку переопределить уже существующую запись в `context annotation`, библиотека вернет ошибку). Поскольку на транспортном уровне контекст передается в виде custom HTTP заголовков, синтаксис _key-value_ должен следовать ограничениям [RFC7230 ](https://tools.ietf.org/html/rfc7230#section-3.2.6).
+
+```erlang
+25> Annotation1 = #{<<"client1-name">> => <<"Vasya">>}.
+26> Context4 = woody_context:new(<<"myUniqRequestID4">>, EventHandler, Annotation1).
+27> Annotation1 = woody_context:annotation(Context4).
+28> {Result, NextContext4} = woody_client:call(Context4, Request, #{url => Url}).
+29> Annotation1 = woody_context:annotation(NextContext4).
+30> Annotation2 = #{<<"client2-name">> => <<"Masha">>}.
+31> Context5 = woody_context:annotate(NextContext4, Annotation2).
+32> <<"Masha">> = woody_context:annotation(<<"client2-name">>, Context5).
+33> FullAnnot = maps:merge(Annotation1, Annotation2).
+34> FullAnnot = woody_context:annotation(Context5).
+```
 
 ### Woody Server Thrift Handler
 
@@ -95,19 +110,19 @@ Erlang реализация [Библиотеки RPC вызовов для об
 -export([handle_function/4]).
 
 -spec handle_function(woody_t:func(), woody_server_thrift_handler:args(),
-    woody_client:context(), woody_server_thrift_handler:handler_opts())
+    woody_context:ctx(), woody_server_thrift_handler:handler_opts())
 ->
-    {woody_server_thrift_handler:result(), woody_client:context()} | no_return().
+    {woody_server_thrift_handler:result(), woody_context:ctx()} | no_return().
 handle_function(give_me_money, Sum = {Amount, Currency}, Context, _Opts) ->
     Wallet = <<"localhost:8022/v1/thrift_wallet_service">>,
     RequestLimits = {my_wallet_service, check_limits, Sum},
 
     %% RpcId можно получить из Context, полученного handle_function,
     %% для использования при логировании.
-    RpcId = woody_client:get_rpc_id(Context),
+    RpcId = woody_context:get_rpc_id(Context),
 
     %% Используется Context, полученный handle_function.
-    %% woody_client:new/2 вызывать не надо.
+    %% woody_context:new/[3/4] вызывать не надо.
     case woody_client:call_safe(Context, RequestLimits, #{url => Wallet}) of
         {ok, Context1} ->
 

@@ -12,6 +12,7 @@
 %% woody_client behaviour callback
 -export([call/3]).
 
+%% Types
 -type args()    :: any().
 -type request() :: {woody_t:service(), woody_t:func(), args()}.
 
@@ -19,14 +20,7 @@
 -type error_protocol() :: ?ERROR_PROTOCOL(_).
 -export_type([except_thrift/0, error_protocol/0]).
 
--define(log_rpc_result(EventHandler, RpcId, Status, Result),
-    woody_event_handler:handle_event(EventHandler, ?EV_SERVICE_RESULT, RpcId, #{
-        status => Status, result => Result
-    })
-).
-
 -define(WOODY_OPTS, [protocol, transport]).
-
 -define(thrift_cast, oneway_void).
 
 %%
@@ -40,24 +34,25 @@ start_pool(Name, PoolSize) when is_integer(PoolSize) ->
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(woody_client:context(), request(), woody_client:options()) ->
+-spec call(woody_context:ctx(), request(), woody_client:options()) ->
     woody_client:result_ok() | no_return().
-call(Context = #{event_handler := EventHandler},
-    {Service = {_, ServiceName}, Function, Args}, TransportOpts)
-->
-    RpcId = maps:with([span_id, trace_id, parent_id], Context),
-    woody_event_handler:handle_event(EventHandler, ?EV_CALL_SERVICE, RpcId, #{
-        service   => ServiceName,
-        function  => Function,
-        type      => get_rpc_type(Service, Function),
-        args      => Args
-    }),
-    handle_result(
-        do_call(
-            make_thrift_client(RpcId, Service, clean_opts(TransportOpts), EventHandler),
-            Function, Args
-        ), RpcId, Context
-    ).
+call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
+    _ = woody_event_handler:handle_event(
+            woody_context:get_ev_handler(Context),
+            ?EV_CALL_SERVICE,
+            woody_context:get_child_rpc_id(Context),
+            #{
+                service  => ServiceName,
+                function => Function,
+                type     => get_rpc_type(Service, Function),
+                args     => Args,
+                context  => Context
+            }
+        ),
+    handle_result(do_call(
+        make_thrift_client(Context, Service, clean_opts(TransportOpts)),
+        Function, Args
+        ), Context).
 
 
 %%
@@ -76,9 +71,9 @@ get_rpc_type(_) -> call.
 clean_opts(Options) ->
     maps:without(?WOODY_OPTS, Options).
 
-make_thrift_client(RpcId, Service, TransportOpts, EventHandler) ->
+make_thrift_client(Context, Service, TransportOpts) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(RpcId, TransportOpts, EventHandler),
+        woody_client_thrift_http_transport:new(Context, TransportOpts),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),
@@ -95,42 +90,32 @@ do_call(Client, Function, Args) ->
     do_call(Client, Function, [Args]).
 
 
-handle_result({ok, ok}, RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, ok, ?thrift_cast),
+handle_result({ok, ok}, Context) ->
+    _ = log_rpc_result(ok, ?thrift_cast, Context),
     {ok, Context};
-
-handle_result({ok, Result}, RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, ok, Result),
+handle_result({ok, Result}, Context) ->
+    _ = log_rpc_result(ok, Result, Context),
     {Result, Context};
-
 %% In case a server violates the requirements and sends
 %% #TAppiacationException{} with http status code 200.
-handle_result({exception, Result = #'TApplicationException'{}}, RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, error, Result),
+handle_result({exception, Result = #'TApplicationException'{}}, Context) ->
+    _ = log_rpc_result(error, Result, Context),
     error({?ERROR_TRANSPORT(server_error), Context});
-
-%% Service threw valid thrift exception
-handle_result(Exception = ?EXCEPT_THRIFT(_), RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, ok, Exception),
+%% Service threw a valid thrift exception
+handle_result(Exception = ?EXCEPT_THRIFT(_), Context) ->
+    _ = log_rpc_result(ok, Exception, Context),
     throw({Exception, Context});
-
-handle_result({error, Error = ?ERROR_TRANSPORT(_)}, RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, error, Error),
+handle_result({error, Error = ?ERROR_TRANSPORT(_)}, Context) ->
+    _ = log_rpc_result(error, Error, Context),
     error({Error, Context});
-
-handle_result({error, Error}, RpcId,
-    Context = #{event_handler := EventHandler})
-->
-    ?log_rpc_result(EventHandler, RpcId, error, Error),
+handle_result({error, Error}, Context) ->
+    _ = log_rpc_result(error, Error, Context),
     error({?ERROR_PROTOCOL(Error), Context}).
 
+log_rpc_result(Status, Result, Context) ->
+    woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        ?EV_SERVICE_RESULT,
+        woody_context:get_child_rpc_id(Context),
+        #{status => Status, result => Result}
+    ).

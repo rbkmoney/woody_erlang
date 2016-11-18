@@ -47,18 +47,11 @@
 
 -define(THRIFT_ERROR_KEY, {?MODULE, thrift_error}).
 
--define(LOG_EVENT(EventHandler, Event, Status, RpcId, Meta),
-    woody_event_handler:handle_event(EventHandler, Event, RpcId, Meta#{
-        status => Status
-    })
-).
-
 -define(HEADERS_RPC_ID, #{
     span_id   => ?HEADER_NAME_RPC_ID,
     trace_id  => ?HEADER_NAME_RPC_ROOT_ID,
     parent_id => ?HEADER_NAME_RPC_PARENT_ID
 }).
-
 
 %%
 %% woody_server callback
@@ -67,17 +60,17 @@
     supervisor:child_spec().
 child_spec(Id, #{
     handlers      := Handlers,
-    event_handler := EventHandler,
+    event_handler := EvHandler,
     ip            := Ip,
     port          := Port,
-    net_opts := NetOpts
+    net_opts      := NetOpts
 }) ->
-    _ = check_callback(handle_event, 3, EventHandler),
+    _ = check_callback(handle_event, 3, EvHandler),
     AcceptorsPool = genlib_app:env(woody, acceptors_pool_size,
         ?DEFAULT_ACCEPTORS_POOLSIZE
     ),
     {Transport, TransportOpts} = get_socket_transport(Ip, Port, NetOpts),
-    CowboyOpts = get_cowboy_config(Handlers, EventHandler),
+    CowboyOpts = get_cowboy_config(Handlers, EvHandler),
     ranch:child_spec({?MODULE, Id}, AcceptorsPool,
         Transport, TransportOpts, cowboy_protocol, CowboyOpts).
 
@@ -103,67 +96,75 @@ get_socket_transport(Ip, Port, Options) ->
             {ranch_tcp, Opts}
     end.
 
-get_cowboy_config(Handlers, EventHandler) ->
-    Paths = get_paths(config(), EventHandler, Handlers, []),
-    Debug = enable_debug(genlib_app:env(woody, enable_debug), EventHandler),
+get_cowboy_config(Handlers, EvHandler) ->
+    Paths = get_paths(config(), EvHandler, Handlers, []),
+    Debug = transport_traces(EvHandler, config()),
     [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Debug.
 
 get_paths(_, _, [], Paths) ->
     Paths;
-get_paths(ServerOpts, EventHandler, [{PathMatch, {Service, Handler, Opts}} | T], Paths) ->
-    get_paths(ServerOpts, EventHandler, T, [{PathMatch, ?MODULE,
-        [EventHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
+get_paths(ServerOpts, EvHandler, [{PathMatch, {Service, Handler, Opts}} | T], Paths) ->
+    get_paths(ServerOpts, EvHandler, T, [{PathMatch, ?MODULE,
+        [EvHandler, ServerOpts, {Service, validate_handler(Handler), Opts}]
     } | Paths]);
 get_paths(_, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 config() ->
-    [{max_body_length, ?MAX_BODY_LENGTH}].
+    #{
+       max_body_length => ?MAX_BODY_LENGTH,
+       regexp_annotation => compile_annotation_filter()
+    }.
 
-enable_debug(true, EventHandler) ->
+transport_traces(EvHandler, ServerOpts) ->
     [
         {onrequest, fun(Req) ->
-                {Url, Req1} = cowboy_req:url(Req),
-                {Headers, Req2} = cowboy_req:headers(Req1),
-            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, undefined, #{
-                event => transport_onrequest,
-                url => Url,
-                headers => Headers
-            }),
-            Req2 end
-        },
-        {onresponse, fun(Code, Headers, _Body, Req) ->
-            woody_event_handler:handle_event(EventHandler, ?EV_DEBUG, undefined, #{
-                event => transport_onresponse,
-                code => Code,
-                headers => Headers
-                }),
-            Req end
-        }
-    ];
-enable_debug(_, _) ->
-    [].
+            trace_req(genlib_app:env(woody, enable_debug), Req, EvHandler, ServerOpts) end},
+        {onresponse, fun(Code, Headers, Body, Req) ->
+            trace_resp(genlib_app:env(woody, enable_debug), Req, Code, Headers, Body, EvHandler) end}
+    ].
 
+trace_req(true, Req, EvHandler, ServerOpts) ->
+    {Url, Req1} = cowboy_req:url(Req),
+    {Headers, Req2} = cowboy_req:headers(Req1),
+    {BodyStatus, Body, _} = get_body(Req2, ServerOpts, true),
+    _ = woody_event_handler:handle_event(EvHandler, ?EV_DEBUG, undefined, #{
+         event       => transport_onrequest,
+         url         => Url,
+         headers     => Headers,
+         body        => Body,
+         body_status => BodyStatus}),
+    Req2;
+trace_req(_, Req, _, _) ->
+    Req.
+
+trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
+    _ = woody_event_handler:handle_event(EvHandler, ?EV_DEBUG, undefined, #{
+         event   => transport_onresponse,
+         code    => Code,
+         headers => Headers,
+         body    => Body}),
+    Req;
+trace_resp(_, Req, _, _, _, _) ->
+    Req.
 
 %%
 %% thrift_transport callbacks
 %%
 -record(http_req, {
     req              :: cowboy_req:req(),
-    rpc_id           :: woody_t:rpc_id(),
     body = <<>>      :: binary(),
     resp_body = <<>> :: binary(),
-    event_handler    :: woody_t:handler(),
+    context          :: woody_context:ctx(),
     replied = false  :: boolean()
 }).
 -type state() :: #http_req{}.
 
-make_transport(Req, RpcId, Body, EventHandler) ->
+make_transport(Req, Body, Context) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #http_req{
         req           = Req,
-        rpc_id        = RpcId,
         body          = Body,
-        event_handler = EventHandler
+        context       = Context
     }),
     Transport.
 
@@ -182,13 +183,11 @@ flush(State = #http_req{replied = true}) ->
     {State, {error, already_replied}};
 flush(State = #http_req{
     req           = Req,
-    rpc_id        = RpcId,
     resp_body     = Body,
-    event_handler = EventHandler
+    context       = Context
 }) ->
     {Code, Req1} = add_x_error_header(Req),
-    ?LOG_EVENT(EventHandler, ?EV_SERVER_SEND, reply_status(Code),
-        RpcId, #{code => Code}),
+    _ = log_event(?EV_SERVER_SEND, reply_status(Code), Context, #{code => Code}),
     {ok, Req2} = cowboy_req:reply(Code, [{<<"content-type">>, ?CONTENT_TYPE_THRIFT}],
         Body, Req1),
     {State#http_req{req = Req2, resp_body = <<>>, replied = true}, ok}.
@@ -211,35 +210,39 @@ mark_thrift_error(Type, Error) ->
 -spec init({_, http}, cowboy_req:req(), list()) ->
     {ok       , cowboy_req:req(), list()} |
     {shutdown , cowboy_req:req(), _}.
-init({_Transport, http}, Req, Opts = [EventHandler | _]) ->
+init({_Transport, http}, Req, [EvHandler | Opts]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            check_headers(set_resp_headers(RpcId, Req2), [Url, RpcId | Opts]);
+            Context = woody_context:new_incoming(RpcId, EvHandler),
+            check_headers(set_resp_headers(RpcId, Req2), [Url, Context | Opts]);
         {error, ErrorMeta, Req2} ->
-            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-                ErrorMeta, #{url => Url, reason => bad_rpc_id}),
+            _ = woody_event_handler:handle_event(
+                EvHandler,
+                ?EV_SERVER_RECEIVE,
+                ErrorMeta,
+                #{status => error, url => Url, reason => bad_rpc_id}),
             reply_error_early(400, Req2)
     end.
 
 -spec handle(cowboy_req:req(), list()) ->
     {ok, cowboy_req:req(), _}.
-handle(Req, [Url, RpcId, EventHandler, ServerOpts, ThriftHandler]) ->
-    case get_body(Req, ServerOpts) of
+handle(Req, [Url, Context, ServerOpts, ThriftHandler]) ->
+    case get_body(Req, ServerOpts, false) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, ok, RpcId, #{url => Url}),
-            do_handle(RpcId, Body, ThriftHandler, EventHandler, Req1);
+            _ = log_event(?EV_SERVER_RECEIVE, ok, Context, #{url => Url}),
+            do_handle(Body, ThriftHandler, Context, Req1);
         {ok, <<>>, Req1} ->
-            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId, #{url => Url, reason => body_empty}),
+            _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+                #{url => Url, reason => body_empty}),
             reply_error(400, Req1);
         {error, body_too_large, Req1} ->
-            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId, #{url => Url, reason => body_too_large}),
+            _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+                #{url => Url, reason => body_too_large}),
             reply_error(413, Req1);
         {error, Reason, Req1} ->
-            ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-                RpcId, #{url => Url, reason => {body_read_error, Reason}}),
+            _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+                #{url => Url, reason => {body_read_error, Reason}}),
             reply_error(400, Req1)
     end.
 
@@ -247,11 +250,13 @@ handle(Req, [Url, RpcId, EventHandler, ServerOpts, ThriftHandler]) ->
     ok.
 terminate({normal, _}, _Req, _Status) ->
     ok;
-terminate(Reason, _Req, [_, RpcId, EventHandler | _]) ->
+terminate(Reason, _Req, [_, Context | _]) ->
     erlang:erase(?THRIFT_ERROR_KEY),
-    woody_event_handler:handle_event(EventHandler, ?EV_INTERNAL_ERROR, RpcId, #{
-        error => <<"http handler terminated abnormally">>, reason => Reason
-    }),
+    _ = woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        ?EV_INTERNAL_ERROR,
+        woody_context:get_rpc_id(Context),
+        #{error => <<"http handler terminated abnormally">>, reason => Reason}),
     ok.
 
 get_rpc_id(Req) ->
@@ -278,60 +283,92 @@ check_headers(Req, Opts) ->
 
 check_method({<<"POST">>, Req}, Opts) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
-check_method({Method, Req}, [Url, RpcId, EventHandler | _]) ->
-    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId, #{url => Url, reason => {wrong_method, Method}}),
+check_method({Method, Req}, [Url, Context | _]) ->
+    _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+        #{url => Url, reason => {wrong_method, Method}}),
     reply_error_early(405, cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req)).
 
 check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
     check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
-check_content_type({BadType, Req}, [Url, RpcId, EventHandler | _]) ->
-    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId, #{url => Url, reason => {wrong_content_type, BadType}}),
+check_content_type({BadType, Req}, [Url, Context | _]) ->
+    _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+        #{url => Url, reason => {wrong_content_type, BadType}}),
     reply_error_early(415, Req).
 
 check_accept({Accept, Req}, Opts) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
-    {ok, Req, Opts};
-check_accept({BadType, Req1}, [Url, RpcId, EventHandler | _]) ->
-    ?LOG_EVENT(EventHandler, ?EV_SERVER_RECEIVE, error,
-        RpcId, #{url => Url, reason => {wrong_client_accept, BadType}}),
+    check_annotations_headers(cowboy_req:headers(Req), Opts);
+check_accept({BadType, Req1}, [Url, Context | _]) ->
+    _ = log_event(?EV_SERVER_RECEIVE, error, Context,
+        #{url => Url, reason => {wrong_client_accept, BadType}}),
     reply_error_early(406, Req1).
 
-get_body(Req, ServerOpts) ->
-    MaxBody = genlib_opts:get(max_body_length, ServerOpts),
+check_annotations_headers({Headers, Req}, [Url, Context, ServerOpts | Rest]) ->
+    {ok, Req, [
+        Url,
+        annotate_context(Context, find_annotations(Headers, ServerOpts)),
+        ServerOpts | Rest]
+    }.
+
+annotate_context(Context, Annot) when map_size(Annot) > 0 ->
+    woody_context:annotate(Context, Annot);
+annotate_context(Context, _) ->
+    Context.
+
+find_annotations(Headers, #{regexp_annotation := Re}) ->
+    lists:foldl(
+        fun({H, V}, Acc) when
+            H =/= ?HEADER_NAME_RPC_ID andalso
+            H =/= ?HEADER_NAME_RPC_ROOT_ID andalso
+            H =/= ?HEADER_NAME_RPC_PARENT_ID
+        ->
+            case re:replace(H, Re, "", [{return, binary}, anchored]) of
+                H -> Acc;
+                AnnotHeader -> Acc#{AnnotHeader => V}
+            end;
+           (_, Acc) -> Acc
+        end,
+      #{}, Headers).
+
+compile_annotation_filter() ->
+    {ok, Re} = re:compile([?HEADER_NAME_PREFIX], [unicode, caseless]),
+    Re.
+
+get_body(Req, #{max_body_length := MaxBody}, IsForTrace) ->
     case cowboy_req:body(Req, [{length, MaxBody}]) of
         {ok, Body, Req1} when byte_size(Body) < MaxBody ->
             {ok, Body, Req1};
-        {Res, _, Req1} when Res =:= ok orelse Res =:= more->
-            {error, body_too_large, Req1};
+        {Res, Body, Req1} when Res =:= ok orelse Res =:= more->
+            case IsForTrace of
+                true ->
+                    {body_too_large, Body, Req1};
+                _ ->
+                    {error, body_too_large, Req1}
+            end;
         {error, Reason} ->
             {error, Reason, Req}
     end.
 
-do_handle(RpcId, Body, ThriftHander, EventHandler, Req) ->
-    Context = woody_client:make_child_context(RpcId, EventHandler),
-    Transport   = make_transport(Req, RpcId, Body, EventHandler),
-    case woody_server_thrift_handler:start(Transport, Context, ThriftHander,
-        EventHandler, ?MODULE)
-    of
+do_handle(Body, ThriftHander, Context, Req) ->
+    Transport = make_transport(Req, Body, Context),
+    case woody_server_thrift_handler:start(Transport, ThriftHander, ?MODULE, Context) of
         {ok, Req1} ->
             {ok, Req1, undefined};
         {{error, Reason}, Req1} ->
-            handle_error(Reason, RpcId, EventHandler, Req1);
+            handle_error(Reason, Req1, Context);
         {noreply, Req1} ->
             {ok, Req1, undefined}
     end.
 
-handle_error(bad_request, RpcId, EventHandler, Req) ->
-    reply_error(400, RpcId, EventHandler, Req);
-handle_error(_Error, RpcId, EventHandler, Req) ->
-    reply_error(500, RpcId, EventHandler, Req).
+handle_error(bad_request, Req, Context) ->
+    reply_error(400, Req, Context);
+handle_error(_Error, Req, Context) ->
+    reply_error(500, Req, Context).
 
-reply_error(Code, RpcId, EventHandler, Req) ->
-    ?LOG_EVENT(EventHandler, ?EV_SERVER_SEND, error, RpcId, #{code => Code}),
+reply_error(Code, Req, Context) ->
+    _ = log_event(?EV_SERVER_SEND, error, Context, #{code => Code}),
     {_,  Req1} = add_x_error_header(Req),
     reply_error(Code, Req1).
 
@@ -364,3 +401,9 @@ add_x_error_header(Req) ->
             )}
     end.
 
+log_event(Event, Status, Context, Meta) ->
+    woody_event_handler:handle_event(
+        woody_context:get_ev_handler(Context),
+        Event,
+        woody_context:get_rpc_id(Context),
+        Meta#{status => Status}).
