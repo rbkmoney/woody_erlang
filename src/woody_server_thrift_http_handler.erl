@@ -113,7 +113,7 @@ get_paths(_, _, [Handler | _], _) ->
 config() ->
     #{
        max_body_length => ?MAX_BODY_LENGTH,
-       regexp_annotation => compile_annotation_filter()
+       regexp_meta => compile_filter_meta()
     }.
 
 transport_traces(EvHandler, ServerOpts) ->
@@ -214,7 +214,7 @@ init({_Transport, http}, Req, [EvHandler | Opts]) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            Context = woody_context:new_incoming(RpcId, EvHandler),
+            Context = woody_context:new(RpcId, EvHandler),
             check_headers(set_resp_headers(RpcId, Req2), [Url, Context | Opts]);
         {error, ErrorMeta, Req2} ->
             _ = woody_event_handler:handle_event(
@@ -299,25 +299,25 @@ check_accept({Accept, Req}, Opts) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
-    check_annotations_headers(cowboy_req:headers(Req), Opts);
+    check_metadata_headers(cowboy_req:headers(Req), Opts);
 check_accept({BadType, Req1}, [Url, Context | _]) ->
     _ = log_event(?EV_SERVER_RECEIVE, error, Context,
         #{url => Url, reason => {wrong_client_accept, BadType}}),
     reply_error_early(406, Req1).
 
-check_annotations_headers({Headers, Req}, [Url, Context, ServerOpts | Rest]) ->
+check_metadata_headers({Headers, Req}, [Url, Context, ServerOpts | Rest]) ->
     {ok, Req, [
         Url,
-        annotate_context(Context, find_annotations(Headers, ServerOpts)),
+        add_context_meta(Context, find_metadata(Headers, ServerOpts)),
         ServerOpts | Rest]
     }.
 
-annotate_context(Context, Annot) when map_size(Annot) > 0 ->
-    woody_context:annotate(Context, Annot);
-annotate_context(Context, _) ->
+add_context_meta(Context, Meta) when map_size(Meta) > 0 ->
+    woody_context:add_meta(Context, Meta);
+add_context_meta(Context, _) ->
     Context.
 
-find_annotations(Headers, #{regexp_annotation := Re}) ->
+find_metadata(Headers, #{regexp_meta := Re}) ->
     lists:foldl(
         fun({H, V}, Acc) when
             H =/= ?HEADER_NAME_RPC_ID andalso
@@ -326,13 +326,13 @@ find_annotations(Headers, #{regexp_annotation := Re}) ->
         ->
             case re:replace(H, Re, "", [{return, binary}, anchored]) of
                 H -> Acc;
-                AnnotHeader -> Acc#{AnnotHeader => V}
+                MetaHeader -> Acc#{MetaHeader => V}
             end;
            (_, Acc) -> Acc
         end,
       #{}, Headers).
 
-compile_annotation_filter() ->
+compile_filter_meta() ->
     {ok, Re} = re:compile([?HEADER_NAME_PREFIX], [unicode, caseless]),
     Re.
 

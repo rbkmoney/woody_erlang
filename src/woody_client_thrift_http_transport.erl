@@ -102,7 +102,7 @@ flush(Transport = #{
     is_binary(WBuffer),
     is_binary(RBuffer)
 ->
-    Headers = add_annotation_headers(Context, [
+    Headers = add_metadata_headers(Context, [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
         {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(woody_context:get_child_rpc_id(trace_id,  Transport))},
@@ -168,16 +168,16 @@ handle_response(503, _) ->
 handle_response(Code, _) ->
     ?RETURN_ERROR({http_code, Code}).
 
-add_annotation_headers(Context, Headers) ->
+add_metadata_headers(Context, Headers) ->
     maps:fold(
-        fun add_annotation_header/3,
+        fun add_metadata_header/3,
         Headers,
-        woody_context:annotation(Context)
+        woody_context:get_meta(Context)
     ).
 
-add_annotation_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
+add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
     [{<< ?HEADER_NAME_PREFIX/binary, H/binary >>, V} | Headers];
-add_annotation_header(H, V, Headers) ->
+add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
 log_response(Status, Context, Meta) ->

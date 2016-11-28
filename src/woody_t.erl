@@ -7,7 +7,7 @@
 -export([get_protocol_handler/2]).
 
 -type req_id()    :: binary().
--type span_id()   :: req_id() | undefined.
+-type span_id()   :: req_id().
 -type trace_id()  :: req_id().
 -type parent_id() :: req_id().
 

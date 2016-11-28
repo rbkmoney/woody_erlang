@@ -22,10 +22,9 @@
 -export([all/0,
     init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
 -export([
-    context_non_root_test/1,
-    context_root_with_given_req_id_test/1,
-    context_root_with_given_rpc_id_test/1,
-    context_root_with_generated_rpc_id_test/1,
+    context_with_given_rpc_id_test/1,
+    context_with_given_req_id_test/1,
+    context_with_generated_rpc_id_test/1,
     call_safe_ok_test/1,
     call_ok_test/1,
     call_safe_handler_throw_test/1,
@@ -45,7 +44,7 @@
     call_no_pass_through_bad_ok_test/1,
     call_no_pass_through_bad_except_test/1,
     span_ids_sequence_test/1,
-    span_ids_sequence_with_context_annotation_test/1,
+    span_ids_sequence_with_context_meta_test/1,
     call_with_client_pool_test/1,
     multiplexed_transport_test/1,
     server_http_request_validation_test/1,
@@ -127,15 +126,16 @@
 -define(PATH_WEAPONS  , "/v1/woody/test/weapons").
 -define(PATH_POWERUPS , "/v1/woody/test/powerups").
 
+-define(ROOT_REQ_PARENT_ID, <<"undefined">>).
+
 %%
 %% tests descriptions
 %%
 all() ->
     [
-        context_non_root_test,
-        context_root_with_given_req_id_test,
-        context_root_with_given_rpc_id_test,
-        context_root_with_generated_rpc_id_test,
+        context_with_given_rpc_id_test,
+        context_with_given_req_id_test,
+        context_with_generated_rpc_id_test,
         call_safe_ok_test,
         call_ok_test,
         call_safe_handler_throw_test,
@@ -155,7 +155,7 @@ all() ->
         call_no_pass_through_bad_ok_test,
         call_no_pass_through_bad_except_test,
         span_ids_sequence_test,
-        span_ids_sequence_with_context_annotation_test,
+        span_ids_sequence_with_context_meta_test,
         call_with_client_pool_test,
         multiplexed_transport_test,
         server_http_request_validation_test,
@@ -211,7 +211,7 @@ get_handler('Weapons') ->
     {
         ?PATH_WEAPONS,
         {{?THRIFT_DEFS, 'Weapons'}, ?MODULE, #{
-            annotation_test_id => <<"span_ids_sequence_with_context_annotation">>}
+            meta_test_id => <<"span_ids_sequence_with_context_meta">>}
         }
     }.
 
@@ -232,50 +232,29 @@ end_per_test_case(_, C) ->
 %%
 %% tests
 %%
-context_non_root_test(_) ->
-    ReqId = <<"context_non_root">>,
-    RpcId = woody_context:make_rpc_id(ReqId, ReqId, ReqId),
-    Expect = #{
-        root_rpc => false,
-        rpc_id => RpcId,
-        seq => 0,
-        event_handler => ?MODULE
-    },
-    Expect = woody_context:new(RpcId, ?MODULE).
-
-context_root_with_given_req_id_test(_) ->
-    ReqId = <<"context_root_with_given_req_id">>,
-    Expect = #{
-        root_rpc => true,
-        rpc_id => #{parent_id => <<"undefined">>, span_id => ReqId, trace_id => ReqId},
-        seq => 0,
-        event_handler => ?MODULE
-    },
-    Expect = woody_context:new(ReqId, ?MODULE).
-
-context_root_with_given_rpc_id_test(_) ->
-    ReqId = <<"context_root_with_given_rpc_id">>,
-    RpcId = woody_context:make_rpc_id(<<"undefined">>, ReqId, ReqId),
-    Expect = #{
-        root_rpc => true,
-        rpc_id => RpcId,
-        seq => 0,
-        event_handler => ?MODULE
-    },
-    Expect = woody_context:new(RpcId, ?MODULE).
-
-context_root_with_generated_rpc_id_test(_) ->
-    ReqId = undefined,
+context_with_given_rpc_id_test(_) ->
+    ReqId = <<"context_with_given_rpc_id">>,
+    RpcId = #{parent_id => ReqId, trace_id => ReqId, span_id => ReqId},
     #{
-        root_rpc      := true,
-        event_handler := ?MODULE,
-        seq           := 0,
-        rpc_id        := #{
-            parent_id := <<"undefined">>,
-            span_id   := Generated,
-            trace_id  := Generated
-        }
+        rpc_id        := RpcId,
+        child_seq     := 0,
+        event_handler := ?MODULE
+    } = woody_context:new(RpcId, ?MODULE).
+
+context_with_given_req_id_test(_) ->
+    ReqId = <<"context_with_given_req_id">>,
+    #{
+        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := ReqId, trace_id := ReqId},
+        child_seq     := 0,
+        event_handler := ?MODULE
     } = woody_context:new(ReqId, ?MODULE).
+
+context_with_generated_rpc_id_test(_) ->
+    #{
+        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := Gen, trace_id := Gen},
+        child_seq     := 0,
+        event_handler := ?MODULE
+    } = woody_context:new(undefined, ?MODULE).
 
 call_safe_ok_test(_) ->
     Gun =  <<"Enforcer">>,
@@ -300,17 +279,17 @@ call_handler_throw_test(_) ->
 call_safe_handler_throw_unexpected_test(_) ->
     Id      = <<"call_safe_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
     Expect  = call_safe(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]),
+    {{error, ?ERROR_TRANSPORT(server_error)}, _} = Expect,
     {ok, _} = receive_msg({Id, Current}).
 
 call_handler_throw_unexpected_test(_) ->
     Id      = <<"call_handler_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_seq => 1}},
     try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:Expect -> ok
@@ -330,16 +309,16 @@ call_handler_error_test(_) ->
 call_safe_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_safe_client_transport_error">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Context1 = Context#{child_rpc_id => RpcId},
+    Context = make_context(Id),
+    Context1 = Context#{child_seq => 1},
     {{error, ?ERROR_PROTOCOL(_)}, Context1} = call_safe(Context,
         'Weapons', get_weapon, [Gun, self_to_bin()]).
 
 call_client_transport_error_test(_) ->
     Gun = 'Wrong Type of Mega Destroyer',
     Id  = <<"call_client_transport_error">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Context1 = Context#{child_rpc_id => RpcId},
+    Context = make_context(Id),
+    Context1 = Context#{child_seq => 1},
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
         error:{?ERROR_PROTOCOL(_), Context1} -> ok
@@ -348,8 +327,8 @@ call_client_transport_error_test(_) ->
 call_safe_server_transport_error_test(_) ->
     Id      = <<"call_safe_server_transport_error">>,
     Armor   = <<"Helmet">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {{error, ?ERROR_TRANSPORT(server_error)}, Context#{child_seq => 1}},
     Expect  = call_safe(Context, 'Powerups', get_powerup,
         [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
@@ -359,8 +338,8 @@ call_server_transport_error_test(_) ->
 
 do_call_server_transport_error(Id) ->
     Armor   = <<"Helmet">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {?ERROR_TRANSPORT(server_error), Context#{child_seq => 1}},
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
         error:Expect -> ok
@@ -370,27 +349,24 @@ do_call_server_transport_error(Id) ->
 call_oneway_void_test(_) ->
     Id      = <<"call_oneway_void_test">>,
     Armor   = <<"Helmet">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {ok, Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {ok, Context#{child_seq => 1}},
     Expect  = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg({Id, Armor}).
 
 call_async_ok_test(C) ->
-    Sup        = proplists:get_value(sup, C),
-    Pid        = self(),
-    Callback   = fun(Res) -> collect(Res, Pid) end,
-    Id1        = <<"call_async_ok1">>,
-    Context1   =  #{rpc_id := RpcId1} = make_context(Id1),
-    Context1Exp =  Context1#{child_rpc_id => RpcId1},
-    {ok, Pid1, Context1Exp} = get_weapon(Context1, Sup, Callback, <<"Impact Hammer">>),
-    Id2        = <<"call_async_ok2">>,
-    Context2   = make_context(Id2),
-    Context2   =  #{rpc_id := RpcId2} = make_context(Id2),
-    Context2Exp =  Context2#{child_rpc_id => RpcId2},
-    {ok, Pid2, Context2Exp} = get_weapon(Context2, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg({Context1Exp,
+    Sup      = proplists:get_value(sup, C),
+    Pid      = self(),
+    Callback = fun(Res) -> collect(Res, Pid) end,
+    Id       = <<"call_async_ok">>,
+    Context0 = make_context(Id),
+    Context1 = Context0#{child_seq => 1},
+    {ok, Pid1, Context1} = get_weapon(Context0, Sup, Callback, <<"Impact Hammer">>),
+    Context2 =  Context1#{child_seq => 2},
+    {ok, Pid2, Context2} = get_weapon(Context1, Sup, Callback, <<"Flak Cannon">>),
+    {ok, Pid1} = receive_msg({Context1,
         genlib_map:get(<<"Impact Hammer">>, ?WEAPONS)}),
-    {ok, Pid2} = receive_msg({Context2Exp,
+    {ok, Pid2} = receive_msg({Context2,
         genlib_map:get(<<"Flak Cannon">>, ?WEAPONS)}).
 
 get_weapon(Context, Sup, Cb, Gun) ->
@@ -402,18 +378,18 @@ collect({Result, Context}, Pid) ->
 span_ids_sequence_test(_) ->
     Id      = <<"span_ids_sequence">>,
     Current = genlib_map:get(<<"Enforcer">>, ?WEAPONS),
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_seq => 1}},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
-span_ids_sequence_with_context_annotation_test(_) ->
-    Id      = <<"span_ids_sequence_with_context_annotation">>,
+span_ids_sequence_with_context_meta_test(_) ->
+    Id      = <<"span_ids_sequence_with_context_meta">>,
     Gun     = <<"Enforcer">>,
     Current = genlib_map:get(Gun, ?WEAPONS),
-    Context = #{rpc_id := RpcId} = woody_context:new(
-        Id, ?MODULE, #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
-    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_rpc_id => RpcId}},
+    Context = woody_context:new(Id, ?MODULE,
+        #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
+    Expect  = {genlib_map:get(<<"Ripper">>, ?WEAPONS), Context#{child_seq => 1}},
     Expect  = call(Context, 'Weapons', switch_weapon,
         [Current, next, 1, self_to_bin()]).
 
@@ -422,9 +398,9 @@ call_with_client_pool_test(_) ->
     ok   = woody_client_thrift:start_pool(Pool, 10),
     Id   = <<"call_with_client_pool">>,
     Gun  =  <<"Enforcer">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
+    Context = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
-    Expect = {genlib_map:get(Gun, ?WEAPONS), Context#{child_rpc_id => RpcId}},
+    Expect = {genlib_map:get(Gun, ?WEAPONS), Context#{child_seq => 1}},
     Expect = woody_client:call(
         Context,
         {Service, get_weapon, [Gun, self_to_bin()]},
@@ -461,7 +437,7 @@ server_http_request_validation_test(_) ->
     Headers = [
         {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(Id)},
         {?HEADER_NAME_RPC_ID        , genlib:to_binary(Id)},
-        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(<<"undefined">>)},
+        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(?ROOT_REQ_PARENT_ID)},
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT}
     ],
@@ -487,25 +463,25 @@ server_http_request_validation_test(_) ->
 call_pass_through_ok_test(_) ->
     Id      = <<"call_pass_through_ok">>,
     Armor   = <<"AntiGrav Boots">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {genlib_map:get(Armor, ?POWERUPS), Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {genlib_map:get(Armor, ?POWERUPS), Context#{child_seq => 1}},
     Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]).
 
 call_pass_through_except_test(_) ->
     Id      = <<"call_pass_through_except">>,
     Armor   = <<"Shield Belt">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect = {?EXCEPT_POWERUP_FAILURE("run out"), Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {?EXCEPT_POWERUP_FAILURE("run out"), Context#{child_seq => 1}},
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
         throw:Expect -> ok
     end.
 
 call_no_pass_through_bad_ok_test(_) ->
-    Id      = <<"call_no_pass_through_bad_ok">>,
-    Armor   = <<"AntiGrav Boots">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Context1 = Context#{child_rpc_id => RpcId},
+    Id       = <<"call_no_pass_through_bad_ok">>,
+    Armor    = <<"AntiGrav Boots">>,
+    Context  = make_context(Id),
+    Context1 = Context#{child_seq => 1},
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
         error:{?ERROR_TRANSPORT(server_error), Context1} ->
@@ -513,10 +489,10 @@ call_no_pass_through_bad_ok_test(_) ->
     end.
 
 call_no_pass_through_bad_except_test(_) ->
-    Id      = <<"call_no_pass_through_bad_except">>,
-    Armor   = <<"Shield Belt">>,
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Context1 = Context#{child_rpc_id => RpcId},
+    Id       = <<"call_no_pass_through_bad_except">>,
+    Armor    = <<"Shield Belt">>,
+    Context  = make_context(Id),
+    Context1 = Context#{child_seq => 1},
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
         error:{?ERROR_TRANSPORT(server_error), Context1} ->
@@ -552,14 +528,14 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{annotation_test_id := AnnotTestId}) ->
-    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), CurrentWeapon}),
-    CheckAnnot = is_annotation_check_required(AnnotTestId, woody_context:get_rpc_id(trace_id, Context)),
-    ok = check_annotation(CheckAnnot, Context, CurrentWeapon),
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{meta_test_id := AnnotTestId}) ->
+    ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), CurrentWeapon}),
+    CheckAnnot = is_meta_check_required(AnnotTestId, woody_context:get_rpc_id(trace_id, Context)),
+    ok = check_meta(CheckAnnot, Context, CurrentWeapon),
     switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot);
 
 handle_function(get_weapon, {Name, To}, Context, _Opts) ->
-    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     Res = case genlib_map:get(Name, ?WEAPONS) of
         #'Weapon'{ammo = 0}  ->
             throw({?WEAPON_FAILURE("out of ammo"), Context});
@@ -570,7 +546,7 @@ handle_function(get_weapon, {Name, To}, Context, _Opts) ->
 
 %% Powerups
 handle_function(get_powerup, {Name, To}, Context, _Opts) ->
-    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     {return_powerup(Name, Context), Context};
 
 handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
@@ -580,7 +556,7 @@ handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
     call(Context, 'Powerups', get_powerup, [Name, To]);
 
 handle_function(like_powerup, {Name, To}, Context, _Opts) ->
-    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Name}),
+    ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     {ok, Context}.
 
 %%
@@ -629,14 +605,14 @@ get_service_endpoint('Powerups') ->
     }.
 
 gun_test_basic(CallFun, Id, Gun, ExpectRes, WithMsg) ->
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {ExpectRes, Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {ExpectRes, Context#{child_seq => 1}},
     Expect  = ?MODULE:CallFun(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]),
     check_msg(WithMsg, Id, Gun).
 
 gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
-    Context = #{rpc_id := RpcId} = make_context(Id),
-    Expect  = {Exception, Context#{child_rpc_id => RpcId}},
+    Context = make_context(Id),
+    Expect  = {Exception, Context#{child_seq => 1}},
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
         Class:Expect -> ok
@@ -665,7 +641,7 @@ switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
     end.
 
 annotate_weapon(true, Context, WName, WPos) ->
-    woody_context:annotate(Context, #{genlib:to_binary(WPos) => WName});
+    woody_context:add_meta(Context, #{genlib:to_binary(WPos) => WName});
 annotate_weapon(_, Context, _, _) ->
     Context.
 
@@ -679,11 +655,11 @@ next_weapon(Pos, _) when is_integer(Pos), Pos >= 0, Pos < 10 ->
 next_weapon(_, Context) ->
     throw({?POS_ERROR, Context}).
 
-validate_next_context(true, #{seq := NextSeq, annotation := NextAnnot}, #{seq := Seq, annotation := Annot}) ->
+validate_next_context(true, #{child_seq := NextSeq, meta := NextAnnot}, #{child_seq := Seq, meta := Annot}) ->
     NextSeq = Seq + 1,
     NextAnnot = maps:merge(NextAnnot, Annot), %% check that Annot map is a submap of NextAnnot
     ok;
-validate_next_context(false, #{seq := NextSeq}, #{seq := Seq}) ->
+validate_next_context(false, #{child_seq := NextSeq}, #{child_seq := Seq}) ->
     NextSeq = Seq + 1,
     ok.
 
@@ -719,14 +695,14 @@ receive_msg(Msg) ->
         error(get_msg_timeout)
     end.
 
-is_annotation_check_required(AnnotTestId, AnnotTestId) ->
+is_meta_check_required(AnnotTestId, AnnotTestId) ->
     true;
-is_annotation_check_required(_, _) ->
+is_meta_check_required(_, _) ->
     false.
 
-check_annotation(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
+check_meta(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
     WSlotBin = genlib:to_binary(WSlot),
-    WName = woody_context:annotation(WSlotBin, Context),
+    WName = woody_context:get_meta(WSlotBin, Context),
     ok;
-check_annotation(_, _, _) ->
+check_meta(_, _, _) ->
     ok.
