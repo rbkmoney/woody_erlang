@@ -22,10 +22,10 @@
 
 
 %% Behaviour definition
--callback call(woody_context:ctx(), request(), options()) -> result_all().
+-callback call(woody_context:ctx(), request(), options()) -> result().
 
 %% Types
--export_type([result_all/0, result_ok/0]).
+-export_type([result/0, result_ok/0]).
 -export_type([options/0, callback/0]).
 
 -type request() :: any().
@@ -33,17 +33,16 @@
 -type options() :: #{
     protocol  => thrift,     %% optional
     transport => http,       %% optional
-    url       => woody_t:url() %% mandatory
+    url       => woody:url() %% mandatory
 }.
 
 -type result_ok() :: woody_server_thrift_handler:result().
 
--type result_all() ::
-    {ok,        result_ok            ()} |
-    {exception, woody_error:exception()} |
-    {error    , woody_error:error    ()}.
+-type result() ::
+    {ok    , result_ok        ()} |
+    {error , woody_error:error()}.
 
--type callback() :: fun((result_all()) -> _).
+-type callback() :: fun((result()) -> _).
 
 
 %%
@@ -55,36 +54,34 @@ call(Context, Request, Options) ->
     case call_safe(Context, Request, Options) of
         {ok, Result} ->
             Result;
-        {exception, Except} ->
-            erlang:throw(Except);
-        {error, Error} ->
+        {error, {business, Error}} ->
+            erlang:throw(Error);
+        {error, {system, Error}} ->
             erlang:error(Error)
     end.
 
 -spec call_safe(woody_context:ctx(), request(), options()) ->
-    result_all().
+    result().
 call_safe(Context, Request, Options) ->
-    ProtocolHandler = woody_t:get_protocol_handler(client, Options),
+    ProtocolHandler = woody:get_protocol_handler(client, Options),
     try ProtocolHandler:call(woody_context:next(Context), Request, Options) of
         Resp = {ok, _} ->
             Resp;
-        Except = {exception, _} ->
-            Except;
-        Error = {error, _} ->
+        Error = {error, {system, _}} ->
             Error;
         Other ->
-            make_error(error, Other)
+            {error, {system, {internal, result_unexpected, format_error(Other)}}}
     catch
-        error:Error ->
-            return_error(woody_error:is_error(Error), Error);
+        error:Error = {system, _} ->
+            {error, Error};
         Class:Reason ->
-            make_error(Class, Reason)
+            {error, {system, {internal, result_unexpected, format_error(Class, Reason, erlang:get_stacktrace())}}}
     end.
 
--spec call_async(woody_t:sup_ref(), callback(), woody_context:ctx(), request(), options()) ->
+-spec call_async(woody:sup_ref(), callback(), woody_context:ctx(), request(), options()) ->
     {ok, pid()} | {error, _}.
 call_async(Sup, Callback, Context, Request, Options) ->
-    _ = woody_t:get_protocol_handler(client, Options),
+    _ = woody:get_protocol_handler(client, Options),
     SupervisorSpec = #{
         id       => {?MODULE, woody_clients_sup},
         start    => {supervisor, start_link, [?MODULE, woody_client_sup]},
@@ -138,10 +135,10 @@ init(woody_client_sup) ->
 %%
 %% Internal functions
 %%
-return_error(true, Error) ->
-    Error;
-return_error(false, Error) ->
-    make_error(error, Error).
+-spec format_error(term()) -> binary().
+format_error(Error) ->
+    genlib:to_binary(Error).
 
-make_error(Class, Reason) ->
-    {error, woody_error:make_error(internal, result_unexpected, {Class, Reason, erlang:get_stacktrace()})}.
+-spec format_error(atom(), term(), term()) -> binary().
+format_error(Class, Reason, Stacktrace) ->
+    genlib:to_binary([Class, Reason, Stacktrace]).

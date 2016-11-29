@@ -173,15 +173,14 @@ handle_success(Result, State = #state{service = Service}, Function, SeqId) ->
             send_reply(State, Function, ?tMessageType_REPLY, Reply, SeqId)
     end.
 
-handle_function_catch(error, Error, Stack, State, Function, SeqId) ->
-    handle_function_catch(woody_error:is_error(Error), Error, Stack, State, Function, SeqId);
 handle_function_catch(throw, Except, Stack, State, Function, SeqId) ->
     handle_exception(Except, Stack, State, Function, SeqId);
-handle_function_catch(exit, Error, Stack, State, Function, SeqId) ->
-    handle_internal_error(Error, Stack, State, Function, SeqId);
-handle_function_catch(true, Error, Stack, State, Function, SeqId) ->
+handle_function_catch(error, Error = {Source, Class, _}, Stack, State, Function, SeqId) when
+    Source =:= internal ; Source =:= external andalso
+    Class =:= resource_unavailable ; Class =:= result_unexpected ; Class =:= result_unknown
+->
     handle_woody_error(Error, Stack, State, Function, SeqId);
-handle_function_catch(false, Error, Stack, State, Function, SeqId) ->
+handle_function_catch(exit, Error, Stack, State, Function, SeqId) ->
     handle_internal_error(Error, Stack, State, Function, SeqId).
 
 
