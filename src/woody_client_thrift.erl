@@ -18,7 +18,7 @@
 
 -type except_thrift()  :: _OkException.
 -type error_protocol() :: ?ERROR_PROTOCOL(_).
--export_type([except_thrift/0, error_protocol/0]).
+
 
 -define(WOODY_OPTS, [protocol, transport]).
 -define(thrift_cast, oneway_void).

@@ -11,18 +11,21 @@
 %% behaviour definition
 %%
 -type error_reason() :: any().
--type result()       :: any().
 -type handler_opts() :: term().
 -type args()         :: tuple().
--export_type([handler_opts/0, args/0, result/0, error_reason/0]).
+-export_type([handler_opts/0, args/0, error_reason/0]).
 
 -type except() :: {_ThriftExcept, woody_context:ctx()}.
 -export_type([except/0]).
 
+-type result() :: ok | any().
+-export_type([result/0]).
+
 -callback handle_function(woody_t:func(), args(),
     woody_context:ctx(), handler_opts())
 ->
-    {ok | result(), woody_context:ctx()} | no_return().
+    result() | no_return().
+
 
 %%
 %% API
@@ -132,11 +135,10 @@ handle_function(Function, InParams, State = #state{protocol = Protocol}, SeqId) 
     end.
 
 try_call_handler(Function, Args, State, SeqId) ->
-    try handle_result(call_handler(Function, Args, State), State, Function, SeqId)
+    try handle_success(call_handler(Function, Args, State), State, Function, SeqId)
     catch
         Class:Reason ->
-            handle_function_catch(State, Function, Class, Reason,
-                erlang:get_stacktrace(), SeqId)
+            handle_function_catch(Class, Reason, erlang:get_stacktrace(), State, Function, SeqId)
     end.
 
 call_handler(Function, Args, #state{
@@ -154,12 +156,7 @@ call_handler(Function, Args, #state{
     _ = log_rpc_result(ok, Context, #{result => Result}),
     Result.
 
-handle_result({ok, _Context}, State, Function, SeqId) ->
-    handle_success(State, Function, ok, SeqId);
-handle_result({Response, _Context}, State, Function, SeqId) ->
-    handle_success(State, Function, Response, SeqId).
-
-handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
+handle_success(Result, State = #state{service = Service}, Function, SeqId) ->
     ReplyType = get_function_info(Service, Function, reply_type),
     StructName = atom_to_list(Function) ++ "_result",
     case Result of
@@ -176,36 +173,51 @@ handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
             send_reply(State, Function, ?tMessageType_REPLY, Reply, SeqId)
     end.
 
-handle_function_catch(State = #state{
-        context       = Context,
-        service       = Service
-    }, Function, Class, Reason, Stack, SeqId)
-->
-    ReplyType = get_function_info(Service, Function, reply_type),
-    case {Class, Reason} of
-        _Error when ReplyType =:= oneway_void ->
-            _ = log_rpc_result(error, Context,
-                #{class => Class, reason => Reason, ignore => true}),
-            {State, noreply};
-        {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
-            _ = log_rpc_result(error, Context,
-                #{class => throw, reason => Exception, ignore => false}),
-            handle_exception(State, Function, Exception, SeqId);
-        {throw, Exception} ->
-            _ = log_rpc_result(error, Context,
-                #{class => throw, reason => Exception, ignore => false}),
-            handle_unknown_exception(State, Function, Exception, SeqId);
-        {Error, Reason} when Error =:= error orelse Error =:= exit ->
-            _ = log_rpc_result(error, Context,
-                #{class => error, reason => Reason, stack => Stack, ignore => false}),
-            Reason1 = short_reason(Reason),
-            handle_error(State, Function, Reason1, SeqId)
-    end.
+handle_function_catch(error, Error, Stack, State, Function, SeqId) ->
+    handle_function_catch(woody_error:is_error(Error), Error, Stack, State, Function, SeqId);
+handle_function_catch(throw, Except, Stack, State, Function, SeqId) ->
+    handle_exception(Except, Stack, State, Function, SeqId);
+handle_function_catch(exit, Error, Stack, State, Function, SeqId) ->
+    handle_internal_error(Error, Stack, State, Function, SeqId);
+handle_function_catch(true, Error, Stack, State, Function, SeqId) ->
+    handle_woody_error(Error, Stack, State, Function, SeqId);
+handle_function_catch(false, Error, Stack, State, Function, SeqId) ->
+    handle_internal_error(Error, Stack, State, Function, SeqId).
 
-short_reason(Reason) when is_tuple(Reason) ->
-    element(1, Reason);
-short_reason(Reason) ->
-    Reason.
+
+%% handle_function_catch(State = #state{
+%%         context       = Context,
+%%         service       = Service
+%%     }, Stack, Function, SeqId)
+%% ->
+%%     ReplyType = get_function_info(Service, Function, reply_type),
+%%     map_error(Class, Reason),
+%%     case {Class, Reason} of
+%%         _Error when ReplyType =:= oneway_void ->
+%%             _ = log_rpc_result(error, Context,
+%%                 #{class => Class, reason => Reason, ignore => true}),
+%%             {State, noreply};
+%%         {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
+%%             _ = log_rpc_result(error, Context,
+%%                 #{class => throw, reason => Exception, ignore => false}),
+%%             handle_exception(State, Function, Exception, SeqId);
+%%         {throw, Exception} ->
+%%             _ = log_rpc_result(error, Context,
+%%                 #{class => throw, reason => Exception, ignore => false}),
+%%             handle_unknown_exception(State, Function, Exception, SeqId);
+%%         {Error, Reason} when Error =:= error orelse Error =:= exit ->
+%%             _ = log_rpc_result(error, Context,
+%%                 #{class => error, reason => Reason, stack => Stack, ignore => false}),
+%%             Reason1 = short_reason(Reason),
+%%             handle_error(State, Function, Reason1, SeqId)
+%%     end.
+
+
+
+%% short_reason(Reason) when is_tuple(Reason) ->
+%%     element(1, Reason);
+%% short_reason(Reason) ->
+%%     Reason.
 
 handle_exception(State, Function, {exception, Exception}, SeqId) ->
     handle_exception(State, Function, Exception, SeqId);
