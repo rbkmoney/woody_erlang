@@ -37,7 +37,7 @@
 
 -type options() :: #{
     handlers      => list(server_handler()),
-    event_handler => woody_t:handler(),
+    event_handler => woody:handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
     net_opts      => net_opts()

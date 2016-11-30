@@ -21,7 +21,7 @@
 -type result() :: ok | any().
 -export_type([result/0]).
 
--callback handle_function(woody_t:func(), args(),
+-callback handle_function(woody:func(), args(),
     woody_context:ctx(), handler_opts())
 ->
     result() | no_return().
@@ -39,18 +39,18 @@
 
 -record(state, {
     context           :: woody_context:ctx(),
-    service           :: woody_t:service(),
-    handler           :: woody_t:handler(),
+    service           :: woody:service(),
+    handler           :: woody:handler(),
     handler_opts      :: handler_opts(),
     protocol          :: any(),
     protocol_stage    :: ?STAGE_READ | ?STAGE_WRITE,
-    transport_handler :: woody_t:handler()
+    transport_handler :: woody:handler()
 }).
 
--type thrift_handler() :: {woody_t:service(), woody_t:handler(), handler_opts()}.
+-type thrift_handler() :: {woody:service(), woody:handler(), handler_opts()}.
 -export_type([thrift_handler/0]).
 
--type transport_handler() :: woody_t:handler().
+-type transport_handler() :: woody:handler().
 
 -spec start(thrift_transport:t_transport(), thrift_handler(), transport_handler(), woody_context:ctx())
 ->

@@ -14,7 +14,7 @@
 
 %% Types
 -type args()    :: any().
--type request() :: {woody_t:service(), woody_t:func(), args()}.
+-type request() :: {woody:service(), woody:func(), args()}.
 
 -type except_thrift()  :: _OkException.
 -type error_protocol() :: ?ERROR_PROTOCOL(_).

@@ -21,5 +21,5 @@
 
 -spec child_spec(_Id, options()) -> supervisor:child_spec().
 child_spec(Id, Options) ->
-    ProtocolHandler = woody_t:get_protocol_handler(server, Options),
+    ProtocolHandler = woody:get_protocol_handler(server, Options),
     ProtocolHandler:child_spec(Id, Options).
