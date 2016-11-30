@@ -40,7 +40,7 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
     _ = woody_event_handler:handle_event(
             woody_context:get_ev_handler(Context),
             ?EV_CALL_SERVICE,
-            woody_context:get_child_rpc_id(Context),
+            woody_context:get_rpc_id(Context),
             #{
                 service  => ServiceName,
                 function => Function,
@@ -116,6 +116,6 @@ log_rpc_result(Status, Result, Context) ->
     woody_event_handler:handle_event(
         woody_context:get_ev_handler(Context),
         ?EV_SERVICE_RESULT,
-        woody_context:get_child_rpc_id(Context),
+        woody_context:get_rpc_id(Context),
         #{status => Status, result => Result}
     ).

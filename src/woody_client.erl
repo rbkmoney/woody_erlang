@@ -56,15 +56,15 @@ call(Context, Request, Options) ->
             Result;
         {error, {business, Error}} ->
             erlang:throw(Error);
-        {error, {system, Error}} ->
-            erlang:error(Error)
+        {error, {system, {Source, Class, Details}}} ->
+            woody_error:raise(Source, Class, Details)
     end.
 
 -spec call_safe(woody_context:ctx(), request(), options()) ->
     result().
 call_safe(Context, Request, Options) ->
     ProtocolHandler = woody:get_protocol_handler(client, Options),
-    try ProtocolHandler:call(woody_context:next(Context), Request, Options) of
+    try ProtocolHandler:call(woody_context:new_child(Context), Request, Options) of
         Resp = {ok, _} ->
             Resp;
         Error = {error, {system, _}} ->
@@ -137,8 +137,10 @@ init(woody_client_sup) ->
 %%
 -spec format_error(term()) -> binary().
 format_error(Error) ->
+    %% ToDo
     genlib:to_binary(Error).
 
 -spec format_error(atom(), term(), term()) -> binary().
 format_error(Class, Reason, Stacktrace) ->
+    %% ToDo
     genlib:to_binary([Class, Reason, Stacktrace]).

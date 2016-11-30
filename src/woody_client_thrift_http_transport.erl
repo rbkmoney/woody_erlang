@@ -105,14 +105,14 @@ flush(Transport = #{
     Headers = add_metadata_headers(Context, [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(woody_context:get_child_rpc_id(trace_id,  Transport))},
-        {?HEADER_NAME_RPC_ID        , genlib:to_binary(woody_context:get_child_rpc_id(span_id,   Transport))},
-        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(woody_context:get_child_rpc_id(parent_id, Transport))}
+        {?HEADER_NAME_RPC_ROOT_ID   , genlib:to_binary(woody_context:get_rpc_id(trace_id,  Transport))},
+        {?HEADER_NAME_RPC_ID        , genlib:to_binary(woody_context:get_rpc_id(span_id,   Transport))},
+        {?HEADER_NAME_RPC_PARENT_ID , genlib:to_binary(woody_context:get_rpc_id(parent_id, Transport))}
     ]),
     _ = woody_event_handler:handle_event(
         woody_context:get_ev_handler(Context),
         ?EV_CLIENT_SEND,
-        woody_context:get_child_rpc_id(Transport),
+        woody_context:get_rpc_id(Transport),
         #{url => Url}),
     case send(Url, Headers, WBuffer, maps:without([url], Options), Context) of
         {ok, Response} ->
@@ -184,5 +184,5 @@ log_response(Status, Context, Meta) ->
     woody_event_handler:handle_event(
         woody_context:get_ev_handler(Context),
         ?EV_CLIENT_RECEIVE,
-        woody_context:get_child_rpc_id(Context),
+        woody_context:get_rpc_id(Context),
         Meta#{status =>Status}).

@@ -175,12 +175,11 @@ handle_success(Result, State = #state{service = Service}, Function, SeqId) ->
 
 handle_function_catch(throw, Except, Stack, State, Function, SeqId) ->
     handle_exception(Except, Stack, State, Function, SeqId);
-handle_function_catch(error, Error = {Source, Class, _}, Stack, State, Function, SeqId) when
-    Source =:= internal ; Source =:= external andalso
-    Class =:= resource_unavailable ; Class =:= result_unexpected ; Class =:= result_unknown
-->
+handle_function_catch(error, {woody_error, Error}, Stack, State, Function, SeqId) ->
     handle_woody_error(Error, Stack, State, Function, SeqId);
-handle_function_catch(exit, Error, Stack, State, Function, SeqId) ->
+handle_function_catch(Class, Error, Stack, State, Function, SeqId) when
+    Class =:= error orelse Class =:= exit
+->
     handle_internal_error(Error, Stack, State, Function, SeqId).
 
 
