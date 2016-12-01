@@ -16,9 +16,9 @@
 -export([add_meta/2]).
 -export([get_meta/1, get_meta/2]).
 
--export([make_rpc_id/1, make_rpc_id/3]).
+-export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
--export([unique_int/0]).
+-export([new_unique_int/0]).
 
 %% For intenal use in woody_erlang
 -export([new_child/1]).
@@ -56,14 +56,14 @@ new(RpcId = #{}, EvHandler, Meta) ->
     make_ctx(RpcId, EvHandler, Meta);
 new(TraceId, EvHandler, Meta) ->
     new(
-        make_rpc_id(?ROOT_REQ_PARENT_ID, TraceId, new_req_id()),
+        new_rpc_id(?ROOT_REQ_PARENT_ID, TraceId, new_req_id()),
         EvHandler,
         Meta
     ).
 
 -spec new_child(ctx()) -> ctx().
 new_child(Context = #{rpc_id := #{trace_id := TraceId, span_id := SpanId}}) ->
-    Context#{rpc_id => make_rpc_id(SpanId, TraceId, new_req_id())}.
+    Context#{rpc_id => new_rpc_id(SpanId, TraceId, new_req_id())}.
 
 -spec add_meta(ctx(), meta()) ->
     ctx().
@@ -108,14 +108,14 @@ set_ev_handler(EvHandler, Context) ->
 get_ev_handler(#{event_handler := EvHandler}) ->
     EvHandler.
 
--spec make_rpc_id(woody:trace_id()) ->
-    woody:trace_id().
-make_rpc_id(TraceId) ->
-    make_rpc_id(?ROOT_REQ_PARENT_ID, TraceId, new_req_id()).
-
--spec make_rpc_id(woody:parent_id(), woody:trace_id(), woody:span_id()) ->
+-spec new_rpc_id(woody:trace_id()) ->
     woody:rpc_id().
-make_rpc_id(ParentId, TraceId, SpanId) ->
+new_rpc_id(TraceId) ->
+    new_rpc_id(?ROOT_REQ_PARENT_ID, TraceId, new_req_id()).
+
+-spec new_rpc_id(woody:parent_id(), woody:trace_id(), woody:span_id()) ->
+    woody:rpc_id().
+new_rpc_id(ParentId, TraceId, SpanId) ->
     #{
         parent_id => ParentId,
         trace_id  => TraceId,
@@ -125,11 +125,11 @@ make_rpc_id(ParentId, TraceId, SpanId) ->
 -spec new_req_id() ->
     woody:req_id().
 new_req_id() ->
-    genlib:to_binary(unique_int()).
+    genlib:to_binary(new_unique_int()).
 
--spec unique_int() ->
+-spec new_unique_int() ->
     pos_integer().
-unique_int() ->
+new_unique_int() ->
     <<Id:64>> = snowflake:new(?MODULE),
     Id.
 
@@ -138,11 +138,19 @@ unique_int() ->
 %%
 -spec make_ctx(woody:rpc_id(), woody:handler(), meta() | undefined) ->
     ctx() | no_return().
-make_ctx(RpcId, EvHandler, Meta) ->
+make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, EvHandler = {_, _}, Meta) ->
+    _ = genlib_map:foreach(fun check_req_id_limit/2, RpcId),
     init_meta(#{
         rpc_id        => RpcId,
         event_handler => EvHandler
-    }, Meta).
+               }, Meta);
+make_ctx(RpcId, EvHandler, Meta) ->
+    error(badarg, [RpcId, EvHandler, Meta]).
+
+check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 32 ->
+    ok;
+check_req_id_limit(Type, Id) ->
+    error(badarg, [Type, Id]).
 
 -spec init_meta(ctx(), meta() | undefined) -> ctx().
 init_meta(Context, undefined) ->
@@ -159,5 +167,5 @@ append_meta(MetaBase, MetaNew) ->
         SizeSum ->
             Meta;
         _ ->
-            error({badarg, meta_duplicates})
+            error(badarg, [MetaBase, MetaNew])
     end.

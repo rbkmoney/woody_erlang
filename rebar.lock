@@ -3,7 +3,7 @@
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"1.0.2">>},1},
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib.git",
-       {ref,"66db7fe296465a875b6894eb5ac944c90f82f913"}},
+       {ref,"ea85932ecf19fe39c87237fe5916ba1f65fc0bd6"}},
   0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.5.7">>},0},
  {<<"idna">>,{pkg,<<"idna">>,<<"1.2.0">>},1},
@@ -17,5 +17,5 @@
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.0">>},1},
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
-       {ref,"f132805904307376831fc2dd3780148b4b91aae2"}},
+       {ref,"aca7fca9f1a7161a1324bf5b92f8402c90d0519e"}},
   0}].

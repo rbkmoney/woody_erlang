@@ -3,14 +3,16 @@
 
 -module(woody_error).
 
--export([raise/3]).
+-export([raise/2]).
+-export([format_details/1, format_details_short/1]).
 
 %% API
 
 %% Types
 -export_type([error/0, business_error/0, system_error/0]).
--export_type([source/0, class/0, details/0]).
+-export_type([type/0, source/0, class/0, details/0]).
 
+-type type() :: business | system.
 -type error() ::
     {business , business_error()} |
     {system   , system_error  ()}.
@@ -22,6 +24,30 @@
 -type class  () :: resource_unavailable | result_unexpected | result_unknown.
 -type details() :: binary().
 
--spec raise(source(), class(), details()) -> no_return().
-raise(Source, Class, Details) ->
+
+-type erlang_except() :: throw | error | exit.
+-type stack() :: list().
+
+-export_type([erlang_except/0, stack/0]).
+
+%%
+%% API
+%%
+-spec raise(type(), business_error() | system_error()) -> no_return().
+raise(business, Except) ->
+    erlang:throw(Except);
+raise(system, {Source, Class, Details}) ->
     erlang:error({woody_error, {Source, Class, Details}}).
+
+-spec format_details(term()) -> details().
+format_details(Error) ->
+    genlib:to_binary(io_lib:format("~p", [Error])).
+
+-spec format_details_short(term()) -> details().
+format_details_short(Error) ->
+    format_details(short_reason(Error)).
+
+short_reason(Reason) when is_tuple(Reason) ->
+    element(1, Reason);
+short_reason(Reason) ->
+    Reason.

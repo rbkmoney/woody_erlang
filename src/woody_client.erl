@@ -20,20 +20,19 @@
 %% Supervisor callbacks
 -export([init/1]).
 
-
-%% Behaviour definition
--callback call(woody_context:ctx(), request(), options()) -> result().
-
 %% Types
 -export_type([result/0, result_ok/0]).
--export_type([options/0, callback/0]).
+-export_type([callback/0, request/0, options/0]).
 
--type request() :: any().
+-type request() :: woody_client_thrift:request().
 
 -type options() :: #{
     protocol  => thrift,     %% optional
     transport => http,       %% optional
     url       => woody:url() %% mandatory
+    %% Hint: for now hackney options can be passed thru this map as: key => value too
+    %% and will be converted to hackney options list. See hackney:request/5 for more info.
+    %% ToDo: disable this hack as soon as woody is coupled with nginx in µ container!
 }.
 
 -type result_ok() :: woody_server_thrift_handler:result().
@@ -44,6 +43,8 @@
 
 -type callback() :: fun((result()) -> _).
 
+%% Behaviour definition
+-callback call(woody_context:ctx(), request(), options()) -> result().
 
 %%
 %% API
@@ -54,34 +55,30 @@ call(Context, Request, Options) ->
     case call_safe(Context, Request, Options) of
         {ok, Result} ->
             Result;
-        {error, {business, Error}} ->
-            erlang:throw(Error);
-        {error, {system, {Source, Class, Details}}} ->
-            woody_error:raise(Source, Class, Details)
+        {error, {Type, Error}} ->
+            woody_error:raise(Type, Error)
     end.
 
 -spec call_safe(woody_context:ctx(), request(), options()) ->
     result().
 call_safe(Context, Request, Options) ->
-    ProtocolHandler = woody:get_protocol_handler(client, Options),
+    ProtocolHandler = woody_util:get_protocol_handler(client, Options),
     try ProtocolHandler:call(woody_context:new_child(Context), Request, Options) of
         Resp = {ok, _} ->
             Resp;
-        Error = {error, {system, _}} ->
+        Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error;
         Other ->
-            {error, {system, {internal, result_unexpected, format_error(Other)}}}
+            handle_client_error(Other, Context)
     catch
-        error:Error = {system, _} ->
-            {error, Error};
-        Class:Reason ->
-            {error, {system, {internal, result_unexpected, format_error(Class, Reason, erlang:get_stacktrace())}}}
+        _:Reason ->
+            handle_client_error(Reason, Context)
     end.
 
--spec call_async(woody:sup_ref(), callback(), woody_context:ctx(), request(), options()) ->
+-spec call_async(woody_context:ctx(), request(), options(), woody:sup_ref(), callback()) ->
     {ok, pid()} | {error, _}.
-call_async(Sup, Callback, Context, Request, Options) ->
-    _ = woody:get_protocol_handler(client, Options),
+call_async(Context, Request, Options, Sup, Callback) ->
+    _ = woody_util:get_protocol_handler(client, Options),
     SupervisorSpec = #{
         id       => {?MODULE, woody_clients_sup},
         start    => {supervisor, start_link, [?MODULE, woody_client_sup]},
@@ -135,12 +132,12 @@ init(woody_client_sup) ->
 %%
 %% Internal functions
 %%
--spec format_error(term()) -> binary().
-format_error(Error) ->
-    %% ToDo
-    genlib:to_binary(Error).
-
--spec format_error(atom(), term(), term()) -> binary().
-format_error(Class, Reason, Stacktrace) ->
-    %% ToDo
-    genlib:to_binary([Class, Reason, Stacktrace]).
+-spec handle_client_error(_Error, woody_context:ctx()) ->
+    {error, {system, {internal, result_unexpected, woody_error:details()}}}.
+handle_client_error(Error, Context) ->
+    Details = woody_error:format_details_short(Error),
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
+            #{error => client_error, reason => Details, stack => erlang:get_stacktrace()},
+            Context
+        ),
+    {error, {system, {internal, result_unexpected, <<"client error">>}}}.
