@@ -25,16 +25,29 @@
     path(),
     th_handler()
 }.
--type options() :: #{
-    protocol      => thrift,
-    transport     => http,
-    handlers      => list(http_handler()),
-    event_handler => woody:handler(),
-    ip            => inet:ip_address(),
-    port          => inet:port_address()
-}.
--export_type([http_handler/0, options/0]).
 
+%% See cowboy_protocol:opts() for details.
+%% ToDo: update/remove, when woody is coupled with nginx.
+-type net_opts() :: #{
+    max_header_value_length => non_neg_integer(),
+    max_headers             => non_neg_integer(),
+    max_keepalive           => non_neg_integer(),
+    timeout                 => timeout()
+}.
+-define(COWBOY_ALLOWED_OPTS,
+    [max_header_value_length, max_headers, max_keepalive, timeout]
+).
+
+-type options() :: #{
+    protocol   => thrift,
+    transport  => http,
+    handlers   => list(http_handler()),
+    ev_handler => woody:handler(),
+    ip         => inet:ip_address(),
+    port       => inet:port_address(),
+    net_ops    => net_opts() %% optional
+}.
+-export_type([http_handler/0, net_opts/0, options/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
 -type server_opts() :: #{
@@ -55,7 +68,7 @@
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 
-%% nginx should be configured to take care of various limits
+%% nginx should be configured to take care of various limits.
 -define(MAX_BODY_LENGTH, infinity).
 
 
@@ -64,9 +77,7 @@
 %%
 -spec child_spec(_Id, options()) ->
     supervisor:child_spec().
-child_spec(Id, #{
-    handlers      := Handlers,
-    event_handler := EvHandler,
+child_spec(Id, Opts = #{
     ip            := Ip,
     port          := Port
 }) ->
@@ -74,24 +85,28 @@ child_spec(Id, #{
         ?DEFAULT_ACCEPTORS_POOLSIZE
     ),
     {Transport, TransportOpts} = get_socket_transport(Ip, Port),
-    CowboyOpts = get_cowboy_config(Handlers, EvHandler),
+    CowboyOpts = get_cowboy_config(Opts),
     ranch:child_spec({?MODULE, Id}, AcceptorsPool,
         Transport, TransportOpts, cowboy_protocol, CowboyOpts).
 
 get_socket_transport(Ip, Port) ->
     {ranch_tcp, [{ip, Ip}, {port, Port}]}.
 
--spec get_cowboy_config(list(http_handler()), woody:handler()) ->
+-spec get_cowboy_config(options()) -> cowboy_protocol:opts().
+get_cowboy_config(Opts = #{handlers := Handlers, ev_handler := EvHandler}) ->
+    Paths      = get_paths(config(), EvHandler, Handlers, []),
+    CowboyOpts = get_cowboy_opts(maps:get(net_opts, Opts, undefined)),
+    HttpTrace  = get_http_trace(EvHandler, config()),
     [
-        {env, [{dispatch, cowboy_router:dispatch_rules()}]} |
-        {onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}
-    ].
-get_cowboy_config(Handlers, EvHandler) ->
-    Paths = get_paths(config(), EvHandler, Handlers, []),
-    Trace = transport_traces(EvHandler, config()),
-    [{env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]}] ++ Trace.
+        {env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]},
+        %% Limit woody_context:meta() key length to 53 bytes
+        %% according to woody requirements.
+        {max_header_name_length, 64}
+    ] ++ CowboyOpts ++ HttpTrace.
 
--spec get_paths(server_opts(), woody:handler(), list(http_handler()), list({path(), module(), state()})) ->
+-spec get_paths(server_opts(), woody:handler(), list(http_handler()),
+    list({path(), module(), state()}))
+->
     list({path(), module(), state()}).
 get_paths(_, _, [], Paths) ->
     Paths;
@@ -118,9 +133,15 @@ compile_filter_meta() ->
     {ok, Re} = re:compile([?HEADER_META_PREFIX], [unicode, caseless]),
     Re.
 
--spec transport_traces(woody:handler(), server_opts()) ->
+-spec get_cowboy_opts(net_opts() | undefined) -> cowboy_protocol:opts().
+get_cowboy_opts(undefined) ->
+    [];
+get_cowboy_opts(NetOps) ->
+    maps:to_list(maps:with(?COWBOY_ALLOWED_OPTS, NetOps)).
+
+-spec get_http_trace(woody:handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
-transport_traces(EvHandler, ServerOpts) ->
+get_http_trace(EvHandler, ServerOpts) ->
     [
         {onrequest, fun(Req) ->
             trace_req(genlib_app:env(woody, trace_http_server), Req, EvHandler, ServerOpts) end},

@@ -25,17 +25,15 @@
     context_given_trace_id_test/1,
     context_generated_rpc_id_test/1,
     ids_monotonic_incr_test/1,
-    call_safe_ok_test/1,
     call_ok_test/1,
-    call_safe_business_error_test/1,
+    call4_with_rpcid_ok_test/1,
+    call4_with_trace_id_ok_test/1,
+    call4_with_undefined_ok_test/1,
+    call5_with_trace_id_ok_test/1,
     call_business_error_test/1,
-    call_safe_throw_unexpected_test/1,
     call_throw_unexpected_test/1,
-    call_safe_system_external_error_test/1,
     call_system_external_error_test/1,
-    call_safe_client_error_test/1,
     call_client_error_test/1,
-    call_safe_server_internal_error_test/1,
     call_server_internal_error_test/1,
     call_oneway_void_test/1,
     call_async_ok_test/1,
@@ -50,10 +48,6 @@
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1
 ]).
-
-%% internal API
--export([call/4, call_safe/4]).
-
 
 -define(THRIFT_DEFS, woody_test_thrift).
 
@@ -132,17 +126,15 @@ all() ->
         context_given_trace_id_test,
         context_generated_rpc_id_test,
         ids_monotonic_incr_test,
-        call_safe_ok_test,
         call_ok_test,
-        call_safe_business_error_test,
+        call4_with_rpcid_ok_test,
+        call4_with_trace_id_ok_test,
+        call4_with_undefined_ok_test,
+        call5_with_trace_id_ok_test,
         call_business_error_test,
-        call_safe_throw_unexpected_test,
         call_throw_unexpected_test,
-        call_safe_system_external_error_test,
         call_system_external_error_test,
-        call_safe_client_error_test,
         call_client_error_test,
-        call_safe_server_internal_error_test,
         call_server_internal_error_test,
         call_oneway_void_test,
         call_async_ok_test,
@@ -184,7 +176,6 @@ init_per_testcase(TC, C) when
       TC =:= context_given_trace_id_test   ;
       TC =:= context_generated_rpc_id_test ;
       TC =:= ids_monotonic_incr_test       ;
-      TC =:= call_safe_client_error_test   ;
       TC =:= call_client_error_test
 ->
     C;
@@ -195,11 +186,10 @@ init_per_testcase(_, C) ->
 
 start_woody_server(Id, Sup, Services) ->
     Server = woody:child_spec(Id, #{
-        handlers      => [get_handler(S) || S <- Services],
-        event_handler => {?MODULE, []},
-        ip            => ?SERVER_IP,
-        port          => ?SERVER_PORT,
-        net_opts      => []
+        handlers   => [get_handler(S) || S <- Services],
+        ev_handler => {?MODULE, []},
+        ip         => ?SERVER_IP,
+        port       => ?SERVER_PORT
     }),
     {ok, _} = supervisor:start_child(Sup, Server).
 
@@ -239,23 +229,23 @@ context_given_rpc_id_test(_) ->
     RpcId     = #{parent_id => ReqId, trace_id => ReqId, span_id => ReqId},
     EvHandler = {?MODULE, {}},
     #{
-        rpc_id        := RpcId,
-        event_handler := EvHandler
+        rpc_id     := RpcId,
+        ev_handler := EvHandler
     } = woody_context:new(RpcId, EvHandler).
 
 context_given_trace_id_test(_) ->
     TraceId   = <<"context_given_trace_id">>,
     EvHandler = {?MODULE, {}},
     #{
-        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _, trace_id := TraceId},
-        event_handler := EvHandler
+        rpc_id     := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _, trace_id := TraceId},
+        ev_handler := EvHandler
     } = woody_context:new(TraceId, EvHandler).
 
 context_generated_rpc_id_test(_) ->
     EvHandler = {?MODULE, {}},
     #{
         rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _GenId1, trace_id := _GenId2},
-        event_handler := EvHandler
+        ev_handler := EvHandler
     } = woody_context:new(undefined, EvHandler).
 
 ids_monotonic_incr_test(_) ->
@@ -270,34 +260,50 @@ ids_monotonic_incr_test(_) ->
                 end,
     Children = lists:sort(SortFun, Children).
 
-call_safe_ok_test(_) ->
-    Gun =  <<"Enforcer">>,
-    gun_test_basic(call_safe, <<"call_s_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
-
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
-    gun_test_basic(call, <<"call_ok">>, Gun, genlib_map:get(Gun, ?WEAPONS), true).
+    gun_test_basic(<<"call_ok">>, Gun, genlib_map:get(Gun, ?WEAPONS), true).
 
-call_safe_business_error_test(_) ->
-    Gun = <<"Bio Rifle">>,
-    gun_test_basic(call_safe, <<"call_s_business_error">>, Gun,
-        {error, {business, ?WEAPON_FAILURE("out of ammo")}}, true).
+call4_with_rpcid_ok_test(_) ->
+    ReqId = <<"call4_with_rpcid_ok">>,
+    call4_ok(woody_context:new_rpc_id(ReqId, ReqId, ReqId)).
+
+call4_with_trace_id_ok_test(_) ->
+    call4_ok(<<"call4_with_trace_id_ok">>).
+
+call4_with_undefined_ok_test(_) ->
+    call4_ok(undefined).
+
+call4_ok(Id) ->
+    Gun   = <<"Enforcer">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    EvHandler = {?MODULE, []},
+    Opts = #{url => Url},
+    Expect = genlib_map:get(Gun, ?WEAPONS),
+    try woody:call({Service, get_weapon, [Gun, self_to_bin()]}, Opts, Id, EvHandler)
+    catch
+        _:Expect -> ok
+    end.
+
+call5_with_trace_id_ok_test(_) ->
+    Id  = <<"call5_with_trace_id_ok">>,
+    Gun   = <<"Enforcer">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    EvHandler = {?MODULE, []},
+    Opts = #{url => Url},
+    Expect = genlib_map:get(Gun, ?WEAPONS),
+    try woody:call({Service, get_weapon, [Gun, self_to_bin()]}, Opts, Id, EvHandler,
+        #{<<"some_key">> => <<"some_value">>})
+    catch
+        _:Expect -> ok
+    end.
 
 call_business_error_test(_) ->
     Gun = <<"Bio Rifle">>,
-    gun_catch_test_basic(<<"call_business_error">>, Gun,
+    gun_test_basic(<<"call_business_error">>, Gun,
         {throw, ?WEAPON_FAILURE("out of ammo")}, true).
 
 -define(STACK_OVERFLOW, pos_out_of_boundaries).
-
-call_safe_throw_unexpected_test(_) ->
-    Id      = <<"call_s_throw_unexpected">>,
-    Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
-    Context = make_context(Id),
-    Error   = genlib:to_binary(?STACK_OVERFLOW),
-    Expext  = {error, {system, {external, result_unexpected, Error}}},
-    Expext  = call_safe(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()]),
-    {ok, _} = receive_msg(Current, Context).
 
 call_throw_unexpected_test(_) ->
     Id      = <<"call_throw_unexpected">>,
@@ -310,23 +316,12 @@ call_throw_unexpected_test(_) ->
     end,
     {ok, _} = receive_msg(Current, Context).
 
-call_safe_system_external_error_test(_) ->
-    Gun = <<"The Ultimate Super Mega Destroyer">>,
-    gun_test_basic(call_safe, <<"call_s_system_external_error">>, Gun,
-        {error, {system, {external, result_unexpected, <<"case_clause">>}}}, true).
-
 call_system_external_error_test(_) ->
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    gun_catch_test_basic(<<"call_system_external_error">>, Gun,
+    gun_test_basic(<<"call_system_external_error">>, Gun,
         {error, {woody_error, {external, result_unexpected, <<"case_clause">>}}}, true).
 
 -define(THRIFT_C_ERROR, <<"client thrift error">>).
-
-call_safe_client_error_test(_) ->
-    Gun     = 'Wrong Type of Mega Destroyer',
-    Context = make_context(<<"call_s_client_error">>),
-    Expect = {error, {system, {internal, result_unexpected, ?THRIFT_C_ERROR}}},
-    Expect = call_safe(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]).
 
 call_client_error_test(_) ->
     Gun     = 'Wrong Type of Mega Destroyer',
@@ -337,13 +332,6 @@ call_client_error_test(_) ->
     end.
 
 -define(THRIFT_S_ENCODE_ERROR, <<"thrift: encode error">>).
-
-call_safe_server_internal_error_test(_) ->
-    Armor   = <<"Helmet">>,
-    Context = make_context(<<"call_s_server_internal_error">>),
-    Expect  = {error, {system, {external, result_unexpected, ?THRIFT_S_ENCODE_ERROR}}},
-    Expect  = call_safe(Context, 'Powerups', get_powerup, [Armor, self_to_bin()]),
-    {ok, _} = receive_msg(Armor, Context).
 
 call_server_internal_error_test(_) ->
     Armor   = <<"Helmet">>,
@@ -433,11 +421,8 @@ call_with_client_pool_test(_) ->
     Context = make_context(<<"call_with_client_pool">>),
     {Url, Service} = get_service_endpoint('Weapons'),
     Expect = genlib_map:get(Gun, ?WEAPONS),
-    Expect = woody:call(
-        Context,
-        {Service, get_weapon, [Gun, self_to_bin()]},
-        #{url => Url, pool => Pool}
-    ),
+    Expect = woody:call({Service, get_weapon, [Gun, self_to_bin()]},
+                 #{url => Url, pool => Pool}, Context),
     {ok, _} = receive_msg(Gun, Context),
     ok = woody_client_thrift:stop_pool(Pool).
 
@@ -495,11 +480,10 @@ try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
     try
         woody:child_spec('bad_spec', #{
-            handlers      => [get_handler('Powerups'), NaughtyHandler],
-            event_handler => ?MODULE,
-            ip            => ?SERVER_IP,
-            port          => ?SERVER_PORT,
-            net_opts      => []
+            handlers   => [get_handler('Powerups'), NaughtyHandler],
+            ev_handler => ?MODULE,
+            ip         => ?SERVER_IP,
+            port       => ?SERVER_PORT
         })
     catch
         error:{bad_handler_spec, NaughtyHandler} ->
@@ -559,27 +543,26 @@ handle_event(Type, RpcId, Meta, _) ->
 %%
 %% internal functions
 %%
+gun_test_basic(Id, Gun, {Class, Expect}, WithMsg) ->
+    Context   = make_context(Id),
+    Expect    = try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+                catch
+                    Class:Except -> Except
+                end,
+    check_msg(WithMsg, Gun, Context);
+gun_test_basic(Id, Gun, Expect, WithMsg) ->
+    gun_test_basic(Id, Gun, {undefined, Expect}, WithMsg).
+
 make_context(ReqId) ->
     woody_context:new(ReqId, {?MODULE, []}).
 
 call(Context, ServiceName, Function, Args) ->
-    do_call(call, Context, ServiceName, Function, Args).
-
-call_safe(Context, ServiceName, Function, Args) ->
-    do_call(call_safe, Context, ServiceName, Function, Args).
-
-do_call(Call, Context, ServiceName, Function, Args) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    woody:Call(
-        Context,
-        {Service, Function, Args},
-        #{url => Url}
-    ).
+    woody:call({Service, Function, Args}, #{url => Url}, Context).
 
 call_async(Context, ServiceName, Function, Args, Sup, Callback) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    woody:call_async(Context, {Service, Function, Args},
-        #{url => Url}, Sup, Callback).
+    woody:call_async({Service, Function, Args}, #{url => Url}, Sup, Callback, Context).
 
 get_service_endpoint('Weapons') ->
     {
@@ -592,20 +575,6 @@ get_service_endpoint('Powerups') ->
         {?THRIFT_DEFS, 'Powerups'}
     }.
 
-gun_test_basic(CallFun, Id, Gun, ExpectRes, WithMsg) ->
-    Context   = make_context(Id),
-    ExpectRes = ?MODULE:CallFun(Context, 'Weapons', get_weapon,
-                    [Gun, self_to_bin()]),
-    check_msg(WithMsg, Gun, Context).
-
-gun_catch_test_basic(Id, Gun, {Class, Exception}, WithMsg) ->
-    Context   = make_context(Id),
-    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
-    catch
-        Class:Exception -> ok
-    end,
-    check_msg(WithMsg, Gun, Context).
-
 check_msg(true, Msg, Context) ->
     {ok, _} = receive_msg(Msg, Context);
 check_msg(false, _, _) ->
@@ -614,16 +583,14 @@ check_msg(false, _, _) ->
 switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift),
     ContextAnnot = annotate_weapon(CheckAnnot, Context, NextWName, NextWPos),
-    case call_safe(ContextAnnot, 'Weapons', get_weapon,
+    try call(ContextAnnot, 'Weapons', get_weapon,
              [NextWName, self_to_bin()])
-    of
-        {error, {business, #'WeaponFailure'{
+    catch
+        throw:#'WeaponFailure'{
             code   = <<"weapon_error">>,
             reason = <<"out of ammo">>
-        }}} ->
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot);
-        {ok, Weapon} ->
-            Weapon
+        } ->
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot)
     end.
 
 annotate_weapon(true, Context, WName, WPos) ->

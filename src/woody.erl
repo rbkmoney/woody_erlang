@@ -5,12 +5,17 @@
 
 -include("woody_defs.hrl").
 
-%% API
+%% Client API
 -export([call/3]).
--export([call_safe/3]).
 -export([call_async/5]).
 
+%% for root calls only
+-export([call/4, call/5]).
+-export([call_async/6, call_async/7]).
+
+%% Server API
 -export([child_spec/2]).
+
 
 %% Types
 -type req_id()    :: binary().
@@ -58,23 +63,54 @@
 %%
 %% API
 %%
--spec call(woody_context:ctx(), woody_client:request(), woody_client:options()) ->
-    woody_client:result_ok() | no_return().
-call(Context, Request, Options) ->
-    woody_client:call(Context, Request, Options).
 
--spec call_safe(woody_context:ctx(), woody_client:request(), woody_client:options()) ->
-    woody_client:result().
-call_safe(Context, Request, Options) ->
-    woody_client:call_safe(Context, Request, Options).
+%% client
+-spec call(woody_client:request(), woody_client:options(),
+    woody_context:ctx())
+->
+    woody_client:result() | no_return().
+call(Request, Options, Context) ->
+    woody_client:call(Request, Options, Context).
 
--spec call_async(woody_context:ctx(), woody_client:request(), woody_client:options(),
-    sup_ref(), woody_client:callback())
+%% Use call/4, call/5 only for root calls.
+-spec call(woody_client:request(), woody_client:options(),
+    woody_client:id(), handler())
+->
+    woody_client:result() | no_return().
+call(Request, Options, Id, EvHandler) ->
+    woody_client:call(Request, Options, Id, EvHandler).
+
+-spec call(woody_client:request(), woody_client:options(),
+    woody_client:id(), handler(), woody_context:meta() | undefined)
+->
+    woody_client:result() | no_return().
+call(Request, Options, Id, EvHandler, Meta) ->
+    woody_client:call(Request, Options, Id, EvHandler, Meta).
+
+
+-spec call_async(woody_client:request(), woody_client:options(), sup_ref(),
+    woody_client:async_cb(), woody_context:ctx())
 ->
     {ok, pid()} | {error, _}.
-call_async(Context, Request, Options, Sup, Callback) ->
-    woody_client:call_async(Context, Request, Options, Sup, Callback).
+call_async(Request, Options, Sup, Callback, Context) ->
+    woody_client:call_async(Request, Options, Sup, Callback, Context).
 
+%% Use call_async/6, call_async/7 only for root calls.
+-spec call_async(woody_client:request(), woody_client:options(), sup_ref(),
+    woody_client:async_cb(), woody_client:id(), handler())
+->
+    {ok, pid()} | {error, _}.
+call_async(Request, Options, Sup, Callback, Id, EvHandler) ->
+    woody_client:call_async(Request, Options, Sup, Callback, Id, EvHandler).
+
+-spec call_async(woody_client:request(), woody_client:options(), sup_ref(),
+    woody_client:async_cb(), woody_client:id(), handler(), woody_context:meta() | undefined)
+->
+    {ok, pid()} | {error, _}.
+call_async(Request, Options, Sup, Callback, Id, EvHandler, Meta) ->
+    woody_client:call_async(Request, Options, Sup, Callback, Id, EvHandler, Meta).
+
+%% server
 -spec child_spec(_Id, woody_server:options()) -> supervisor:child_spec().
 child_spec(Id, Options) ->
     woody_server:child_spec(Id, Options).

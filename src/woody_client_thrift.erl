@@ -34,7 +34,7 @@ stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
 -spec call(woody_context:ctx(), request(), woody_client:options()) ->
-    woody_client:result().
+    woody_client:safe_result().
 call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
     _ = log_event(?EV_CALL_SERVICE, Context,
             #{
@@ -77,7 +77,7 @@ make_thrift_client(Context, Service, TransportOpts) ->
     Client.
 
 -spec do_call(thrift_client(), woody:func(), args(), woody_context:ctx()) ->
-    woody_client:result().
+    woody_client:safe_result().
 do_call(Client, Function, Args, Context) when is_list(Args) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
@@ -94,8 +94,8 @@ do_call(Client, Function, Args, Context) when is_list(Args) ->
 do_call(Client, Function, Args, Context) ->
     do_call(Client, Function, [Args], Context).
 
--spec handle_result(woody_client:result() | {error, _ThriftError}, woody_context:ctx()) ->
-    woody_client:result().
+-spec handle_result(woody_client:safe_result() | {error, _ThriftError}, woody_context:ctx()) ->
+    woody_client:safe_result().
 handle_result(Res = {ok, ok}, Context) ->
     _ = log_event(?EV_SERVICE_RESULT, Context,
             #{status => ok, result => ?THRIFT_CAST}),

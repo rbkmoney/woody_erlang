@@ -93,6 +93,8 @@ flush(Transport = #{
         {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
         {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
     ]),
+
+    %% ToDo: don't pass client options to hackney, when woody is coupled with nginx.
     Options1 = maps:to_list(maps:without([url], Options)),
     _ = log_event(?EV_CLIENT_SEND, Context, #{url => Url}),
     case handle_result(hackney:request(post, Url, Headers, WBuffer, Options1), Context) of

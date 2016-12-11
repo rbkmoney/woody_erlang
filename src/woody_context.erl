@@ -30,7 +30,7 @@
 
 -type ctx() :: #{  %% The elements are madatory if not specified otherwise
     rpc_id        => woody:rpc_id(),
-    event_handler => woody:handler(),
+    ev_handler => woody:handler(),
     meta          => meta()  %% optional
 }.
 -type meta()     :: #{binary() => binary()}.
@@ -101,11 +101,11 @@ get_rpc_id(Key, Context) ->
 -spec set_ev_handler(woody:handler(), woody_context:ctx()) ->
     woody_context:ctx().
 set_ev_handler(EvHandler, Context) ->
-    Context#{event_handler := EvHandler}.
+    Context#{ev_handler := EvHandler}.
 
 -spec get_ev_handler(woody_context:ctx()) ->
     woody:handler().
-get_ev_handler(#{event_handler := EvHandler}) ->
+get_ev_handler(#{ev_handler := EvHandler}) ->
     EvHandler.
 
 -spec new_rpc_id(woody:trace_id()) ->
@@ -140,10 +140,7 @@ new_unique_int() ->
     ctx() | no_return().
 make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, EvHandler = {_, _}, Meta) ->
     _ = genlib_map:foreach(fun check_req_id_limit/2, RpcId),
-    init_meta(#{
-        rpc_id        => RpcId,
-        event_handler => EvHandler
-               }, Meta);
+    init_meta(#{rpc_id => RpcId, ev_handler => EvHandler}, Meta);
 make_ctx(RpcId, EvHandler, Meta) ->
     error(badarg, [RpcId, EvHandler, Meta]).
 
