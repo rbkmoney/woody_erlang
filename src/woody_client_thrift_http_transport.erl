@@ -30,7 +30,7 @@
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
--define(BAD_RESP_HEADER   , <<"bad woody.error headers">>).
+-define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
 
 %%
 %% API
@@ -114,9 +114,13 @@ close(Transport) ->
 %%
 -spec handle_result(_, woody_context:ctx()) ->
     {ok, woody:http_body()} | error().
-handle_result({ok, 200, _Headers, Ref}, Context) ->
+handle_result({ok, 200, Headers, Ref}, Context) ->
+    Meta = case check_error_reason(Headers, 200, Context) of
+        <<>>   -> #{};
+        Reason -> #{reason => Reason}
+    end,
     _ = log_event(?EV_CLIENT_RECEIVE, Context,
-            #{status => ok, code => 200}),
+            Meta#{status => ok, code => 200}),
     body(hackney:body(Ref), Context);
 handle_result({ok, Code, Headers, _Ref}, Context) ->
     {Class, Reason} = check_error_headers(Code, Headers, Context),
@@ -151,14 +155,7 @@ check_error_headers(502, Headers,  Context) ->
         Context
     );
 check_error_headers(Code, Headers, Context) ->
-    {
-        get_error_class(Code),
-        check_error_reason(
-            get_header_value(?HEADER_E_REASON, Headers),
-            Code,
-            Context
-        )
-    }.
+    {get_error_class(Code), check_error_reason(Headers, Code, Context)}.
 
 -spec get_error_class(woody:http_code()) -> woody_error:class().
 get_error_class(503) ->
@@ -173,35 +170,39 @@ get_error_class(_) ->
 check_502_error_class(none, Headers, Context) ->
     _ = log_event(?EV_TRACE, Context,
             #{event => <<?HEADER_E_CLASS/binary, " header missing">>}),
-    {result_unexpected, check_error_reason(
-        get_header_value(?HEADER_E_REASON, Headers), 522, Context)};
+    {result_unexpected, check_error_reason(Headers, 522, Context)};
 check_502_error_class(multiple, _, Context) ->
     _ = log_event(?EV_INTERNAL_ERROR, Context, #{error => ?ERROR_RESP_HEADER,
             reason => <<"multiple headers: ", ?HEADER_E_CLASS/binary>>}),
     {result_unexpected, ?BAD_RESP_HEADER};
 check_502_error_class(<<"result unexpected">>, Headers, Context) ->
-    {result_unexpected, check_error_reason(
-        get_header_value(?HEADER_E_REASON, Headers), 502, Context)};
+    {result_unexpected, check_error_reason(Headers, 502, Context)};
 check_502_error_class(<<"resource unavailable">>, Headers, Context) ->
-    {resource_unavailable, check_error_reason(
-        get_header_value(?HEADER_E_REASON, Headers), 502, Context)};
+    {resource_unavailable, check_error_reason(Headers, 502, Context)};
 check_502_error_class(Bad, _, Context) ->
     _ = log_event(?EV_INTERNAL_ERROR, Context, #{ error => ?ERROR_RESP_HEADER,
             reason => <<"unknown ", ?HEADER_E_CLASS/binary, " header value: ", Bad/binary>>}),
     {result_unexpected, ?BAD_RESP_HEADER}.
 
--spec check_error_reason(header_parse_value(), woody:http_code(), woody_context:ctx()) ->
+-spec check_error_reason(woody:http_headers(), woody:http_code(), woody_context:ctx()) ->
     woody_error:details().
-check_error_reason(none, Code, Context) ->
+check_error_reason(Headers, Code, Context) ->
+    do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, Context).
+
+-spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_context:ctx()) ->
+    woody_error:details().
+do_check_error_reason(none, 200, _Context) ->
+    <<>>;
+do_check_error_reason(none, Code, Context) ->
     _ = log_event(?EV_TRACE, Context,
             #{event => <<?HEADER_E_REASON/binary, " header missing">>}),
     BinCode = genlib:to_binary(Code),
     <<"http code: ", BinCode/binary>>;
-check_error_reason(multiple, _, Context) ->
+do_check_error_reason(multiple, _, Context) ->
     _ = log_event(?EV_INTERNAL_ERROR, Context, #{error => ?ERROR_RESP_HEADER,
             reason => <<"multiple headers: ", ?HEADER_E_REASON/binary>>}),
     ?BAD_RESP_HEADER;
-check_error_reason(Reason, _, _) ->
+do_check_error_reason(Reason, _, _) ->
     Reason.
 
 -spec get_error_class_header_value(woody:http_headers()) ->
