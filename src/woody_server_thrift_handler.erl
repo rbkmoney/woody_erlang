@@ -7,29 +7,16 @@
 -include_lib("thrift/include/thrift_protocol.hrl").
 -include("woody_defs.hrl").
 
-%% Behaviour definition
--type args() :: tuple().
--export_type([args/0]).
-
--type result() :: ok | any().
--export_type([result/0]).
-
--callback handle_function(woody:func(), args(), woody_context:ctx(), woody:options()) ->
-    result() | no_return().
-
 %% Types
 -type client_error() :: {client, woody_error:details()}.
 -export_type([client_error/0]).
 
--type handler() :: {woody:service(), woody:handler()}.
--export_type([handler/0]).
-
 -type state() :: #{
     context       => woody_context:ctx(),
-    handler       => woody:handler(),
+    handler       => woody:handler(woody:options()),
     service       => woody:service(),
     function      => wooody:func(),
-    args          => args(),
+    args          => woody:args(),
     th_proto      => term(),
     th_seqid      => term(),
     th_param_type => term(),
@@ -50,12 +37,15 @@
 -type thrift_error()         :: unknown_function | multiplexed_request | builtin_thrift_error().
 -type decode_error()         :: {error, thrift_error(), state()}.
 
+%% Behaviour definition
+-callback handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
+    woody:result() | no_return().
+
 
 %%
 %% API
 %%
--spec decode(binary(), handler(), woody_context:ctx())
-->
+-spec decode(binary(), woody:th_handler(), woody_context:ctx()) ->
     {ok, noreply | reply, state()} | {error, client_error()}.
 decode(Request, {Service, Handler}, Context) ->
     {ok, Transport} = thrift_membuffer_transport:new(Request),
@@ -82,8 +72,7 @@ handle(State = #{th_msg_type := MsgType}) ->
 
 %% Parse request
 -spec decode_begin(state()) ->
-    {ok, state()} |
-    decode_error().
+    {ok, state()} | decode_error().
 decode_begin(State = #{th_proto := Proto}) ->
     case thrift_protocol:read(Proto, message_begin) of
         {Proto1, #protocol_message_begin{name = Function, type = Type, seqid = SeqId}} when
@@ -110,8 +99,7 @@ get_function_name(Function) ->
     end.
 
 -spec get_params_type(woody:func() | {error, thrift_error()}, state()) ->
-    {ok, state()} |
-    decode_error().
+    {ok, state()} | decode_error().
 get_params_type({error, Error}, State) ->
     {error, Error, State};
 get_params_type(Function, State = #{service := Service}) ->
@@ -144,7 +132,7 @@ decode_request(Error = {error, _Error, _State}) ->
 decode_request({ok, State = #{th_proto := Proto, th_param_type := ParamsType}}) ->
     case thrift_protocol:read(Proto, ParamsType) of
         {Proto1, {ok, Args}} ->
-            {ok, State#{th_proto => Proto1, args => Args}};
+            {ok, State#{th_proto => Proto1, args => tuple_to_list(Args)}};
         {Proto1, {error, Error}} ->
             {error, Error, State#{th_rotocol => Proto1}}
     end.
@@ -194,7 +182,7 @@ call_handler_safe(State) ->
             handle_function_catch(Class, Reason, erlang:get_stacktrace(), State)
     end.
 
--spec call_handler(state()) -> result() | no_return().
+-spec call_handler(state()) -> woody:result() | no_return().
 call_handler(#{
     context  := Context,
     handler  := {Module, Opts},
@@ -213,7 +201,7 @@ call_handler(#{
         ),
     Module:handle_function(Function, Args, Context, Opts).
 
--spec handle_success(result(), state()) ->
+-spec handle_success(woody:result(), state()) ->
     {ok | {error, {system, woody_error:system_error()}}, state()}.
 handle_success(Result, State = #{
     function    := Function,

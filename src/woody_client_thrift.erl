@@ -13,10 +13,6 @@
 -export([call/3]).
 
 %% Types
--type args()    :: any().
--type request() :: {woody:service(), woody:func(), args()}.
--export_type([request/0, args/0]).
-
 -type thrift_client() :: term().
 
 -define(WOODY_OPTS, [protocol, transport]).
@@ -33,7 +29,7 @@ start_pool(Name, PoolSize) when is_integer(PoolSize) ->
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(woody_context:ctx(), request(), woody_client:options()) ->
+-spec call(woody_context:ctx(), woody:request(), woody_client:options()) ->
     woody_client:safe_result().
 call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
     _ = log_event(?EV_CALL_SERVICE, Context,
@@ -58,6 +54,7 @@ get_rpc_type({Module, Service}, Function) ->
         error:_ ->
             error(badarg, [{Module, Service}, Function])
     end.
+
 -spec get_rpc_type(atom()) -> woody:rpc_type().
 get_rpc_type(?THRIFT_CAST) -> cast;
 get_rpc_type(_) -> call.
@@ -76,9 +73,9 @@ make_thrift_client(Context, Service, TransportOpts) ->
     {ok, Client} = thrift_client:new(Protocol, Service),
     Client.
 
--spec do_call(thrift_client(), woody:func(), args(), woody_context:ctx()) ->
+-spec do_call(thrift_client(), woody:func(), woody:args(), woody_context:ctx()) ->
     woody_client:safe_result().
-do_call(Client, Function, Args, Context) when is_list(Args) ->
+do_call(Client, Function, Args, Context) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
             %% In case a server violates the requirements and sends
@@ -90,9 +87,7 @@ do_call(Client, Function, Args, Context) when is_list(Args) ->
                {Client1, {error, {business, ThriftExcept}}}
         end,
     _ = thrift_client:close(ClientNext),
-    handle_result(Result, Context);
-do_call(Client, Function, Args, Context) ->
-    do_call(Client, Function, [Args], Context).
+    handle_result(Result, Context).
 
 -spec handle_result(woody_client:safe_result() | {error, _ThriftError}, woody_context:ctx()) ->
     woody_client:safe_result().

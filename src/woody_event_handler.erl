@@ -134,7 +134,7 @@ handle_event(Event, Meta, Context) ->
     _ = Handler:handle_event(Event, woody_context:get_rpc_id(Context), add_request_meta(Event, Meta, Context), Opts),
     ok.
 
--spec handle_event(woody:handler(), ?EV_TRACE, undefined, meta_trace()) -> ok.
+-spec handle_event(woody:ev_handler(), ?EV_TRACE, undefined, meta_trace()) -> ok.
 handle_event({Handler, Opts}, Event, RpcId, Meta) ->
     _ = Handler:handle_event(Event, RpcId, Meta, Opts),
     ok.

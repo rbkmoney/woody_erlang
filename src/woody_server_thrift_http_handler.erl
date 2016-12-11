@@ -17,14 +17,6 @@
 
 
 %% Types
--type path()       :: '_' | iodata(). %% cowboy_router:route_match()
--type th_handler() :: woody_server_thrift_handler:handler().
--export_type([path/0, th_handler/0]).
-
--type http_handler() :: {
-    path(),
-    th_handler()
-}.
 
 %% See cowboy_protocol:opts() for details.
 %% ToDo: update/remove, when woody is coupled with nginx.
@@ -41,13 +33,13 @@
 -type options() :: #{
     protocol   => thrift,
     transport  => http,
-    handlers   => list(http_handler()),
-    ev_handler => woody:handler(),
+    handlers   => list(woody:http_handler(woody:th_handler())),
+    ev_handler => woody:ev_handler(),
     ip         => inet:ip_address(),
     port       => inet:port_address(),
     net_ops    => net_opts() %% optional
 }.
--export_type([http_handler/0, net_opts/0, options/0]).
+-export_type([net_opts/0, options/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
 -type server_opts() :: #{
@@ -56,10 +48,11 @@
 }.
 
 -type state() :: #{
-    url         => woody:url(),
-    context     => woody_context:ctx(),
+    th_handler  => woody:th_handler(),
+    ev_handler  => woody:ev_handler(),
     server_opts => server_opts(),
-    th_handler  => th_handler()
+    url         => woody:url(),
+    context     => woody_context:ctx()
 }.
 
 -type cowboy_init_result() ::
@@ -104,18 +97,18 @@ get_cowboy_config(Opts = #{handlers := Handlers, ev_handler := EvHandler}) ->
         {max_header_name_length, 64}
     ] ++ CowboyOpts ++ HttpTrace.
 
--spec get_paths(server_opts(), woody:handler(), list(http_handler()),
-    list({path(), module(), state()}))
+-spec get_paths(server_opts(), woody:ev_handler(),
+    list(woody:http_handler(woody:th_handler())), list({woody:path(), module(), state()}))
 ->
-    list({path(), module(), state()}).
+    list({woody:path(), module(), state()}).
 get_paths(_, _, [], Paths) ->
     Paths;
 get_paths(ServerOpts, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) ->
     get_paths(ServerOpts, EvHandler, T, [
         {PathMatch, ?MODULE, #{
+            th_handler  => {Service, Handler},
             ev_handler  => EvHandler,
-            server_opts => ServerOpts,
-            th_handler  => {Service, Handler}
+            server_opts => ServerOpts
         }} | Paths
     ]);
 get_paths(_, _, [Handler | _], _) ->
@@ -139,7 +132,7 @@ get_cowboy_opts(undefined) ->
 get_cowboy_opts(NetOps) ->
     maps:to_list(maps:with(?COWBOY_ALLOWED_OPTS, NetOps)).
 
--spec get_http_trace(woody:handler(), server_opts()) ->
+-spec get_http_trace(woody:ev_handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
 get_http_trace(EvHandler, ServerOpts) ->
     [
@@ -355,7 +348,7 @@ get_body(Req, #{max_body_length := MaxBody}) ->
             {{error, Reason}, <<>>, Req}
     end.
 
--spec handle_request(woody:http_body(), th_handler(),
+-spec handle_request(woody:http_body(), woody:th_handler(),
     woody_context:ctx(), cowboy_req:req())
 ->
     cowboy_req:req().
