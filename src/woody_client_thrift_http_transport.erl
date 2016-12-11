@@ -21,7 +21,7 @@
 -type woody_transport() :: #{
     context       => woody_context:ctx(),
     options       => map(),
-    write_buffer  => binary(),
+    write_buffer  => iolist(),
     read_buffer   => binary()
 }.
 
@@ -41,7 +41,7 @@ new(Context, TransportOpts = #{url := _Url}) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
         context       => Context,
         options       => TransportOpts,
-        write_buffer  => <<>>,
+        write_buffer  => [],
         read_buffer   => <<>>
     }),
     Transport.
@@ -60,10 +60,10 @@ stop_client_pool(Name) ->
 %%
 -spec write(woody_transport(), binary()) -> {woody_transport(), ok}.
 write(Transport = #{write_buffer := WBuffer}, Data) when
-    is_binary(WBuffer),
+    is_list(WBuffer),
     is_binary(Data)
 ->
-    {Transport#{write_buffer => <<WBuffer/binary, Data/binary>>}, ok}.
+    {Transport#{write_buffer => [WBuffer, Data]}, ok}.
 
 -spec read(woody_transport(), pos_integer()) -> {woody_transport(), {ok, binary()}}.
 read(Transport = #{read_buffer := RBuffer}, Len) when
@@ -83,7 +83,7 @@ flush(Transport = #{
     write_buffer  := WBuffer,
     read_buffer   := RBuffer
 }) when
-    is_binary(WBuffer),
+    is_list(WBuffer),
     is_binary(RBuffer)
 ->
     Headers = add_metadata_headers(Context, [
@@ -98,11 +98,11 @@ flush(Transport = #{
     case handle_result(hackney:request(post, Url, Headers, WBuffer, Options1), Context) of
         {ok, Response} ->
             {Transport#{
-                read_buffer  => <<RBuffer/binary, Response/binary>>,
-                write_buffer => <<>>
+                read_buffer  => Response,
+                write_buffer => []
             }, ok};
         Error ->
-            {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
+            {Transport#{read_buffer => <<>>, write_buffer => []}, Error}
     end.
 
 -spec close(woody_transport()) -> {woody_transport(), ok}.
