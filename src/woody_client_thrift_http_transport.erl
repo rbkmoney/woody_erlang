@@ -172,7 +172,7 @@ get_error_class(_) ->
 check_502_error_class(none, Headers, Context) ->
     _ = log_event(?EV_TRACE, Context,
             #{event => <<?HEADER_E_CLASS/binary, " header missing">>}),
-    {result_unexpected, check_error_reason(Headers, 522, Context)};
+    {result_unexpected, check_error_reason(Headers, 502, Context)};
 check_502_error_class(multiple, _, Context) ->
     _ = log_event(?EV_INTERNAL_ERROR, Context, #{error => ?ERROR_RESP_HEADER,
             reason => <<"multiple headers: ", ?HEADER_E_CLASS/binary>>}),

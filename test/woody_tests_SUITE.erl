@@ -8,6 +8,7 @@
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
+-behaviour(cowboy_http_handler).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -17,6 +18,9 @@
 
 %% woody_event_handler callbacks
 -export([handle_event/4]).
+
+%% cowboy_http_handler callbacks
+-export([init/3, handle/2, terminate/3]).
 
 %% common test API
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
@@ -30,19 +34,26 @@
     call4_with_trace_id_ok_test/1,
     call4_with_undefined_ok_test/1,
     call5_with_trace_id_ok_test/1,
+    call_async_ok_test/1,
+    call_oneway_void_test/1,
+    call_sequence_with_context_meta_test/1,
     call_business_error_test/1,
     call_throw_unexpected_test/1,
     call_system_external_error_test/1,
     call_client_error_test/1,
     call_server_internal_error_test/1,
-    call_oneway_void_test/1,
-    call_async_ok_test/1,
-    call_sequence_with_context_meta_test/1,
     call_pass_thru_ok_test/1,
     call_pass_thru_except_test/1,
     call_pass_thru_bad_result_test/1,
     call_pass_thru_bad_except_test/1,
+    call_pass_thru_result_unexpected_test/1,
     call_pass_thru_resource_unavail_test/1,
+    call_pass_thru_result_unknown_test/1,
+    call_no_headers_404_test/1,
+    call_no_headers_500_test/1,
+    call_no_headers_502_test/1,
+    call_no_headers_503_test/1,
+    call_no_headers_504_test/1,
     call_with_client_pool_test/1,
     call_thrift_multiplexed_test/1,
     server_http_req_validation_test/1,
@@ -109,13 +120,21 @@
     ?POWERUP(<<"Invisibility">>     , time_left = 0)
 }).
 
--define(SERVER_IP     , {0, 0, 0, 0}).
--define(SERVER_PORT   , 8085).
--define(URL_BASE      , "0.0.0.0:8085").
--define(PATH_WEAPONS  , "/v1/woody/test/weapons").
--define(PATH_POWERUPS , "/v1/woody/test/powerups").
+-define(SERVER_IP      , {0, 0, 0, 0}).
+-define(SERVER_PORT    , 8085).
+-define(URL_BASE       , "0.0.0.0:8085").
+-define(PATH_WEAPONS   , "/v1/woody/test/weapons").
+-define(PATH_POWERUPS  , "/v1/woody/test/powerups").
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
+
+-define(THRIFT_S_ERR_MULTIPLEX , <<"thrift: multiplexing (not supported)">>).
+-define(THRIFT_S_ERR_ENCODE    , <<"thrift: encode error">>).
+-define(THRIFT_C_ERROR         , <<"client thrift error">>).
+-define(WEAPON_STACK_OVERFLOW  , pos_out_of_boundaries).
+-define(BAD_POWERUP_REPLY      , powerup_unknown).
+-define(POWERUP_UNAVAILABLE    , <<"expired">>).
+-define(POWERUP_STATE_UNKNOWN  , <<"invisible">>).
 
 %%
 %% tests descriptions
@@ -131,19 +150,26 @@ all() ->
         call4_with_trace_id_ok_test,
         call4_with_undefined_ok_test,
         call5_with_trace_id_ok_test,
+        call_async_ok_test,
+        call_oneway_void_test,
+        call_sequence_with_context_meta_test,
         call_business_error_test,
         call_throw_unexpected_test,
         call_system_external_error_test,
         call_client_error_test,
         call_server_internal_error_test,
-        call_oneway_void_test,
-        call_async_ok_test,
         call_pass_thru_ok_test,
         call_pass_thru_except_test,
         call_pass_thru_bad_result_test,
         call_pass_thru_bad_except_test,
-        call_sequence_with_context_meta_test,
+        call_pass_thru_result_unexpected_test,
         call_pass_thru_resource_unavail_test,
+        call_pass_thru_result_unknown_test,
+        call_no_headers_404_test,
+        call_no_headers_500_test,
+        call_no_headers_502_test,
+        call_no_headers_503_test,
+        call_no_headers_504_test,
         call_with_client_pool_test,
         call_thrift_multiplexed_test,
         server_http_req_validation_test,
@@ -179,10 +205,32 @@ init_per_testcase(TC, C) when
       TC =:= call_client_error_test
 ->
     C;
+init_per_testcase(TC, C) when
+      TC =:= call_no_headers_404_test ;
+      TC =:= call_no_headers_500_test ;
+      TC =:= call_no_headers_502_test ;
+      TC =:= call_no_headers_503_test ;
+      TC =:= call_no_headers_504_test
+->
+    {ok, Sup} = start_tc_sup(),
+    {ok, _} = start_error_server(TC, Sup),
+    [{sup, Sup} | C];
 init_per_testcase(_, C) ->
-    {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+    {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C].
+
+start_tc_sup() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+start_error_server(TC, Sup) ->
+    Code      = get_fail_code(TC),
+    Dispatch  = cowboy_router:compile([{'_', [{?PATH_WEAPONS, ?MODULE, Code}]}]),
+    Server    = ranch:child_spec(woody_ct, 10, ranch_tcp,
+                 [{ip, ?SERVER_IP}, {port, ?SERVER_PORT}],
+                 cowboy_protocol, [{env, [{dispatch, Dispatch}]}]
+             ),
+    supervisor:start_child(Sup, Server).
 
 start_woody_server(Id, Sup, Services) ->
     Server = woody:child_spec(Id, #{
@@ -191,7 +239,7 @@ start_woody_server(Id, Sup, Services) ->
         ip         => ?SERVER_IP,
         port       => ?SERVER_PORT
     }),
-    {ok, _} = supervisor:start_child(Sup, Server).
+    supervisor:start_child(Sup, Server).
 
 get_handler('Powerups') ->
     {
@@ -207,19 +255,28 @@ get_handler('Weapons') ->
         }
     }.
 
-end_per_test_case(_, C) ->
-    Sup = proplists:get_value(sup, C),
-    exit(Sup, shutdown),
-    Ref = monitor(process, Sup),
-    receive
-        {'DOWN', Ref, process, Sup, _Reason} ->
-            demonitor(Ref),
-            ok
-    after 1000 ->
-        demonitor(Ref, [flush]),
-        error(exit_timeout)
-    end.
+get_fail_code(call_no_headers_404_test) -> 404;
+get_fail_code(call_no_headers_500_test) -> 500;
+get_fail_code(call_no_headers_502_test) -> 502;
+get_fail_code(call_no_headers_503_test) -> 503;
+get_fail_code(call_no_headers_504_test) -> 504.
 
+end_per_test_case(_, C) ->
+    case proplists:get_value(sup, C, undefined) of
+        undefined ->
+            ok;
+        Sup ->
+            exit(Sup, shutdown),
+            Ref = monitor(process, Sup),
+            receive
+                {'DOWN', Ref, process, Sup, _Reason} ->
+                    demonitor(Ref),
+                    ok
+            after 1000 ->
+                    demonitor(Ref, [flush]),
+                    error(exit_timeout)
+            end
+    end.
 
 %%
 %% tests
@@ -303,13 +360,11 @@ call_business_error_test(_) ->
     gun_test_basic(<<"call_business_error">>, Gun,
         {throw, ?WEAPON_FAILURE("out of ammo")}, true).
 
--define(STACK_OVERFLOW, pos_out_of_boundaries).
-
 call_throw_unexpected_test(_) ->
     Id      = <<"call_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
-    Error   = genlib:to_binary(?STACK_OVERFLOW),
+    Error   = genlib:to_binary(?WEAPON_STACK_OVERFLOW),
     try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
         error:{woody_error, {external, result_unexpected, Error}} -> ok
@@ -321,8 +376,6 @@ call_system_external_error_test(_) ->
     gun_test_basic(<<"call_system_external_error">>, Gun,
         {error, {woody_error, {external, result_unexpected, <<"case_clause">>}}}, true).
 
--define(THRIFT_C_ERROR, <<"client thrift error">>).
-
 call_client_error_test(_) ->
     Gun     = 'Wrong Type of Mega Destroyer',
     Context = make_context(<<"call_client_error">>),
@@ -331,14 +384,12 @@ call_client_error_test(_) ->
         error:{woody_error, {internal, result_unexpected, ?THRIFT_C_ERROR}} -> ok
     end.
 
--define(THRIFT_S_ENCODE_ERROR, <<"thrift: encode error">>).
-
 call_server_internal_error_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_server_internal_error">>),
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ENCODE_ERROR}} -> ok
+        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ERR_ENCODE}} -> ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
@@ -376,25 +427,30 @@ call_pass_thru_ok_test(_) ->
     Armor   = <<"AntiGrav Boots">>,
     Context = make_context(<<"call_pass_thru_ok">>),
     Expect  = genlib_map:get(Armor, ?POWERUPS),
-    Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]).
+    Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]),
+    {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_except_test(_) ->
     Armor   = <<"Shield Belt">>,
-    Context = make_context(<<"call_pass_thru_except">>),
+    Id      = <<"call_pass_thru_except">>,
+    RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
+    Context = woody_context:new(RpcId, {?MODULE, []}),
     Except  = ?POWERUP_FAILURE("run out"),
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
         throw:Except -> ok
-    end.
+    end,
+    {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_bad_result_test(_) ->
     Armor    = <<"AntiGrav Boots">>,
     Context  = make_context(<<"call_pass_thru_bad_result">>),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ENCODE_ERROR}} ->
+        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ERR_ENCODE}} ->
             ok
-    end.
+    end,
+    {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_bad_except_test(_) ->
     Armor    = <<"Shield Belt">>,
@@ -403,14 +459,59 @@ call_pass_thru_bad_except_test(_) ->
     catch
         error:{woody_error, {external, result_unexpected, <<"'PowerupFailure'">>}} ->
             ok
-    end.
+    end,
+    {ok, _} = receive_msg(Armor, Context).
+
+call_pass_thru_result_unexpected_test(_) ->
+    call_pass_thru_error(<<"call_pass_thru_result_unexpected">>, <<"Helmet">>,
+        error, result_unexpected, ?THRIFT_S_ERR_ENCODE).
 
 call_pass_thru_resource_unavail_test(_) ->
-    Powerup  = <<"Damage Amplifier">>,
-    Context  = make_context(<<"call_pass_thru_resource_unavail">>),
+    call_pass_thru_error(<<"call_pass_thru_resource_unavail">>, <<"Damage Amplifier">>,
+        error, resource_unavailable, ?POWERUP_UNAVAILABLE).
+
+call_pass_thru_result_unknown_test(_) ->
+    call_pass_thru_error(<<"call_pass_thru_result_unknown">>, <<"Invisibility">>,
+        error, result_unknown, ?POWERUP_STATE_UNKNOWN).
+
+call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass, ErrDetails) ->
+    RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
+    Context = woody_context:new(RpcId, {?MODULE, []}),
     try call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
     catch
-        error:{woody_error, {external, resource_unavailable, <<"expired">>}} ->
+        ExceptClass:{woody_error, {external, ErrClass, ErrDetails}} ->
+            ok
+    end,
+    {ok, _} = receive_msg(Powerup, Context).
+
+call_no_headers_404_test(_) ->
+    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unexpected,
+        <<"http code: 404">>).
+
+call_no_headers_500_test(_) ->
+    call_fail_w_no_headers(<<"call_no_headers_500">>, result_unexpected,
+        <<"http code: 500">>).
+
+call_no_headers_502_test(_) ->
+    call_fail_w_no_headers(<<"call_no_headers_502">>, result_unexpected,
+        <<"http code: 502">>).
+
+call_no_headers_503_test(_) ->
+    call_fail_w_no_headers(<<"call_no_headers_503">>, resource_unavailable,
+        <<"http code: 503">>).
+
+call_no_headers_504_test(_) ->
+    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unknown,
+        <<"http code: 504">>).
+
+call_fail_w_no_headers(Id, Class, Details) ->
+    Gun     =  <<"Enforcer">>,
+    Context = make_context(Id),
+    {Url, Service} = get_service_endpoint('Weapons'),
+    try woody:call({Service, get_weapon, [Gun, self_to_bin()]},
+            #{url => Url}, Context)
+    catch
+        error:{woody_error, {external, Class, Details}} ->
             ok
     end.
 
@@ -426,12 +527,10 @@ call_with_client_pool_test(_) ->
     {ok, _} = receive_msg(Gun, Context),
     ok = woody_client_thrift:stop_pool(Pool).
 
--define(THRIFT_S_MULTIPLEX, <<"thrift: multiplexing (not supported)">>).
-
 call_thrift_multiplexed_test(_) ->
     Client = make_thrift_multiplexed_client(<<"call_thrift_multiplexed">>,
                  "powerups", get_service_endpoint('Powerups')),
-    {Client1, {error, {system, {external, result_unexpected, ?THRIFT_S_MULTIPLEX}}}} =
+    {Client1, {error, {system, {external, result_unexpected, ?THRIFT_S_ERR_MULTIPLEX}}}} =
         thrift_client:call(Client, get_powerup, [<<"Body Armor">>, self_to_bin()]),
     thrift_client:close(Client1).
 
@@ -528,7 +627,14 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
     ProxyGetPowerup =:= proxy_get_powerup orelse
     ProxyGetPowerup =:= bad_proxy_get_powerup
 ->
-    call(Context, 'Powerups', get_powerup, [Name, To]);
+    try call(Context, 'Powerups', get_powerup, [Name, self_to_bin()])
+    catch
+        Class:Reason ->
+            erlang:raise(Class, Reason, erlang:get_stacktrace())
+    after
+        {ok, _} = receive_msg(Name, Context),
+        ok      = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name})
+    end;
 
 handle_function(like_powerup, [Name, To], Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
@@ -537,8 +643,64 @@ handle_function(like_powerup, [Name, To], Context, _Opts) ->
 %%
 %% woody_event_handler callbacks
 %%
+handle_event(Type, RpcId = #{
+    trace_id := TraceId, parent_id := ParentId}, Meta = #{code := Code}, _)
+when
+    (
+        TraceId =:= <<"call_pass_thru_except">>               orelse
+        TraceId =:= <<"call_pass_thru_resource_unavailable">> orelse
+        TraceId =:= <<"call_pass_thru_result_unexpected">>    orelse
+        TraceId =:= <<"call_pass_thru_result_unknown">>
+    ) andalso
+    (Type =:= ?EV_CLIENT_RECEIVE orelse Type =:= ?EV_SERVER_SEND)
+ ->
+    _ = handle_proxy_event(Type, Code, TraceId, ParentId),
+    log_event(Type, RpcId, Meta);
 handle_event(Type, RpcId, Meta, _) ->
+    log_event(Type, RpcId, Meta).
+
+log_event(Type, RpcId, Meta) ->
     ct:pal(info, "woody event ~p for RPC ID: ~p~n~p", [Type, RpcId, Meta]).
+
+handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId, ParentId) when TraceId =/= ParentId ->
+    handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId);
+handle_proxy_event(?EV_SERVER_SEND, Code, TraceId, ParentId) when TraceId =:= ParentId ->
+    handle_proxy_event(?EV_SERVER_SEND, Code, TraceId);
+handle_proxy_event(_, _, _, _) ->
+    ok.
+
+handle_proxy_event(?EV_CLIENT_RECEIVE, 200, <<"call_pass_thru_except">>) ->
+    ok;
+handle_proxy_event(?EV_SERVER_SEND,    200, <<"call_pass_thru_except">>) ->
+    ok;
+handle_proxy_event(?EV_CLIENT_RECEIVE, 500, <<"call_pass_thru_result_unexpected">>) ->
+    ok;
+handle_proxy_event(?EV_SERVER_SEND,    502, <<"call_pass_thru_result_unexpected">>) ->
+    ok;
+handle_proxy_event(?EV_CLIENT_RECEIVE, 503, <<"call_pass_thru_resource_unavailable">>) ->
+    ok;
+handle_proxy_event(?EV_SERVER_SEND,    502, <<"call_pass_thru_resource_unavailable">>) ->
+    ok;
+handle_proxy_event(?EV_CLIENT_RECEIVE, 504, <<"call_pass_thru_result_unknown">>) ->
+    ok;
+handle_proxy_event(?EV_SERVER_SEND,    504, <<"call_pass_thru_result_unknown">>) ->
+    ok;
+handle_proxy_event(Event, Code, Descr) ->
+    erlang:error(badarg, [Event, Code, Descr]).
+
+%%
+%% cowboy_http_handler callbacks
+%%
+init({_, http}, Req, Code) ->
+    ct:pal("Cowboy fail server received request. Replying: ~p", [Code]),
+    {ok, Req1} = cowboy_req:reply(Code, Req),
+    {shutdown, Req1, Code}.
+
+handle(Req, _) ->
+    {ok, Req, neverhappen}.
+
+terminate(_, _, _) ->
+    ok.
 
 %%
 %% internal functions
@@ -606,16 +768,16 @@ next_weapon(#'Weapon'{slot_pos = Pos}, prev, Shift) ->
 next_weapon(Pos) when is_integer(Pos), Pos >= 0, Pos < 10 ->
     {genlib_map:get(Pos, ?SLOTS, <<"no weapon">>), Pos};
 next_weapon(_) ->
-    throw(?STACK_OVERFLOW).
+    throw(?WEAPON_STACK_OVERFLOW).
 
--define(BAD_POWERUP_REPLY, powerup_unknown).
-
+return_powerup(<<"Invisibility">>) ->
+    woody_error:raise(system, {internal, result_unknown, ?POWERUP_STATE_UNKNOWN});
 return_powerup(Name) when is_binary(Name) ->
     return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY));
 return_powerup(#'Powerup'{level = Level}) when Level == 0 ->
     throw(?POWERUP_FAILURE("run out"));
 return_powerup(#'Powerup'{time_left = Time}) when Time == 0 ->
-    woody_error:raise(system, {internal, resource_unavailable, <<"expired">>});
+    woody_error:raise(system, {internal, resource_unavailable, ?POWERUP_UNAVAILABLE});
 return_powerup(P = #'Powerup'{}) ->
     P;
 return_powerup(P = ?BAD_POWERUP_REPLY) ->
@@ -652,3 +814,4 @@ check_meta(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
     ok;
 check_meta(_, _, _) ->
     ok.
+
