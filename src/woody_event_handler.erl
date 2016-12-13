@@ -143,7 +143,7 @@ handle_event(Event, Meta, Context = #{ev_handler := Handler}) ->
     ok.
 handle_event(Handler, Event, RpcId, Meta) ->
     {Module, Opts} = woody_util:get_mod_opts(Handler),
-    Module:handle_event(Event, RpcId, Meta, Opts),
+    _ = Module:handle_event(Event, RpcId, Meta, Opts),
     ok.
 
 -spec format_rpc_id(woody:rpc_id()) ->
@@ -151,9 +151,9 @@ handle_event(Handler, Event, RpcId, Meta) ->
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
     {"[~s ~s ~s]", [Trace, Parent, Span]}.
 
--spec format_event(woody:rpc_id(), event(), event_meta()) ->
+-spec format_event(event(), event_meta(), woody:rpc_id()) ->
     log_msg().
-format_event(RpcId, Event, Meta) ->
+format_event(Event, Meta, RpcId) ->
     {Severity, Msg} = format_event(Event, Meta),
     {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
 
