@@ -4,6 +4,7 @@
 -module(woody_util).
 
 -export([get_protocol_handler/2]).
+-export([to_binary/1]).
 
 %% Types
 -type role() :: client | server.
@@ -21,3 +22,16 @@ get_protocol_handler(Role, Opts) ->
         {thrift, http, server} -> woody_server_thrift_http_handler;
         _                      -> error(badarg, [Role, Opts])
     end.
+
+-spec to_binary(atom() | list() | binary()) ->
+    binary().
+to_binary(Reason) when is_list(Reason) ->
+    to_binary(Reason, <<>>);
+to_binary(Reason) ->
+    to_binary([Reason]).
+
+to_binary([], Reason) ->
+    Reason;
+to_binary([Part | T], Reason) ->
+    BinPart = genlib:to_binary(Part),
+    to_binary(T, <<Reason/binary, BinPart/binary>>).

@@ -44,6 +44,7 @@
 -type async_cb() :: fun((safe_result()) -> _).
 -export_type([async_cb/0]).
 
+%% Internal API
 %% Behaviour definition
 -callback call(woody_context:ctx(), woody:request(), options()) -> safe_result().
 
@@ -167,9 +168,12 @@ call_safe(Request, Options, Context) ->
 -spec handle_client_error(_Error, woody_context:ctx()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
 handle_client_error(Error, Context) ->
-    Details = woody_error:format_details_short(Error),
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
-            #{error => client_error, reason => Details, stack => erlang:get_stacktrace()},
-            Context
-        ),
+    Details = woody_error:format_details(Error),
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
+            role     => client,
+            severity => error,
+            error    => woody_util:to_binary([?EV_CALL_SERVICE, " error"]),
+            reason   => Details,
+            stack    => erlang:get_stacktrace()
+        }, Context),
     {error, {system, {internal, result_unexpected, <<"client error">>}}}.

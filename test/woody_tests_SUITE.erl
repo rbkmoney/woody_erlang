@@ -234,10 +234,10 @@ start_error_server(TC, Sup) ->
 
 start_woody_server(Id, Sup, Services) ->
     Server = woody:child_spec(Id, #{
-        handlers   => [get_handler(S) || S <- Services],
-        ev_handler => {?MODULE, []},
-        ip         => ?SERVER_IP,
-        port       => ?SERVER_PORT
+        handlers      => [get_handler(S) || S <- Services],
+        event_handler => {?MODULE, []},
+        ip            => ?SERVER_IP,
+        port          => ?SERVER_PORT
     }),
     supervisor:start_child(Sup, Server).
 
@@ -579,10 +579,10 @@ try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
     try
         woody:child_spec('bad_spec', #{
-            handlers   => [get_handler('Powerups'), NaughtyHandler],
-            ev_handler => ?MODULE,
-            ip         => ?SERVER_IP,
-            port       => ?SERVER_PORT
+            handlers      => [get_handler('Powerups'), NaughtyHandler],
+            event_handler => ?MODULE,
+            ip            => ?SERVER_IP,
+            port          => ?SERVER_PORT
         })
     catch
         error:{bad_handler_spec, NaughtyHandler} ->
@@ -643,7 +643,7 @@ handle_function(like_powerup, [Name, To], Context, _Opts) ->
 %%
 %% woody_event_handler callbacks
 %%
-handle_event(Type, RpcId = #{
+handle_event(Event, RpcId = #{
     trace_id := TraceId, parent_id := ParentId}, Meta = #{code := Code}, _)
 when
     (
@@ -652,15 +652,12 @@ when
         TraceId =:= <<"call_pass_thru_result_unexpected">>    orelse
         TraceId =:= <<"call_pass_thru_result_unknown">>
     ) andalso
-    (Type =:= ?EV_CLIENT_RECEIVE orelse Type =:= ?EV_SERVER_SEND)
+    (Event =:= ?EV_CLIENT_RECEIVE orelse Event =:= ?EV_SERVER_SEND)
  ->
-    _ = handle_proxy_event(Type, Code, TraceId, ParentId),
-    log_event(Type, RpcId, Meta);
-handle_event(Type, RpcId, Meta, _) ->
-    log_event(Type, RpcId, Meta).
-
-log_event(Type, RpcId, Meta) ->
-    ct:pal(info, "woody event ~p for RPC ID: ~p~n~p", [Type, RpcId, Meta]).
+    _ = handle_proxy_event(Event, Code, TraceId, ParentId),
+    log_event(Event, RpcId, Meta);
+handle_event(Event, RpcId, Meta, _) ->
+    log_event(Event, RpcId, Meta).
 
 handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId, ParentId) when TraceId =/= ParentId ->
     handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId);
@@ -683,10 +680,14 @@ handle_proxy_event(?EV_SERVER_SEND,    502, <<"call_pass_thru_resource_unavailab
     ok;
 handle_proxy_event(?EV_CLIENT_RECEIVE, 504, <<"call_pass_thru_result_unknown">>) ->
     ok;
-handle_proxy_event(?EV_SERVER_SEND,    504, <<"call_pass_thru_result_unknown">>) ->
+handle_proxy_event(?EV_SERVER_SEND,    502, <<"call_pass_thru_result_unknown">>) ->
     ok;
 handle_proxy_event(Event, Code, Descr) ->
     erlang:error(badarg, [Event, Code, Descr]).
+
+log_event(Event, RpcId, Meta) ->
+    {_Severity, {Format, Msg}} = woody_event_handler:format_event(RpcId, Event, Meta),
+    ct:pal(Format, Msg).
 
 %%
 %% cowboy_http_handler callbacks

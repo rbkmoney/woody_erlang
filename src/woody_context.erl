@@ -33,7 +33,7 @@
     ev_handler => woody:ev_handler(),
     meta       => meta()  %% optional
 }.
--type meta()     :: #{binary() => binary()}.
+-type meta()     :: #{meta_key() => binary()}.
 -type meta_key() :: binary().
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).

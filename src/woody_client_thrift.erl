@@ -23,7 +23,7 @@
 %%
 -spec start_pool(any(), pos_integer()) -> ok.
 start_pool(Name, PoolSize) when is_integer(PoolSize) ->
-    woody_client_thrift_http_transport:start_client_pool(Name,PoolSize).
+    woody_client_thrift_http_transport:start_client_pool(Name, PoolSize).
 
 -spec stop_pool(any()) -> ok | {error, not_found | simple_one_for_one}.
 stop_pool(Name) ->
@@ -37,8 +37,7 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
                 service  => ServiceName,
                 function => Function,
                 type     => get_rpc_type(Service, Function),
-                args     => Args,
-                context  => Context
+                args     => Args
             }
         ),
     do_call(make_thrift_client(Context, Service, clean_opts(TransportOpts)),
@@ -48,11 +47,11 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
 %% Internal functions
 %%
 -spec get_rpc_type(woody:service(), woody:func()) -> woody:rpc_type().
-get_rpc_type({Module, Service}, Function) ->
+get_rpc_type(ThriftService = {Module, Service}, Function) ->
     try get_rpc_type(Module:function_info(Service, Function, reply_type))
     catch
         error:_ ->
-            error(badarg, [{Module, Service}, Function])
+            error(badarg, [ThriftService, Function])
     end.
 
 -spec get_rpc_type(atom()) -> woody:rpc_type().
@@ -106,10 +105,10 @@ handle_result(Res = {error, Error = {Type,_}}, Context) when
             #{status => error, result => Error}),
     Res;
 handle_result({error, ThriftError}, Context) ->
-    _ = log_event(?EV_THRIFT_ERROR, Context, #{
-            stage => undefined,
-            reason => woody_error:format_details(ThriftError),
-            stack => erlang:get_stacktrace()
+    _ = log_event(?EV_SERVICE_RESULT, Context, #{
+            statis => error,
+            result => woody_error:format_details(ThriftError),
+            stack  => erlang:get_stacktrace()
         }),
     {error, {system, {internal, result_unexpected, <<"client thrift error">>}}}.
 

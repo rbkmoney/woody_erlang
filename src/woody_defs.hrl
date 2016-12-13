@@ -24,8 +24,7 @@
 -define(EV_INVOKE_SERVICE_HANDLER , 'invoke service handler').
 -define(EV_SERVICE_HANDLER_RESULT , 'service handler result').
 
--define(EV_THRIFT_ERROR           , 'thrift error').
 -define(EV_INTERNAL_ERROR         , 'internal error').
-
 -define(EV_TRACE                  , 'trace event').
+
 -endif.

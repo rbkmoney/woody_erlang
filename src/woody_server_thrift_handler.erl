@@ -1,7 +1,7 @@
 -module(woody_server_thrift_handler).
 
 %% API
--export([decode/3, handle/1]).
+-export([init_handler/3, invoke_handler/1]).
 
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
@@ -33,6 +33,9 @@
 
 -type thrift_reply_type() :: oneway_void | tuple().
 
+-type reply_type() :: oneway_void | call.
+-export_type([reply_type/0]).
+
 -type builtin_thrift_error() :: bad_binary_protocol_version | no_binary_protocol_version | _OtherError.
 -type thrift_error()         :: unknown_function | multiplexed_request | builtin_thrift_error().
 -type decode_error()         :: {error, thrift_error(), state()}.
@@ -45,9 +48,9 @@
 %%
 %% API
 %%
--spec decode(binary(), woody:th_handler(), woody_context:ctx()) ->
-    {ok, noreply | reply, state()} | {error, client_error()}.
-decode(Request, {Service, Handler}, Context) ->
+-spec init_handler(binary(), woody:th_handler(), woody_context:ctx()) ->
+    {ok, reply_type(), state()} | {error, client_error()}.
+init_handler(Request, {Service, Handler}, Context) ->
     {ok, Transport} = thrift_membuffer_transport:new(Request),
     {ok, Proto} = thrift_binary_protocol:new(Transport,
         [{strict_read, true}, {strict_write, true}]
@@ -59,9 +62,9 @@ decode(Request, {Service, Handler}, Context) ->
         th_proto => Proto
     }))).
 
--spec handle(state()) ->
-    {ok, binary()} | {error, woody_error:error()} | noreply.
-handle(State = #{th_msg_type := MsgType}) ->
+-spec invoke_handler(state()) ->
+    {ok, binary()} | {error, woody_error:error()}.
+invoke_handler(State = #{th_msg_type := MsgType}) ->
     {Result, #{th_proto := Proto}} = call_handler_safe(State),
     {_, {ok, Reply}} = thrift_protocol:close_transport(Proto),
     handle_result(Result, Reply, MsgType).
@@ -138,23 +141,24 @@ decode_request({ok, State = #{th_proto := Proto, th_param_type := ParamsType}}) 
     end.
 
 -spec handle_decode_result
-    ({ok, state()}) -> {ok, noreply | reply, state()};
+    ({ok, state()}) -> {ok, reply_type(), state()};
     (decode_error()) -> {error, client_error()}.
 handle_decode_result({error, Error, State = #{th_proto := Proto}}) ->
     _ = thrift_protocol:close_transport(Proto),
     handle_decode_error(Error, State);
 handle_decode_result({ok, State = #{th_rep_type := oneway_void}}) ->
-    {ok, reply, State};
+    {ok, oneway_void, State};
 handle_decode_result({ok, State}) ->
-    {ok, noreply, State}.
+    {ok, call, State}.
 
 -spec handle_decode_error(thrift_error(), state()) -> {error, client_error()}.
 handle_decode_error(Error, #{context := Context}) ->
-    _ = woody_event_handler:handle_event(
-            ?EV_THRIFT_ERROR,
-            #{stage => protocol_read, reason => woody_error:format_details(Error)},
-            Context
-        ),
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
+            role     => server,
+            severity => warning,
+            error    => <<"thrift protocol read failed">>,
+            reason   => woody_error:format_details(Error)
+        }, Context),
     {error, client_error(Error)}.
 
 -spec client_error(thrift_error()) -> client_error().
@@ -234,7 +238,7 @@ handle_function_catch(error, {woody_error, Error = {_, _, _}}, _Stack, State) ->
 handle_function_catch(Class, Error, Stack, State) when
     Class =:= error orelse Class =:= exit
 ->
-    handle_internal_error(Error, Stack, State).
+    handle_internal_error(Error, Class, Stack, State).
 
 
 -spec handle_exception(woody_error:business_error() | _Throw,
@@ -252,7 +256,7 @@ handle_exception(Except, Stack, State = #{
         fun(X, A) -> get_except(Except, X, A) end, undefined, XInfo),
     case {FoundExcept, ReplyType} of
         {undefined, _} ->
-            handle_internal_error(Except, Stack, State);
+            handle_internal_error(Except, throw, Stack, State);
         {{_Module, _Type}, oneway_void} ->
             log_handler_result(error, Context,
                 #{class => business, result => Except, ignore => true}),
@@ -261,7 +265,7 @@ handle_exception(Except, Stack, State = #{
             log_handler_result(error, Context,
                 #{class => business, result => Except, ignore => false}),
             ExceptTuple = list_to_tuple([Function | ExceptionList]),
-            encode_reply({error, {business, get_except_name(Module, Type)}},
+            encode_reply({error, {business, genlib:to_binary(get_except_name(Module, Type))}},
                 {ReplySpec, ExceptTuple}, State#{th_msg_type => ?tMessageType_REPLY})
     end.
 
@@ -291,15 +295,15 @@ handle_woody_error(Error, State = #{context := Context}) ->
         #{class => system, result => Error, ignore => false}),
     {{error, {system, Error}}, State}.
 
--spec handle_internal_error(_Error, woody_error:stack(), state()) ->
+-spec handle_internal_error(_Error, woody_error:erlang_except(), woody_error:stack(), state()) ->
     {{error, {system, {internal, woody_error:source(), woody_error:details()}}}, state()}.
-handle_internal_error(Error, Stack, State = #{context := Context, th_rep_type := oneway_void}) ->
+handle_internal_error(Error, ExcClass, Stack, State = #{context := Context, th_rep_type := oneway_void}) ->
     log_handler_result(error, Context,
-        #{class => system, result => Error, stack => Stack, ignore => true}),
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => true}),
     {{error, {system, {internal, result_unexpected, <<>>}}}, State};
-handle_internal_error(Error, Stack, State = #{context := Context}) ->
+handle_internal_error(Error, ExcClass, Stack, State = #{context := Context}) ->
     log_handler_result(error, Context,
-        #{class => system, result => Error, stack => Stack, ignore => false}),
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => false}),
     {{error, {system, {internal, result_unexpected, woody_error:format_details_short(Error)}}}, State}.
 
 -spec encode_reply(ok | {error, woody_error:business_error()}, _Result, state()) ->
@@ -322,22 +326,20 @@ encode_reply(Status, Reply, State = #{
         {Status, State#{th_proto => Protocol4}}
     catch
         error:{badmatch, {_, {error, Error}}} ->
-            _ = woody_event_handler:handle_event(
-                    ?EV_THRIFT_ERROR,
-                    #{
-                        stage  => protocol_write,
-                        reason => woody_error:format_details(Error),
-                        stack  => erlang:get_stacktrace()
-                    },
-                    Context
-                ),
+            _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
+                    role     => server,
+                    severity => warning,
+                    error    => <<"thrift protocol write failed">>,
+                    reason   => woody_error:format_details(Error),
+                    stack    => erlang:get_stacktrace()
+                }, Context),
             {{error, {system, {internal, result_unexpected, <<"thrift: encode error">>}}}, State}
     end.
 
 -spec handle_result(ok | {error, woody_error:error()}, binary(), thrift_reply_type()) ->
-    {ok, binary()} | {error, woody_error:error()} | noreply.
+    {ok, binary()} | {error, woody_error:error()}.
 handle_result(_, _, oneway_void) ->
-    noreply;
+    {ok, <<>>};
 handle_result(ok, Reply, _) ->
     {ok, Reply};
 handle_result({error, {business, ExceptName}}, Except, _) ->

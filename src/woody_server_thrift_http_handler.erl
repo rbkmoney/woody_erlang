@@ -34,7 +34,7 @@
     protocol   => thrift,
     transport  => http,
     handlers   => list(woody:http_handler(woody:th_handler())),
-    ev_handler => woody:ev_handler(),
+    event_handler => woody:ev_handler(),
     ip         => inet:ip_address(),
     port       => inet:port_address(),
     net_ops    => net_opts() %% optional
@@ -86,7 +86,7 @@ get_socket_transport(Ip, Port) ->
     {ranch_tcp, [{ip, Ip}, {port, Port}]}.
 
 -spec get_cowboy_config(options()) -> cowboy_protocol:opts().
-get_cowboy_config(Opts = #{handlers := Handlers, ev_handler := EvHandler}) ->
+get_cowboy_config(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Paths      = get_paths(config(), EvHandler, Handlers, []),
     CowboyOpts = get_cowboy_opts(maps:get(net_opts, Opts, undefined)),
     HttpTrace  = get_http_trace(EvHandler, config()),
@@ -146,7 +146,8 @@ trace_req(true, Req, EvHandler, ServerOpts) ->
     {Url, Req1} = cowboy_req:url(Req),
     {Headers, Req2} = cowboy_req:headers(Req1),
     Meta = #{
-         event   => transport_onrequest,
+         role    => server,
+         event   => <<"http request received">>,
          url     => Url,
          headers => Headers
      },
@@ -163,7 +164,8 @@ trace_req(_, Req, _, _) ->
 
 trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
     _ = woody_event_handler:handle_event(EvHandler, ?EV_TRACE, undefined, #{
-         event   => transport_onresponse,
+         role    => server,
+         event   => <<"http response send">>,
          code    => Code,
          headers => Headers,
          body    => Body}),
@@ -219,9 +221,11 @@ terminate({normal, _}, _Req, _Status) ->
 terminate(Reason, _Req, #{context := Context}) ->
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
             #{
-                error  => <<"http handler terminated abnormally">>,
-                reason => woody_error:format_details(Reason),
-                stack  => erlang:get_stacktrace()
+                role     => server,
+                error    => <<"http handler terminated abnormally">>,
+                reason   => woody_error:format_details(Reason),
+                stack    => erlang:get_stacktrace(),
+                severity => error
             },
             Context
         ),
@@ -353,13 +357,13 @@ get_body(Req, #{max_body_length := MaxBody}) ->
 ->
     cowboy_req:req().
 handle_request(Body, ThriftHander, Context, Req) ->
-    case woody_server_thrift_handler:decode(Body, ThriftHander, Context) of
-        {ok, reply, HandlerState} ->
+    case woody_server_thrift_handler:init_handler(Body, ThriftHander, Context) of
+        {ok, oneway_void, HandlerState} ->
             Req1 = reply(200, Req, Context),
-            noreply = woody_server_thrift_handler:handle(HandlerState),
+            _ = woody_server_thrift_handler:invoke_handler(HandlerState),
             Req1;
-        {ok, noreply, HandlerState} ->
-            handle_result(woody_server_thrift_handler:handle(HandlerState), Req, Context);
+        {ok, call, HandlerState} ->
+            handle_result(woody_server_thrift_handler:invoke_handler(HandlerState), Req, Context);
         {error, Error} ->
             handle_error(Error, Req, Context)
     end.
@@ -371,16 +375,7 @@ handle_request(Body, ThriftHander, Context, Req) ->
 handle_result({ok, Body}, Req, Context) ->
     reply(200, cowboy_req:set_resp_body(Body, Req), Context);
 handle_result({error, Error}, Req, Context) ->
-    handle_error(Error, Req, Context);
-handle_result(noreply, Req, Context) ->
-    Reason = <<"noreply result for non-oneway thrift call">>,
-    _ = woody_event_handler:handle_event(
-        ?EV_INTERNAL_ERROR,
-        #{error => result_unexpected, reason => Reason},
-        Context
-    ),
-    handle_error({system, {internal, result_unexpected, Reason}}, Req, Context).
-
+    handle_error(Error, Req, Context).
 
 -spec handle_error(woody_error:error() | woody_server_thrift_handler:client_error(),
     cowboy_req:req(), woody_context:ctx())
@@ -404,7 +399,7 @@ handle_error({system, {external, result_unexpected, Details}}, Req, Context) ->
 handle_error({system, {external, resource_unavailable, Details}}, Req, Context) ->
     reply(502, set_error_headers(<<"Resource Unavailable">>, Details, Req), Context);
 handle_error({system, {external, result_unknown, Details}}, Req, Context) ->
-    reply(504, set_error_headers(<<"Result Unknown">>, Details, Req), Context).
+    reply(502, set_error_headers(<<"Result Unknown">>, Details, Req), Context).
 
 -spec set_error_headers(binary(), binary(), cowboy_req:req()) ->
     cowboy_req:req().
