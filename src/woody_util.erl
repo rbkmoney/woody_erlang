@@ -4,7 +4,11 @@
 -module(woody_util).
 
 -export([get_protocol_handler/2]).
+-export([get_mod_opts/1]).
 -export([to_binary/1]).
+-export([enrich_context/2]).
+
+-define(DEFAULT_HANDLER_OPTS, undefined).
 
 %% Types
 -type role() :: client | server.
@@ -22,6 +26,18 @@ get_protocol_handler(Role, Opts) ->
         {thrift, http, server} -> woody_server_thrift_http_handler;
         _                      -> error(badarg, [Role, Opts])
     end.
+
+-spec get_mod_opts(woody:handler(_)) ->
+    {module(), woody:options()}.
+get_mod_opts(Handler = {_Mod, _Opts}) ->
+    Handler;
+get_mod_opts(Mod) ->
+    {Mod, ?DEFAULT_HANDLER_OPTS}.
+
+-spec enrich_context(woody_context:ctx(), woody:ev_handler()) ->
+    woody_context:ctx().
+enrich_context(Context, EvHandler) ->
+    Context#{ev_handler => EvHandler}.
 
 -spec to_binary(atom() | list() | binary()) ->
     binary().

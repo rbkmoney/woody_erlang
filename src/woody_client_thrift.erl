@@ -21,16 +21,18 @@
 %%
 %% API
 %%
--spec start_pool(any(), pos_integer()) -> ok.
+-spec start_pool(any(), pos_integer()) ->
+    ok.
 start_pool(Name, PoolSize) when is_integer(PoolSize) ->
     woody_client_thrift_http_transport:start_client_pool(Name, PoolSize).
 
--spec stop_pool(any()) -> ok | {error, not_found | simple_one_for_one}.
+-spec stop_pool(any()) ->
+    ok | {error, not_found | simple_one_for_one}.
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
 -spec call(woody_context:ctx(), woody:request(), woody_client:options()) ->
-    woody_client:safe_result().
+    woody_client:result().
 call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
     _ = log_event(?EV_CALL_SERVICE, Context,
             #{
@@ -46,7 +48,8 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
 %%
 %% Internal functions
 %%
--spec get_rpc_type(woody:service(), woody:func()) -> woody:rpc_type().
+-spec get_rpc_type(woody:service(), woody:func()) ->
+    woody:rpc_type().
 get_rpc_type(ThriftService = {Module, Service}, Function) ->
     try get_rpc_type(Module:function_info(Service, Function, reply_type))
     catch
@@ -54,11 +57,13 @@ get_rpc_type(ThriftService = {Module, Service}, Function) ->
             error(badarg, [ThriftService, Function])
     end.
 
--spec get_rpc_type(atom()) -> woody:rpc_type().
+-spec get_rpc_type(atom()) ->
+    woody:rpc_type().
 get_rpc_type(?THRIFT_CAST) -> cast;
 get_rpc_type(_) -> call.
 
--spec clean_opts(woody_client:options()) -> woody_client:options().
+-spec clean_opts(woody_client:options()) ->
+    woody_client:options().
 clean_opts(Options) ->
     maps:without(?WOODY_OPTS, Options).
 
@@ -73,7 +78,7 @@ make_thrift_client(Context, Service, TransportOpts) ->
     Client.
 
 -spec do_call(thrift_client(), woody:func(), woody:args(), woody_context:ctx()) ->
-    woody_client:safe_result().
+    woody_client:result().
 do_call(Client, Function, Args, Context) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
@@ -88,8 +93,8 @@ do_call(Client, Function, Args, Context) ->
     _ = thrift_client:close(ClientNext),
     handle_result(Result, Context).
 
--spec handle_result(woody_client:safe_result() | {error, _ThriftError}, woody_context:ctx()) ->
-    woody_client:safe_result().
+-spec handle_result(woody_client:result() | {error, _ThriftError}, woody_context:ctx()) ->
+    woody_client:result().
 handle_result(Res = {ok, ok}, Context) ->
     _ = log_event(?EV_SERVICE_RESULT, Context,
             #{status => ok, result => ?THRIFT_CAST}),

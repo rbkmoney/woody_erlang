@@ -30,11 +30,7 @@
     context_generated_rpc_id_test/1,
     ids_monotonic_incr_test/1,
     call_ok_test/1,
-    call4_with_rpcid_ok_test/1,
-    call4_with_trace_id_ok_test/1,
-    call4_with_undefined_ok_test/1,
-    call5_with_trace_id_ok_test/1,
-    call_async_ok_test/1,
+    call3_ok_test/1,
     call_oneway_void_test/1,
     call_sequence_with_context_meta_test/1,
     call_business_error_test/1,
@@ -128,13 +124,15 @@
 
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
 
--define(THRIFT_S_ERR_MULTIPLEX , <<"thrift: multiplexing (not supported)">>).
--define(THRIFT_S_ERR_ENCODE    , <<"thrift: encode error">>).
--define(THRIFT_C_ERROR         , <<"client thrift error">>).
+-define(ERR_S_THRIFT_MULTIPLEX    , <<"thrift: multiplexing (not supported)">>).
+-define(ERR_S_THRIFT_ENCODE       , <<"thrift: encode error">>).
+-define(ERR_C_THRIFT              , <<"client thrift error">>).
+-define(ERR_POWERUP_UNAVAILABLE   , <<"expired">>).
+-define(ERR_POWERUP_STATE_UNKNOWN , <<"invisible">>).
+-define(ERR_BAD_PROXYING          , <<"case_clause">>).
+
 -define(WEAPON_STACK_OVERFLOW  , pos_out_of_boundaries).
 -define(BAD_POWERUP_REPLY      , powerup_unknown).
--define(POWERUP_UNAVAILABLE    , <<"expired">>).
--define(POWERUP_STATE_UNKNOWN  , <<"invisible">>).
 
 %%
 %% tests descriptions
@@ -146,11 +144,7 @@ all() ->
         context_generated_rpc_id_test,
         ids_monotonic_incr_test,
         call_ok_test,
-        call4_with_rpcid_ok_test,
-        call4_with_trace_id_ok_test,
-        call4_with_undefined_ok_test,
-        call5_with_trace_id_ok_test,
-        call_async_ok_test,
+        call3_ok_test,
         call_oneway_void_test,
         call_sequence_with_context_meta_test,
         call_business_error_test,
@@ -233,9 +227,9 @@ start_error_server(TC, Sup) ->
     supervisor:start_child(Sup, Server).
 
 start_woody_server(Id, Sup, Services) ->
-    Server = woody:child_spec(Id, #{
+    Server = woody_server:child_spec(Id, #{
         handlers      => [get_handler(S) || S <- Services],
-        event_handler => {?MODULE, []},
+        event_handler => ?MODULE,
         ip            => ?SERVER_IP,
         port          => ?SERVER_PORT
     }),
@@ -244,7 +238,7 @@ start_woody_server(Id, Sup, Services) ->
 get_handler('Powerups') ->
     {
         ?PATH_POWERUPS,
-        {{?THRIFT_DEFS, 'Powerups'}, {?MODULE, []}}
+        {{?THRIFT_DEFS, 'Powerups'}, ?MODULE}
     };
 
 get_handler('Weapons') ->
@@ -282,33 +276,26 @@ end_per_test_case(_, C) ->
 %% tests
 %%
 context_given_rpc_id_test(_) ->
-    ReqId     = <<"context_given_rpc_id">>,
-    RpcId     = #{parent_id => ReqId, trace_id => ReqId, span_id => ReqId},
-    EvHandler = {?MODULE, {}},
+    ReqId = <<"context_given_rpc_id">>,
+    RpcId = #{parent_id => ReqId, trace_id => ReqId, span_id => ReqId},
     #{
-        rpc_id     := RpcId,
-        ev_handler := EvHandler
-    } = woody_context:new(RpcId, EvHandler).
+        rpc_id     := RpcId
+    } = woody_context:new(RpcId).
 
 context_given_trace_id_test(_) ->
-    TraceId   = <<"context_given_trace_id">>,
-    EvHandler = {?MODULE, {}},
+    TraceId = <<"context_given_trace_id">>,
     #{
-        rpc_id     := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _, trace_id := TraceId},
-        ev_handler := EvHandler
-    } = woody_context:new(TraceId, EvHandler).
+        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _, trace_id := TraceId}
+    } = woody_context:new(TraceId).
 
 context_generated_rpc_id_test(_) ->
-    EvHandler = {?MODULE, {}},
     #{
-        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _GenId1, trace_id := _GenId2},
-        ev_handler := EvHandler
-    } = woody_context:new(undefined, EvHandler).
+        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _GenId1, trace_id := _GenId2}
+    } = woody_context:new().
 
 ids_monotonic_incr_test(_) ->
     TraceId   = <<"ids_monotonic_incr">>,
-    EvHandler = {?MODULE, []},
-    ParentCtx = woody_context:new(TraceId, EvHandler),
+    ParentCtx = woody_context:new(TraceId),
     Children  = lists:map(fun(_) -> woody_context:new_child(ParentCtx) end, lists:seq(1, 10000)),
     SortFun   = fun(C1, C2) ->
                     Span1 = genlib:to_int(woody_context:get_rpc_id(span_id, C1)),
@@ -319,46 +306,20 @@ ids_monotonic_incr_test(_) ->
 
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
-    gun_test_basic(<<"call_ok">>, Gun, genlib_map:get(Gun, ?WEAPONS), true).
+    gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
-call4_with_rpcid_ok_test(_) ->
-    ReqId = <<"call4_with_rpcid_ok">>,
-    call4_ok(woody_context:new_rpc_id(ReqId, ReqId, ReqId)).
-
-call4_with_trace_id_ok_test(_) ->
-    call4_ok(<<"call4_with_trace_id_ok">>).
-
-call4_with_undefined_ok_test(_) ->
-    call4_ok(undefined).
-
-call4_ok(Id) ->
-    Gun   = <<"Enforcer">>,
+call3_ok_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
-    EvHandler = {?MODULE, []},
-    Opts = #{url => Url},
-    Expect = genlib_map:get(Gun, ?WEAPONS),
-    try woody:call({Service, get_weapon, [Gun, self_to_bin()]}, Opts, Id, EvHandler)
-    catch
-        _:Expect -> ok
-    end.
-
-call5_with_trace_id_ok_test(_) ->
-    Id  = <<"call5_with_trace_id_ok">>,
-    Gun   = <<"Enforcer">>,
-    {Url, Service} = get_service_endpoint('Weapons'),
-    EvHandler = {?MODULE, []},
-    Opts = #{url => Url},
-    Expect = genlib_map:get(Gun, ?WEAPONS),
-    try woody:call({Service, get_weapon, [Gun, self_to_bin()]}, Opts, Id, EvHandler,
-        #{<<"some_key">> => <<"some_value">>})
-    catch
-        _:Expect -> ok
-    end.
+    Gun     = <<"Enforcer">>,
+    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Opts    = #{url => Url, event_handler => ?MODULE},
+    Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect  = woody_client:call(Request, Opts).
 
 call_business_error_test(_) ->
     Gun = <<"Bio Rifle">>,
     gun_test_basic(<<"call_business_error">>, Gun,
-        {throw, ?WEAPON_FAILURE("out of ammo")}, true).
+        {exception, ?WEAPON_FAILURE("out of ammo")}, true).
 
 call_throw_unexpected_test(_) ->
     Id      = <<"call_throw_unexpected">>,
@@ -381,7 +342,7 @@ call_client_error_test(_) ->
     Context = make_context(<<"call_client_error">>),
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
-        error:{woody_error, {internal, result_unexpected, ?THRIFT_C_ERROR}} -> ok
+        error:{woody_error, {internal, result_unexpected, ?ERR_C_THRIFT}} -> ok
     end.
 
 call_server_internal_error_test(_) ->
@@ -389,44 +350,29 @@ call_server_internal_error_test(_) ->
     Context = make_context(<<"call_server_internal_error">>),
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ERR_ENCODE}} -> ok
+        error:{woody_error, {external, result_unexpected, ?ERR_S_THRIFT_ENCODE}} -> ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
 call_oneway_void_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_oneway_void">>),
-    ok      = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
-    {ok, _} = receive_msg(Armor, Context).
-
-call_async_ok_test(C) ->
-    Context    = make_context(<<"call_async_ok">>),
-    Sup        = proplists:get_value(sup, C),
-    Pid        = self(),
-    Callback   = fun({ok, Res}) -> collect(Res, Context, Pid) end,
-    {ok, Pid1} = get_weapon(Context, Sup, Callback, <<"Impact Hammer">>),
-    {ok, Pid2} = get_weapon(Context, Sup, Callback, <<"Flak Cannon">>),
-    {ok, Pid1} = receive_msg(genlib_map:get(<<"Impact Hammer">>, ?WEAPONS), Context),
-    {ok, Pid2} = receive_msg(genlib_map:get(<<"Flak Cannon">>,   ?WEAPONS), Context).
-
-get_weapon(Context, Sup, Cb, Gun) ->
-    call_async(Context, 'Weapons', get_weapon, [Gun, <<>>], Sup, Cb).
-
-collect(Result, Context, To) ->
-    ok = send_msg(To, {woody_context:get_rpc_id(span_id, Context), Result}).
+    {ok, ok} = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
+    {ok, _}  = receive_msg(Armor, Context).
 
 call_sequence_with_context_meta_test(_) ->
     Gun     = <<"Enforcer">>,
     Current = genlib_map:get(Gun, ?WEAPONS),
-    Context = woody_context:new(<<"call_seq_with_context_meta">>,
-                  {?MODULE, {}}, #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
-    Expect = genlib_map:get(<<"Ripper">>, ?WEAPONS),
+    Context = woody_context:new(
+                <<"call_seq_with_context_meta">>,
+                #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
+    Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)},
     Expect = call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()]).
 
 call_pass_thru_ok_test(_) ->
     Armor   = <<"AntiGrav Boots">>,
     Context = make_context(<<"call_pass_thru_ok">>),
-    Expect  = genlib_map:get(Armor, ?POWERUPS),
+    Expect  = {ok, genlib_map:get(Armor, ?POWERUPS)},
     Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]),
     {ok, _} = receive_msg(Armor, Context).
 
@@ -434,11 +380,11 @@ call_pass_thru_except_test(_) ->
     Armor   = <<"Shield Belt">>,
     Id      = <<"call_pass_thru_except">>,
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
-    Context = woody_context:new(RpcId, {?MODULE, []}),
-    Except  = ?POWERUP_FAILURE("run out"),
+    Context = woody_context:new(RpcId),
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        throw:Except -> ok
+        error:{woody_error, {external, result_unexpected, ?ERR_BAD_PROXYING}} ->
+            ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
@@ -447,7 +393,7 @@ call_pass_thru_bad_result_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_result">>),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?THRIFT_S_ERR_ENCODE}} ->
+        error:{woody_error, {external, result_unexpected, ?ERR_S_THRIFT_ENCODE}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
@@ -457,26 +403,26 @@ call_pass_thru_bad_except_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_except">>),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, <<"'PowerupFailure'">>}} ->
+        error:{woody_error, {external, result_unexpected, ?ERR_BAD_PROXYING}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_result_unexpected_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_result_unexpected">>, <<"Helmet">>,
-        error, result_unexpected, ?THRIFT_S_ERR_ENCODE).
+        error, result_unexpected, ?ERR_S_THRIFT_ENCODE).
 
 call_pass_thru_resource_unavail_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_resource_unavail">>, <<"Damage Amplifier">>,
-        error, resource_unavailable, ?POWERUP_UNAVAILABLE).
+        error, resource_unavailable, ?ERR_POWERUP_UNAVAILABLE).
 
 call_pass_thru_result_unknown_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_result_unknown">>, <<"Invisibility">>,
-        error, result_unknown, ?POWERUP_STATE_UNKNOWN).
+        error, result_unknown, ?ERR_POWERUP_STATE_UNKNOWN).
 
 call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass, ErrDetails) ->
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
-    Context = woody_context:new(RpcId, {?MODULE, []}),
+    Context = woody_context:new(RpcId),
     try call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
     catch
         ExceptClass:{woody_error, {external, ErrClass, ErrDetails}} ->
@@ -508,8 +454,8 @@ call_fail_w_no_headers(Id, Class, Details) ->
     Gun     =  <<"Enforcer">>,
     Context = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
-    try woody:call({Service, get_weapon, [Gun, self_to_bin()]},
-            #{url => Url}, Context)
+    try woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
+            #{url => Url, event_handler => ?MODULE}, Context)
     catch
         error:{woody_error, {external, Class, Details}} ->
             ok
@@ -521,23 +467,23 @@ call_with_client_pool_test(_) ->
     Gun     =  <<"Enforcer">>,
     Context = make_context(<<"call_with_client_pool">>),
     {Url, Service} = get_service_endpoint('Weapons'),
-    Expect = genlib_map:get(Gun, ?WEAPONS),
-    Expect = woody:call({Service, get_weapon, [Gun, self_to_bin()]},
-                 #{url => Url, pool => Pool}, Context),
+    Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect = woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
+                 #{url => Url, event_handler => ?MODULE, pool => Pool}, Context),
     {ok, _} = receive_msg(Gun, Context),
     ok = woody_client_thrift:stop_pool(Pool).
 
 call_thrift_multiplexed_test(_) ->
     Client = make_thrift_multiplexed_client(<<"call_thrift_multiplexed">>,
                  "powerups", get_service_endpoint('Powerups')),
-    {Client1, {error, {system, {external, result_unexpected, ?THRIFT_S_ERR_MULTIPLEX}}}} =
+    {Client1, {error, {system, {external, result_unexpected, ?ERR_S_THRIFT_MULTIPLEX}}}} =
         thrift_client:call(Client, get_powerup, [<<"Body Armor">>, self_to_bin()]),
     thrift_client:close(Client1).
 
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
         woody_client_thrift_http_transport:new(
-            woody_context:new_child(make_context(Id)),
+            woody_context:new_child(woody_util:enrich_context(make_context(Id), ?MODULE)),
             #{url => Url}
         ),
         [{strict_read, true}, {strict_write, true}]
@@ -578,7 +524,7 @@ server_http_req_validation_test(_) ->
 try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
     try
-        woody:child_spec('bad_spec', #{
+        woody_server:child_spec('bad_spec', #{
             handlers      => [get_handler('Powerups'), NaughtyHandler],
             event_handler => ?MODULE,
             ip            => ?SERVER_IP,
@@ -615,13 +561,13 @@ handle_function(get_weapon, [Name, To], Context, _Opts) ->
         #'Weapon'{ammo = 0}  ->
             throw(?WEAPON_FAILURE("out of ammo"));
         Weapon = #'Weapon'{} ->
-            Weapon
+            {ok, Weapon}
     end;
 
 %% Powerups
 handle_function(get_powerup, [Name, To], Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
-    return_powerup(Name);
+    {ok, return_powerup(Name)};
 
 handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
     ProxyGetPowerup =:= proxy_get_powerup orelse
@@ -638,7 +584,7 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
 
 handle_function(like_powerup, [Name, To], Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
-    ok.
+    {ok, ok}.
 
 %%
 %% woody_event_handler callbacks
@@ -668,7 +614,7 @@ handle_proxy_event(_, _, _, _) ->
 
 handle_proxy_event(?EV_CLIENT_RECEIVE, 200, <<"call_pass_thru_except">>) ->
     ok;
-handle_proxy_event(?EV_SERVER_SEND,    200, <<"call_pass_thru_except">>) ->
+handle_proxy_event(?EV_SERVER_SEND,    500, <<"call_pass_thru_except">>) ->
     ok;
 handle_proxy_event(?EV_CLIENT_RECEIVE, 500, <<"call_pass_thru_result_unexpected">>) ->
     ok;
@@ -706,26 +652,29 @@ terminate(_, _, _) ->
 %%
 %% internal functions
 %%
-gun_test_basic(Id, Gun, {Class, Expect}, WithMsg) ->
-    Context   = make_context(Id),
-    Expect    = try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
-                catch
-                    Class:Except -> Except
-                end,
-    check_msg(WithMsg, Gun, Context);
 gun_test_basic(Id, Gun, Expect, WithMsg) ->
-    gun_test_basic(Id, Gun, {undefined, Expect}, WithMsg).
+    Context   = make_context(Id),
+    {Class, Reason} = get_except(Expect),
+    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]) of
+        Expect -> ok
+    catch
+        Class:Reason -> ok
+    end,
+    check_msg(WithMsg, Gun, Context).
+
+get_except({ok, _}) ->
+    {undefined, undefined};
+get_except({exception, _}) ->
+    {undefined, undefined};
+get_except(Except = {_Class, _Reason}) ->
+    Except.
 
 make_context(ReqId) ->
-    woody_context:new(ReqId, {?MODULE, []}).
+    woody_context:new(ReqId).
 
 call(Context, ServiceName, Function, Args) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    woody:call({Service, Function, Args}, #{url => Url}, Context).
-
-call_async(Context, ServiceName, Function, Args, Sup, Callback) ->
-    {Url, Service} = get_service_endpoint(ServiceName),
-    woody:call_async({Service, Function, Args}, #{url => Url}, Sup, Callback, Context).
+    woody_client:call({Service, Function, Args}, #{url => Url, event_handler => ?MODULE}, Context).
 
 get_service_endpoint('Weapons') ->
     {
@@ -746,14 +695,12 @@ check_msg(false, _, _) ->
 switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift),
     ContextAnnot = annotate_weapon(CheckAnnot, Context, NextWName, NextWPos),
-    try call(ContextAnnot, 'Weapons', get_weapon,
-             [NextWName, self_to_bin()])
-    catch
-        throw:#'WeaponFailure'{
-            code   = <<"weapon_error">>,
-            reason = <<"out of ammo">>
-        } ->
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot)
+    case call(ContextAnnot, 'Weapons', get_weapon, [NextWName, self_to_bin()]) of
+        {exception, #'WeaponFailure'{code = <<"weapon_error">>, reason = <<"out of ammo">>}}
+        ->
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot);
+        Ok ->
+            Ok
     end.
 
 annotate_weapon(true, Context, WName, WPos) ->
@@ -772,13 +719,13 @@ next_weapon(_) ->
     throw(?WEAPON_STACK_OVERFLOW).
 
 return_powerup(<<"Invisibility">>) ->
-    woody_error:raise(system, {internal, result_unknown, ?POWERUP_STATE_UNKNOWN});
+    woody_error:raise(system, {internal, result_unknown, ?ERR_POWERUP_STATE_UNKNOWN});
 return_powerup(Name) when is_binary(Name) ->
     return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY));
 return_powerup(#'Powerup'{level = Level}) when Level == 0 ->
     throw(?POWERUP_FAILURE("run out"));
 return_powerup(#'Powerup'{time_left = Time}) when Time == 0 ->
-    woody_error:raise(system, {internal, resource_unavailable, ?POWERUP_UNAVAILABLE});
+    woody_error:raise(system, {internal, resource_unavailable, ?ERR_POWERUP_UNAVAILABLE});
 return_powerup(P = #'Powerup'{}) ->
     P;
 return_powerup(P = ?BAD_POWERUP_REPLY) ->

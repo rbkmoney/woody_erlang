@@ -33,17 +33,20 @@
 %%
 %% API
 %%
--spec raise(type(), business_error() | system_error()) -> no_return().
+-spec raise(type(), business_error() | system_error()) ->
+    no_return().
 raise(business, Except) ->
     erlang:throw(Except);
 raise(system, {Source, Class, Details}) ->
     erlang:error({woody_error, {Source, Class, Details}}).
 
--spec format_details(term()) -> details().
+-spec format_details(term()) ->
+    details().
 format_details(Error) ->
     genlib:to_binary(io_lib:format("~p", [Error])).
 
--spec format_details_short(term()) -> details().
+-spec format_details_short(term()) ->
+    details().
 format_details_short(Error) ->
     format_details(short_reason(Error)).
 

@@ -8,12 +8,23 @@
 %%
 %% behaviour definition
 %%
--export_type([event/0, event_meta/0, meta_client_send/0, meta_client_receive/0,
-    meta_server_receive/0, meta_server_send/0, meta_call_service/0,
-    meta_service_result/0, meta_invoke_service_handler/0,
-    meta_service_handler_result/0, meta_internal_error/0,
-    meta_trace/0
-]).
+-type event() ::
+    ?EV_CALL_SERVICE   | ?EV_INVOKE_SERVICE_HANDLER |
+    ?EV_SERVICE_RESULT | ?EV_SERVICE_HANDLER_RESULT |
+    ?EV_CLIENT_SEND    | ?EV_SERVER_RECEIVE         |
+    ?EV_CLIENT_RECEIVE | ?EV_SERVER_SEND            |
+
+    ?EV_INTERNAL_ERROR | ?EV_TRACE.
+
+-type event_meta() ::
+    meta_call_service()   | meta_invoke_service_handler() |
+    meta_service_result() | meta_service_handler_result() |
+    meta_client_send()    | meta_server_receive()         |
+    meta_client_receive() | meta_server_send()            |
+
+    meta_internal_error() | meta_trace().
+
+-export_type([event/0, event_meta/0]).
 
 -callback handle_event
     (?EV_CALL_SERVICE           , woody:rpc_id(), meta_call_service   (), woody:options()) -> _;
@@ -22,23 +33,15 @@
     (?EV_CLIENT_RECEIVE         , woody:rpc_id(), meta_client_receive (), woody:options()) -> _;
     (?EV_SERVER_RECEIVE         , woody:rpc_id(), meta_server_receive (), woody:options()) -> _;
     (?EV_SERVER_SEND            , woody:rpc_id(), meta_server_send    (), woody:options()) -> _;
-    (?EV_INVOKE_SERVICE_HANDLER , woody:rpc_id(), meta_invoke_service_handler (), woody:options()) -> _;
-    (?EV_SERVICE_HANDLER_RESULT , woody:rpc_id(), meta_service_handler_result (), woody:options()) -> _;
     (?EV_INTERNAL_ERROR         , woody:rpc_id(), meta_internal_error (), woody:options()) -> _;
-    (?EV_TRACE                  , woody:rpc_id()|undefined, meta_trace(), woody:options()) -> _.
+    (?EV_TRACE                  , woody:rpc_id()|undefined, meta_trace(), woody:options()) -> _;
+    (?EV_INVOKE_SERVICE_HANDLER , woody:rpc_id(), meta_invoke_service_handler (), woody:options()) -> _;
+    (?EV_SERVICE_HANDLER_RESULT , woody:rpc_id(), meta_service_handler_result (), woody:options()) -> _.
 
--type event() :: ?EV_CALL_SERVICE | ?EV_SERVICE_RESULT | ?EV_CLIENT_SEND | ?EV_CLIENT_RECEIVE |
-    ?EV_SERVER_RECEIVE | ?EV_SERVER_SEND | ?EV_INVOKE_SERVICE_HANDLER  | ?EV_SERVICE_HANDLER_RESULT |
-    ?EV_INTERNAL_ERROR | ?EV_TRACE.
 
--type event_meta() :: meta_client_send() | meta_client_receive() | meta_call_service() |
-    meta_service_result() | meta_server_receive() | meta_server_send() |
-    meta_invoke_service_handler() | meta_service_handler_result() |
-    meta_internal_error() | meta_trace().
+%% Types
 
--type status()       :: ok | error.
--type role()         :: client | server.
-
+%% client events
 -type meta_call_service() :: #{
     service  => woody:service_name(),
     function => woody:func(),
@@ -50,37 +53,34 @@
     status => status(),
     result => woody:result() | woody_error:error()
 }.
-
 -type meta_client_send() :: #{
     url => woody:url()
 }.
-
 -type meta_client_receive() :: #{
     status => status(),
     %% optional
     code   => woody:http_code(),
     reason => woody_error:details()
 }.
+-export_type([meta_call_service/0, meta_service_result/0, meta_client_send/0, meta_client_receive/0]).
 
+%% server events
 -type meta_server_receive() :: #{
     url    => woody:url(),
     status => status(),
     %% optional
     reason => woody_error:details()
 }.
-
 -type meta_server_send() :: #{
     status => status(),
     code   => woody:http_code()
 }.
-
 -type meta_invoke_service_handler() :: #{
     service  => woody:service_name(),
     function => woody:func(),
     args     => woody:args(),
     metadata => woody_context:meta()
 }.
-
 -type meta_service_handler_result() :: #{
     status => status(),
     result => woody:result() | woody_error:business_error() | woody_error:system_error() | _Error,
@@ -90,7 +90,9 @@
     class        => business | system,
     stack        => woody_error:stack()
 }.
+-export_meta([meta_server_receive/0, meta_server_send/0, meta_invoke_service_handler/0, meta_service_handler_result/0]).
 
+%% internal events
 -type meta_internal_error() :: #{
     role     => role(),
     severity => severity(),
@@ -99,7 +101,6 @@
     %% optional
     stack => woody_error:stack()
 }.
-
 -type meta_trace() :: #{
     event => binary(),
     role  => role(),
@@ -109,12 +110,17 @@
     headers => woody:http_headers(),
     body    => woody:http_body()
 }.
+-export_type([meta_internal_error/0, meta_trace/0]).
+
+-type status()       :: ok | error.
+-type role()         :: client | server.
+-export_type([status/0, role/0]).
 
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()  }.
 -type log_msg () :: {severity(), msg()}.
-
 -export_type([severity/0, msg/0, log_msg/0]).
+
 
 %%
 %% API
@@ -126,19 +132,18 @@
     (?EV_CLIENT_RECEIVE , meta_client_receive (), woody_context:ctx()) -> ok;
     (?EV_SERVER_RECEIVE , meta_server_receive (), woody_context:ctx()) -> ok;
     (?EV_SERVER_SEND    , meta_server_send    (), woody_context:ctx()) -> ok;
-    (?EV_INVOKE_SERVICE_HANDLER , meta_invoke_service_handler(), woody_context:ctx()) -> ok;
-    (?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result(), woody_context:ctx()) -> ok;
     (?EV_INTERNAL_ERROR , meta_internal_error (), woody_context:ctx()) -> ok;
-    (?EV_TRACE          , meta_trace          (), woody_context:ctx()) -> ok.
-handle_event(Event, Meta, Context) ->
-    {Handler, Opts} = woody_context:get_ev_handler(Context),
-    _ = Handler:handle_event(Event, woody_context:get_rpc_id(Context), add_request_meta(Event, Meta, Context), Opts),
-    ok.
+    (?EV_TRACE          , meta_trace          (), woody_context:ctx()) -> ok;
+    (?EV_INVOKE_SERVICE_HANDLER , meta_invoke_service_handler(), woody_context:ctx()) -> ok;
+    (?EV_SERVICE_HANDLER_RESULT , meta_service_handler_result(), woody_context:ctx()) -> ok.
+handle_event(Event, Meta, Context = #{ev_handler := Handler}) ->
+    handle_event(Handler, Event, woody_context:get_rpc_id(Context), add_request_meta(Event, Meta, Context)).
 
--spec handle_event(woody:ev_handler(), ?EV_TRACE, undefined, meta_trace()) ->
+-spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, meta_trace()) ->
     ok.
-handle_event({Handler, Opts}, Event, RpcId, Meta) ->
-    _ = Handler:handle_event(Event, RpcId, Meta, Opts),
+handle_event(Handler, Event, RpcId, Meta) ->
+    {Module, Opts} = woody_util:get_mod_opts(Handler),
+    Module:handle_event(Event, RpcId, Meta, Opts),
     ok.
 
 -spec format_rpc_id(woody:rpc_id()) ->
@@ -151,7 +156,6 @@ format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
 format_event(RpcId, Event, Meta) ->
     {Severity, Msg} = format_event(Event, Meta),
     {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
-
 
 -spec format_event(event(), event_meta()) ->
     log_msg().

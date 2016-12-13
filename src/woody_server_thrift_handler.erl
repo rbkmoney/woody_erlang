@@ -42,7 +42,7 @@
 
 %% Behaviour definition
 -callback handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
-    woody:result() | no_return().
+    {ok, woody:result()} | no_return().
 
 
 %%
@@ -151,7 +151,8 @@ handle_decode_result({ok, State = #{th_rep_type := oneway_void}}) ->
 handle_decode_result({ok, State}) ->
     {ok, call, State}.
 
--spec handle_decode_error(thrift_error(), state()) -> {error, client_error()}.
+-spec handle_decode_error(thrift_error(), state()) ->
+    {error, client_error()}.
 handle_decode_error(Error, #{context := Context}) ->
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
             role     => server,
@@ -161,7 +162,8 @@ handle_decode_error(Error, #{context := Context}) ->
         }, Context),
     {error, client_error(Error)}.
 
--spec client_error(thrift_error()) -> client_error().
+-spec client_error(thrift_error()) ->
+    client_error().
 client_error({bad_binary_protocol_version, Version}) ->
     BinVersion = genlib:to_binary(Version),
     {client, <<"thrift: bad binary protocol version: ", BinVersion/binary>>};
@@ -186,10 +188,11 @@ call_handler_safe(State) ->
             handle_function_catch(Class, Reason, erlang:get_stacktrace(), State)
     end.
 
--spec call_handler(state()) -> woody:result() | no_return().
+-spec call_handler(state()) ->
+    {ok, woody:result()} | no_return().
 call_handler(#{
     context  := Context,
-    handler  := {Module, Opts},
+    handler  := Handler,
     service  := {_, ServiceName},
     function := Function,
     args     := Args})
@@ -203,9 +206,10 @@ call_handler(#{
             },
             Context
         ),
+    {Module, Opts} = woody_util:get_mod_opts(Handler),
     Module:handle_function(Function, Args, Context, Opts).
 
--spec handle_success(woody:result(), state()) ->
+-spec handle_success({ok, woody:result()}, state()) ->
     {ok | {error, {system, woody_error:system_error()}}, state()}.
 handle_success(Result, State = #{
     function    := Function,
@@ -215,11 +219,11 @@ handle_success(Result, State = #{
     _ = log_handler_result(ok, Context, #{result => Result}),
     StructName = atom_to_list(Function) ++ "_result",
     case Result of
-        ok when ReplyType == oneway_void ->
+        {ok, ok} when ReplyType == oneway_void ->
             {ok, State};
-        ok when ReplyType == {struct, struct, []} ->
+        {ok, ok} when ReplyType == {struct, struct, []} ->
             encode_reply(ok, {ReplyType, {StructName}}, State#{th_msg_type => ?tMessageType_REPLY});
-        ReplyData ->
+        {ok, ReplyData} ->
             Reply = {
                 {struct, struct, [{0, undefined, ReplyType, undefined, undefined}]},
                 {StructName, ReplyData}
@@ -241,8 +245,7 @@ handle_function_catch(Class, Error, Stack, State) when
     handle_internal_error(Error, Class, Stack, State).
 
 
--spec handle_exception(woody_error:business_error() | _Throw,
-    woody_error:stack(), state())
+-spec handle_exception(woody_error:business_error() | _Throw, woody_error:stack(), state())
 ->
     {{error, woody_error:error()}, state()}.
 handle_exception(Except, Stack, State = #{

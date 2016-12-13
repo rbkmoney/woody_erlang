@@ -31,13 +31,13 @@
 ).
 
 -type options() :: #{
-    protocol   => thrift,
-    transport  => http,
-    handlers   => list(woody:http_handler(woody:th_handler())),
+    protocol      => thrift,
+    transport     => http,
+    handlers      => list(woody:http_handler(woody:th_handler())),
     event_handler => woody:ev_handler(),
-    ip         => inet:ip_address(),
-    port       => inet:port_address(),
-    net_ops    => net_opts() %% optional
+    ip            => inet:ip_address(),
+    port          => inet:port_address(),
+    net_ops       => net_opts() %% optional
 }.
 -export_type([net_opts/0, options/0]).
 
@@ -85,8 +85,10 @@ child_spec(Id, Opts = #{
 get_socket_transport(Ip, Port) ->
     {ranch_tcp, [{ip, Ip}, {port, Port}]}.
 
--spec get_cowboy_config(options()) -> cowboy_protocol:opts().
+-spec get_cowboy_config(options()) ->
+    cowboy_protocol:opts().
 get_cowboy_config(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+    ok         = validate_event_handler(EvHandler),
     Paths      = get_paths(config(), EvHandler, Handlers, []),
     CowboyOpts = get_cowboy_opts(maps:get(net_opts, Opts, undefined)),
     HttpTrace  = get_http_trace(EvHandler, config()),
@@ -97,10 +99,13 @@ get_cowboy_config(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
         {max_header_name_length, 64}
     ] ++ CowboyOpts ++ HttpTrace.
 
--spec get_paths(server_opts(), woody:ev_handler(),
-    list(woody:http_handler(woody:th_handler())), list({woody:path(), module(), state()}))
-->
-    list({woody:path(), module(), state()}).
+validate_event_handler(Handler) ->
+    {_, _} = woody_util:get_mod_opts(Handler),
+    ok.
+
+-spec get_paths(server_opts(), woody:ev_handler(), Handlers, Paths) -> Paths when
+    Handlers :: list(woody:http_handler(woody:th_handler())),
+    Paths    :: list({woody:path(), module(), state()}).
 get_paths(_, _, [], Paths) ->
     Paths;
 get_paths(ServerOpts, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) ->
@@ -114,19 +119,22 @@ get_paths(ServerOpts, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) -
 get_paths(_, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
--spec config() -> server_opts().
+-spec config() ->
+    server_opts().
 config() ->
     #{
        max_body_length => ?MAX_BODY_LENGTH,
        regexp_meta => compile_filter_meta()
     }.
 
--spec compile_filter_meta() -> re_mp().
+-spec compile_filter_meta() ->
+    re_mp().
 compile_filter_meta() ->
     {ok, Re} = re:compile([?HEADER_META_PREFIX], [unicode, caseless]),
     Re.
 
--spec get_cowboy_opts(net_opts() | undefined) -> cowboy_protocol:opts().
+-spec get_cowboy_opts(net_opts() | undefined) ->
+    cowboy_protocol:opts().
 get_cowboy_opts(undefined) ->
     [];
 get_cowboy_opts(NetOps) ->
@@ -183,11 +191,12 @@ init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler}) ->
     {Url, Req1} = cowboy_req:url(Req),
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            Context = woody_context:new(RpcId, EvHandler),
+            Context = make_request_context(RpcId, EvHandler),
             check_headers(Req2, Opts#{context => Context, url => Url});
         {error, BadRpcId, Req2} ->
-            reply_bad_header(400, <<"bad ", ?HEADER_PREFIX/binary, " id header">>,
-                Url, Req2, woody_context:new(BadRpcId, EvHandler))
+            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
+                Url, Req2, make_request_context(BadRpcId, EvHandler)
+            )
     end.
 
 -spec handle(cowboy_req:req(), state()) ->
@@ -208,8 +217,7 @@ handle(Req, #{
         {{error, body_too_large}, _, Req1} ->
             reply_client_error(413, <<"body too large">>, Url, Req1, Context);
         {{error, Reason}, _, Req1} ->
-            BinReason = genlib:to_binary(Reason),
-            reply_client_error(400, <<"body read error: ", BinReason/binary>>,
+            reply_client_error(400, woody_util:to_binary(["body read error: ", Reason]),
                 Url, Req1, Context)
     end,
     {ok, Req2, undefined}.
@@ -269,7 +277,7 @@ check_headers(Req, Opts) ->
 check_method({<<"POST">>, Req}, Opts) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
 check_method({Method, Req}, #{url := Url, context := Context}) ->
-    reply_bad_header(405, <<"wrong method: ", Method/binary>>, Url,
+    reply_bad_header(405, woody_util:to_binary(["wrong method: ", Method]), Url,
         cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req), Context).
 
 -spec check_content_type({binary() | undefined, cowboy_req:req()}, state()) ->
@@ -278,7 +286,7 @@ check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
     check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
 check_content_type({BadCType, Req}, #{url := Url, context := Context}) ->
     BinBadCType = genlib:to_binary(BadCType),
-    reply_bad_header(415, <<"wrong content type: ", BinBadCType/binary>>,
+    reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BinBadCType]),
         Url, Req, Context).
 
 -spec check_accept({binary() | undefined, cowboy_req:req()}, state()) ->
@@ -289,8 +297,7 @@ check_accept({Accept, Req}, Opts) when
 ->
     check_metadata_headers(cowboy_req:headers(Req), Opts);
 check_accept({BadAccept, Req1}, #{url := Url, context := Context}) ->
-    BinBadAccept = genlib:to_binary(BadAccept),
-    reply_bad_header(406, <<"wrong client accept: ", BinBadAccept/binary>>,
+    reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]),
         Url, Req1, Context).
 
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
@@ -322,6 +329,11 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
         end,
       #{}, Headers).
 
+-spec make_request_context(woody:rpc_id(), woody:ev_handler()) ->
+    woody_context:ctx().
+make_request_context(RpcId, EvHandler) ->
+    woody_util:enrich_context(woody_context:new(RpcId), EvHandler).
+
 -spec reply_bad_header(woody:http_code(), binary(), woody:url(),
     cowboy_req:req(), woody_context:ctx())
 ->
@@ -352,9 +364,7 @@ get_body(Req, #{max_body_length := MaxBody}) ->
             {{error, Reason}, <<>>, Req}
     end.
 
--spec handle_request(woody:http_body(), woody:th_handler(),
-    woody_context:ctx(), cowboy_req:req())
-->
+-spec handle_request(woody:http_body(), woody:th_handler(), woody_context:ctx(), cowboy_req:req()) ->
     cowboy_req:req().
 handle_request(Body, ThriftHander, Context, Req) ->
     case woody_server_thrift_handler:init_handler(Body, ThriftHander, Context) of
@@ -368,19 +378,15 @@ handle_request(Body, ThriftHander, Context, Req) ->
             handle_error(Error, Req, Context)
     end.
 
--spec handle_result({ok, binary()} | {error, woody_error:error()},
-    cowboy_req:req(), woody_context:ctx())
-->
+-spec handle_result({ok, binary()} | {error, woody_error:error()}, cowboy_req:req(), woody_context:ctx()) ->
     cowboy_req:req().
 handle_result({ok, Body}, Req, Context) ->
     reply(200, cowboy_req:set_resp_body(Body, Req), Context);
 handle_result({error, Error}, Req, Context) ->
     handle_error(Error, Req, Context).
 
--spec handle_error(woody_error:error() | woody_server_thrift_handler:client_error(),
-    cowboy_req:req(), woody_context:ctx())
-->
-    cowboy_req:req().
+-spec handle_error(Error, cowboy_req:req(), woody_context:ctx()) -> cowboy_req:req() when
+    Error :: woody_error:error() | woody_server_thrift_handler:client_error().
 handle_error({business, {ExceptName, Except}}, Req, Context) ->
     reply(200, set_error_headers(
         <<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)),
