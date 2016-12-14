@@ -1,4 +1,4 @@
-%%% @doc Client API
+%%% @doc Error handling API
 %%% @end
 
 -module(woody_error).

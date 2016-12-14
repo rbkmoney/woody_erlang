@@ -270,7 +270,7 @@ check_ids(Map = #{req := Req}) ->
 check_headers(Req, State) ->
     check_method(cowboy_req:method(Req), State).
 
--spec check_method({binary(), cowboy_req:req()}, state()) ->
+-spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_method({<<"POST">>, Req}, State) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), State);
@@ -279,14 +279,14 @@ check_method({Method, Req}, State) ->
         cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req), State
     ).
 
--spec check_content_type({binary() | undefined, cowboy_req:req()}, state()) ->
+-spec check_content_type({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_content_type({?CONTENT_TYPE_THRIFT, Req}, State) ->
     check_accept(cowboy_req:header(<<"accept">>, Req), State);
 check_content_type({BadCType, Req}, State) ->
     reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BadCType]), Req, State).
 
--spec check_accept({binary() | undefined, cowboy_req:req()}, state()) ->
+-spec check_accept({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_accept({Accept, Req}, State) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
@@ -330,13 +330,13 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
 make_request_context(RpcId, EvHandler) ->
     woody_context:enrich(woody_context:new(RpcId), EvHandler).
 
--spec reply_bad_header(woody:http_code(), binary(), cowboy_req:req(), state()) ->
+-spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     {shutdown, cowboy_req:req(), undefined}.
 reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
     Req1 = reply_client_error(Code, Reason, Req, State),
     {shutdown, Req1, undefined}.
 
--spec reply_client_error(woody:http_code(), binary(), cowboy_req:req(), state()) ->
+-spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
 reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
     _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
@@ -371,7 +371,7 @@ handle_request(Body, ThriftHander, Context, Req) ->
             handle_error(Error, Req, Context)
     end.
 
--spec handle_result({ok, binary()} | {error, woody_error:error()}, cowboy_req:req(), woody_context:ctx()) ->
+-spec handle_result({ok, woody:http_body()} | {error, woody_error:error()}, cowboy_req:req(), woody_context:ctx()) ->
     cowboy_req:req().
 handle_result({ok, Body}, Req, Context) ->
     reply(200, cowboy_req:set_resp_body(Body, Req), Context);
@@ -397,7 +397,7 @@ handle_error({system, {external, resource_unavailable, Details}}, Req, Context) 
 handle_error({system, {external, result_unknown, Details}}, Req, Context) ->
     reply(502, set_error_headers(<<"Result Unknown">>, Details, Req), Context).
 
--spec set_error_headers(binary(), binary(), cowboy_req:req()) ->
+-spec set_error_headers(woody:http_header_val(), woody:http_header_val(), cowboy_req:req()) ->
     cowboy_req:req().
 set_error_headers(Class, Reason, Req) ->
     lists:foldl(

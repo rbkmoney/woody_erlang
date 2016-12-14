@@ -21,7 +21,7 @@
     th_seqid      => term(),
     th_param_type => term(),
     th_msg_type   => thrift_msg_type(),
-    th_rep_type   => thrift_reply_type()
+    th_reply_type => thrift_reply_type()
 }.
 -export_type([state/0]).
 
@@ -54,7 +54,7 @@ init_handler(Request, {Service, Handler}, Context) ->
     {ok, Proto} = thrift_binary_protocol:new(Transport,
         [{strict_read, true}, {strict_write, true}]
     ),
-    try handle_decode_result(decode_request(decode_begin(#{
+    try handle_decode_result(decode_request(decode_message_begin(#{
             context  => Context,
             service  => Service,
             handler  => Handler,
@@ -77,9 +77,9 @@ invoke_handler(State = #{th_msg_type := MsgType}) ->
 %%
 
 %% Decode request
--spec decode_begin(state()) ->
+-spec decode_message_begin(state()) ->
     state() | no_return().
-decode_begin(State = #{th_proto := Proto}) ->
+decode_message_begin(State = #{th_proto := Proto}) ->
     case thrift_protocol:read(Proto, message_begin) of
         {Proto1, #protocol_message_begin{name = Function, type = Type, seqid = SeqId}} when
             Type =:= ?tMessageType_CALL orelse
@@ -124,7 +124,7 @@ match_reply_type(State = #{service := Service, function := Function, th_msg_type
         ->
             throw_decode_error(request_reply_type_mismatch);
         ReplyType ->
-            State#{th_rep_type => ReplyType}
+            State#{th_reply_type => ReplyType}
     end.
 
 -spec decode_request(state()) ->
@@ -139,7 +139,7 @@ decode_request(State = #{th_proto := Proto, th_param_type := ParamsType}) ->
 
 -spec handle_decode_result(state()) ->
     {ok, reply_type(), state()}.
-handle_decode_result(State = #{th_rep_type:=oneway_void}) ->
+handle_decode_result(State = #{th_reply_type := oneway_void}) ->
     {ok, oneway_void, State};
 handle_decode_result(State) ->
     {ok, call, State}.
@@ -210,9 +210,9 @@ call_handler(#{
 -spec handle_success({ok, woody:result()}, state()) ->
     {ok | {error, {system, woody_error:system_error()}}, state()}.
 handle_success(Result, State = #{
-    function    := Function,
-    th_rep_type := ReplyType,
-    context     := Context
+    function      := Function,
+    th_reply_type := ReplyType,
+    context       := Context
 }) ->
     _ = log_handler_result(ok, Context, #{result => Result}),
     StructName = atom_to_list(Function) ++ "_result",
@@ -247,10 +247,10 @@ handle_function_catch(Class, Error, Stack, State) when
 ->
     {{error, woody_error:error()}, state()}.
 handle_exception(Except, Stack, State = #{
-    service     := Service,
-    function    := Function,
-    th_rep_type := ReplyType,
-    context     := Context
+    service       := Service,
+    function      := Function,
+    th_reply_type := ReplyType,
+    context       := Context
 }) ->
     {struct, _, XInfo} = ReplySpec = get_function_info(Service, Function, exceptions),
     {ExceptionList, FoundExcept} = lists:mapfoldl(
@@ -290,7 +290,7 @@ get_except_name(Module, Type) ->
 
 -spec handle_woody_error(woody_error:system_error() | _Except, state()) ->
     {{error, {system, woody_error:system_error()}}, state()}.
-handle_woody_error(Error, State = #{context := Context, th_rep_type := oneway_void}) ->
+handle_woody_error(Error, State = #{context := Context, th_reply_type := oneway_void}) ->
     log_handler_result(error, Context, #{class => system, result => Error, ignore => true}),
     {{error, {system, Error}}, State};
 handle_woody_error(Error, State = #{context := Context}) ->
@@ -299,7 +299,7 @@ handle_woody_error(Error, State = #{context := Context}) ->
 
 -spec handle_internal_error(_Error, woody_error:erlang_except(), woody_error:stack(), state()) ->
     {{error, {system, {internal, woody_error:source(), woody_error:details()}}}, state()}.
-handle_internal_error(Error, ExcClass, Stack, State = #{context := Context, th_rep_type := oneway_void}) ->
+handle_internal_error(Error, ExcClass, Stack, State = #{context := Context, th_reply_type := oneway_void}) ->
     log_handler_result(error, Context,
         #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => true}),
     {{error, {system, {internal, result_unexpected, <<>>}}}, State};

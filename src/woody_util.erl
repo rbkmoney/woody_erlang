@@ -1,4 +1,4 @@
-%%% @doc Client API
+%%% @doc Internal utils
 %%% @end
 
 -module(woody_util).

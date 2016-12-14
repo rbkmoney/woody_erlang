@@ -1,4 +1,4 @@
-%%% @doc Client API
+%%% @doc Type definitions
 %%% @end
 
 -module(woody).
@@ -36,9 +36,9 @@
 -export_type([rpc_type/0]).
 
 %% Generic
--type options()  :: any().
--type handler(Opts)  :: {module(), Opts} | module().
--type ev_handler()   :: handler(options()).
+-type options()     :: any().
+-type handler(Opts) :: {module(), Opts} | module().
+-type ev_handler()  :: handler(options()).
 -export_type([handler/1, ev_handler/0, options/0]).
 
 -type url()                 :: binary().
@@ -46,12 +46,14 @@
 -type http_handler(Handler) :: {path(), Handler}.
 -export_type([url/0, path/0, http_handler/1]).
 
--type http_code()    :: pos_integer().
--type http_headers() :: list({binary(), binary()}).
--type http_body()    :: binary().
--export_type([http_code/0, http_headers/0, http_body/0]).
+-type http_code()        :: pos_integer().
+-type http_header_name() :: binary().
+-type http_header_val()  :: binary().
+-type http_headers()     :: list({http_header_name(), http_header_val()}).
+-type http_body()        :: binary().
+-export_type([http_code/0, http_header_name/0, http_header_val/0, http_headers/0, http_body/0]).
 
-%% copy-paste from OTP supervsor
+%% copy-paste from OTP supervisor
 -type sup_ref()  :: (Name :: atom())
                   | {Name :: atom(), Node :: node()}
                   | {'global', Name :: atom()}

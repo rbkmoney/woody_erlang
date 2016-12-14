@@ -1,4 +1,4 @@
-%%% @doc Client API
+%%% @doc Woody context API
 %%% @end
 
 -module(woody_context).

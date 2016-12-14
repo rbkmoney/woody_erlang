@@ -25,7 +25,7 @@
     read_buffer   => binary()
 }.
 
--type header_parse_value() ::none | multiple | binary().
+-type header_parse_value() ::none | multiple | woody:http_header_val().
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
@@ -213,7 +213,7 @@ get_error_class_header_value(Headers) ->
             genlib_string:to_lower(Value)
     end.
 
--spec get_header_value(binary(), woody:http_headers()) ->
+-spec get_header_value(woody:http_header_name(), woody:http_headers()) ->
     header_parse_value().
 get_header_value(Name, Headers) ->
     case [V || {K, V} <- Headers, Name =:= genlib_string:to_lower(K)] of
@@ -227,7 +227,7 @@ get_header_value(Name, Headers) ->
 add_metadata_headers(Context, Headers) ->
     maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
 
--spec add_metadata_header(binary(), binary(), woody:http_headers()) ->
+-spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
 add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
     [{<< ?HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
