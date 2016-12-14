@@ -17,8 +17,9 @@
 -export([new_req_id/0]).
 -export([new_unique_int/0]).
 
-%% For intenal use in woody_erlang
+%% Internal API
 -export([new_child/1]).
+-export([enrich/2, clean/1]).
 
 %% Types
 -export_type([ctx/0]).
@@ -118,6 +119,19 @@ new_req_id() ->
 new_unique_int() ->
     <<Id:64>> = snowflake:new(?MODULE),
     Id.
+
+%%
+%% Internal API
+%%
+-spec enrich(woody_context:ctx(), woody:ev_handler()) ->
+    woody_context:ctx().
+enrich(Context, EvHandler) ->
+    Context#{ev_handler => EvHandler}.
+
+-spec clean(woody_context:ctx()) ->
+    woody_context:ctx().
+clean(Context) ->
+    maps:remove(ev_handler, Context).
 
 %%
 %% Internal functions

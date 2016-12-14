@@ -79,8 +79,7 @@ child_spec(Id, Opts = #{
     ),
     {Transport, TransportOpts} = get_socket_transport(Ip, Port),
     CowboyOpts = get_cowboy_config(Opts),
-    ranch:child_spec({?MODULE, Id}, AcceptorsPool,
-        Transport, TransportOpts, cowboy_protocol, CowboyOpts).
+    ranch:child_spec({?MODULE, Id}, AcceptorsPool, Transport, TransportOpts, cowboy_protocol, CowboyOpts).
 
 get_socket_transport(Ip, Port) ->
     {ranch_tcp, [{ip, Ip}, {port, Port}]}.
@@ -189,19 +188,20 @@ trace_resp(_, Req, _, _, _, _) ->
     cowboy_init_result().
 init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler}) ->
     {Url, Req1} = cowboy_req:url(Req),
+    State = Opts#{url => Url},
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
             Context = make_request_context(RpcId, EvHandler),
-            check_headers(Req2, Opts#{context => Context, url => Url});
+            check_headers(Req2, State#{context => Context});
         {error, BadRpcId, Req2} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
-                Url, Req2, make_request_context(BadRpcId, EvHandler)
+                Req2, State#{context => make_request_context(BadRpcId, EvHandler)}
             )
     end.
 
 -spec handle(cowboy_req:req(), state()) ->
     {ok, cowboy_req:req(), _}.
-handle(Req, #{
+handle(Req, State = #{
     url         := Url,
     context     := Context,
     server_opts := ServerOpts,
@@ -209,16 +209,14 @@ handle(Req, #{
 }) ->
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-            #{url => Url, status => ok}, Context),
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, #{url => Url, status => ok}, Context),
             handle_request(Body, ThriftHandler, Context, Req1);
         {ok, <<>>, Req1} ->
-            reply_client_error(400, <<"body empty">>, Url, Req1, Context);
+            reply_client_error(400, <<"body empty">>, Req1, State);
         {{error, body_too_large}, _, Req1} ->
-            reply_client_error(413, <<"body too large">>, Url, Req1, Context);
+            reply_client_error(413, <<"body too large">>, Req1, State);
         {{error, Reason}, _, Req1} ->
-            reply_client_error(400, woody_util:to_binary(["body read error: ", Reason]),
-                Url, Req1, Context)
+            reply_client_error(400, woody_util:to_binary(["body read error: ", Reason]), Req1, State)
     end,
     {ok, Req2, undefined}.
 
@@ -269,41 +267,39 @@ check_ids(Map = #{req := Req}) ->
 
 -spec check_headers(cowboy_req:req(), state()) ->
     cowboy_init_result().
-check_headers(Req, Opts) ->
-    check_method(cowboy_req:method(Req), Opts).
+check_headers(Req, State) ->
+    check_method(cowboy_req:method(Req), State).
 
 -spec check_method({binary(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
-check_method({<<"POST">>, Req}, Opts) ->
-    check_content_type(cowboy_req:header(<<"content-type">>, Req), Opts);
-check_method({Method, Req}, #{url := Url, context := Context}) ->
-    reply_bad_header(405, woody_util:to_binary(["wrong method: ", Method]), Url,
-        cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req), Context).
+check_method({<<"POST">>, Req}, State) ->
+    check_content_type(cowboy_req:header(<<"content-type">>, Req), State);
+check_method({Method, Req}, State) ->
+    reply_bad_header(405, woody_util:to_binary(["wrong method: ", Method]),
+        cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req), State
+    ).
 
 -spec check_content_type({binary() | undefined, cowboy_req:req()}, state()) ->
     cowboy_init_result().
-check_content_type({?CONTENT_TYPE_THRIFT, Req}, Opts) ->
-    check_accept(cowboy_req:header(<<"accept">>, Req), Opts);
-check_content_type({BadCType, Req}, #{url := Url, context := Context}) ->
-    BinBadCType = genlib:to_binary(BadCType),
-    reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BinBadCType]),
-        Url, Req, Context).
+check_content_type({?CONTENT_TYPE_THRIFT, Req}, State) ->
+    check_accept(cowboy_req:header(<<"accept">>, Req), State);
+check_content_type({BadCType, Req}, State) ->
+    reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BadCType]), Req, State).
 
 -spec check_accept({binary() | undefined, cowboy_req:req()}, state()) ->
     cowboy_init_result().
-check_accept({Accept, Req}, Opts) when
+check_accept({Accept, Req}, State) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
-    check_metadata_headers(cowboy_req:headers(Req), Opts);
-check_accept({BadAccept, Req1}, #{url := Url, context := Context}) ->
-    reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]),
-        Url, Req1, Context).
+    check_metadata_headers(cowboy_req:headers(Req), State);
+check_accept({BadAccept, Req1}, State) ->
+    reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]), Req1, State).
 
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
-check_metadata_headers({Headers, Req}, Opts = #{context := Context, server_opts := ServerOpts}) ->
-    {ok, Req, Opts#{context => add_context_meta(Context, find_metadata(Headers, ServerOpts))}}.
+check_metadata_headers({Headers, Req}, State = #{context := Context, server_opts := ServerOpts}) ->
+    {ok, Req, State#{context => add_context_meta(Context, find_metadata(Headers, ServerOpts))}}.
 
 -spec add_context_meta(woody_context:ctx(), woody_context:meta()) ->
     woody_context:ctx().
@@ -332,23 +328,20 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
 -spec make_request_context(woody:rpc_id(), woody:ev_handler()) ->
     woody_context:ctx().
 make_request_context(RpcId, EvHandler) ->
-    woody_util:enrich_context(woody_context:new(RpcId), EvHandler).
+    woody_context:enrich(woody_context:new(RpcId), EvHandler).
 
--spec reply_bad_header(woody:http_code(), binary(), woody:url(),
-    cowboy_req:req(), woody_context:ctx())
-->
+-spec reply_bad_header(woody:http_code(), binary(), cowboy_req:req(), state()) ->
     {shutdown, cowboy_req:req(), undefined}.
-reply_bad_header(Code, Reason, Url, Req, Context) when is_integer(Code) ->
-    Req1 = reply_client_error(Code, Reason, Url, Req, Context),
+reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
+    Req1 = reply_client_error(Code, Reason, Req, State),
     {shutdown, Req1, undefined}.
 
--spec reply_client_error(woody:http_code(), binary(), woody:url(),
-    cowboy_req:req(), woody_context:ctx())
-->
+-spec reply_client_error(woody:http_code(), binary(), cowboy_req:req(), state()) ->
     cowboy_req:req().
-reply_client_error(Code, Reason, Url, Req, Context) ->
+reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
     _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-            #{url => Url, status => error, reason => Reason}, Context),
+            #{url => Url, status => error, reason => Reason}, Context
+        ),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), Context).
 
 %% handle functions
@@ -388,10 +381,7 @@ handle_result({error, Error}, Req, Context) ->
 -spec handle_error(Error, cowboy_req:req(), woody_context:ctx()) -> cowboy_req:req() when
     Error :: woody_error:error() | woody_server_thrift_handler:client_error().
 handle_error({business, {ExceptName, Except}}, Req, Context) ->
-    reply(200, set_error_headers(
-        <<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)),
-        Context
-    );
+    reply(200, set_error_headers(<<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)), Context);
 handle_error({client, Error}, Req, Context) ->
     reply(400, set_error_headers(<<"Result Unexpected">>, Error, Req), Context);
 handle_error({system, {internal, result_unexpected, Details}}, Req, Context) ->
@@ -419,10 +409,7 @@ set_error_headers(Class, Reason, Req) ->
 -spec reply(woody:http_code(), cowboy_req:req(), woody_context:ctx()) ->
     cowboy_req:req().
 reply(200, Req, Context) ->
-    do_reply(200, cowboy_req:set_resp_header(
-        <<"content-type">>, ?CONTENT_TYPE_THRIFT, Req),
-        Context
-    );
+    do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), Context);
 reply(Code, Req, Context) ->
     do_reply(Code, Req, Context).
 

@@ -44,7 +44,7 @@ call(Request, Options) ->
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    case call_safe(Request, Options, woody_util:enrich_context(Context, EvHandler)) of
+    case call_safe(Request, Options, woody_context:enrich(Context, EvHandler)) of
         Result = {ok, _} ->
             Result;
         {error, {business, Error}} ->

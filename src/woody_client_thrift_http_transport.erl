@@ -120,11 +120,11 @@ handle_result({ok, 200, Headers, Ref}, Context) ->
         Reason -> #{reason => Reason}
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, Meta#{status => ok, code => 200}),
-    body(hackney:body(Ref), Context);
+    get_body(hackney:body(Ref), Context);
 handle_result({ok, Code, Headers, _Ref}, Context) ->
-    {Class, Reason} = check_error_headers(Code, Headers, Context),
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, code => Code, reason => Reason}),
-    {error, {system, {external, Class, Reason}}};
+    {Class, Details} = check_error_headers(Code, Headers, Context),
+    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status=>error, code=>Code, reason=>Details}),
+    {error, {system, {external, Class, Details}}};
 handle_result({error, {closed, _}}, Context) ->
     Reason = <<"partial response">>,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Reason}),
@@ -141,11 +141,11 @@ handle_result({error, Reason}, Context) ->
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => woody_error:format_details(Reason)}),
     {error, {system, {internal, result_unexpected, <<"http request send error">>}}}.
 
--spec body({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
+-spec get_body({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
     {ok, woody:http_body()} | error().
-body(B = {ok, _}, _) ->
+get_body(B = {ok, _}, _) ->
     B;
-body({error, Reason}, Context) ->
+get_body({error, Reason}, Context) ->
     _ = log_internal_error(?ERROR_RESP_BODY, Reason, Context),
     {error, {system, {internal, result_unknown, ?ERROR_RESP_BODY}}}.
 

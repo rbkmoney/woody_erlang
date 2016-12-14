@@ -96,18 +96,15 @@ do_call(Client, Function, Args, Context) ->
 -spec handle_result(woody_client:result() | {error, _ThriftError}, woody_context:ctx()) ->
     woody_client:result().
 handle_result(Res = {ok, ok}, Context) ->
-    _ = log_event(?EV_SERVICE_RESULT, Context,
-            #{status => ok, result => ?THRIFT_CAST}),
+    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ?THRIFT_CAST}),
     Res;
 handle_result(Res = {ok, ThRes}, Context) ->
-    _ = log_event(?EV_SERVICE_RESULT, Context,
-            #{status => ok, result => ThRes}),
+    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ThRes}),
     Res;
 handle_result(Res = {error, Error = {Type,_}}, Context) when
     Type =:= business orelse Type =:= system
 ->
-    _ = log_event(?EV_SERVICE_RESULT, Context,
-            #{status => error, result => Error}),
+    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => error, result => Error}),
     Res;
 handle_result({error, ThriftError}, Context) ->
     _ = log_event(?EV_SERVICE_RESULT, Context, #{
