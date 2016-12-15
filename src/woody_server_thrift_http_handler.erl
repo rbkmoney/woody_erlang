@@ -230,8 +230,8 @@ terminate(Reason, _Req, #{context := Context}) ->
                 role     => server,
                 error    => <<"http handler terminated abnormally">>,
                 reason   => woody_error:format_details(Reason),
-                stack    => erlang:get_stacktrace(),
-                severity => error
+                class    => undefined,
+                stack    => erlang:get_stacktrace()
             },
             Context
         ),

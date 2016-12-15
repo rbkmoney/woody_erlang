@@ -148,10 +148,9 @@ handle_decode_result(State) ->
     {error, client_error()}.
 handle_decode_error(Error, Context) ->
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
-            role     => server,
-            severity => warning,
-            error    => <<"thrift protocol read failed">>,
-            reason   => woody_error:format_details(Error)
+            role   => server,
+            error  => <<"thrift protocol read failed">>,
+            reason => woody_error:format_details(Error)
         }, Context),
     {error, client_error(Error)}.
 
@@ -329,11 +328,11 @@ encode_reply(Status, Reply, State = #{
     catch
         error:{badmatch, {_, {error, Error}}} ->
             _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
-                    role     => server,
-                    severity => warning,
-                    error    => <<"thrift protocol write failed">>,
-                    reason   => woody_error:format_details(Error),
-                    stack    => erlang:get_stacktrace()
+                    role   => server,
+                    error  => <<"thrift protocol write failed">>,
+                    reason => woody_error:format_details(Error),
+                    class  => error,
+                    stack  => erlang:get_stacktrace()
                 }, Context),
             {{error, {system, {internal, result_unexpected, <<"thrift: encode error">>}}}, State}
     end.

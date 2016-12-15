@@ -1,6 +1,6 @@
 -module(woody_client_thrift).
 
--behaviour(woody_client).
+-behaviour(woody_client_behaviour).
 
 -include_lib("thrift/include/thrift_constants.hrl").
 -include("woody_defs.hrl").
@@ -9,13 +9,13 @@
 -export([start_pool/2]).
 -export([stop_pool/1]).
 
-%% woody_client behaviour callback
+%% woody_client_behaviour callback
 -export([call/3]).
 
 %% Types
 -type thrift_client() :: term().
 
--define(WOODY_OPTS, [protocol, transport]).
+-define(WOODY_OPTS, [protocol, transport, event_handler]).
 -define(THRIFT_CAST, oneway_void).
 
 %%
@@ -31,9 +31,9 @@ start_pool(Name, PoolSize) when is_integer(PoolSize) ->
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
 
--spec call(woody_context:ctx(), woody:request(), woody_client:options()) ->
+-spec call(woody:request(), woody_client:options(), woody_context:ctx()) ->
     woody_client:result().
-call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
+call({Service = {_, ServiceName}, Function, Args}, Opts, Context) ->
     _ = log_event(?EV_CALL_SERVICE, Context,
             #{
                 service  => ServiceName,
@@ -42,8 +42,7 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
                 args     => Args
             }
         ),
-    do_call(make_thrift_client(Context, Service, clean_opts(TransportOpts)),
-        Function, Args, Context).
+    do_call(make_thrift_client(Service, clean_opts(Opts), Context), Function, Args, Context).
 
 %%
 %% Internal functions
@@ -53,7 +52,7 @@ call(Context, {Service = {_, ServiceName}, Function, Args}, TransportOpts) ->
 get_rpc_type(ThriftService = {Module, Service}, Function) ->
     try get_rpc_type(Module:function_info(Service, Function, reply_type))
     catch
-        error:_ ->
+        error:Reason when Reason =:= undef orelse Reason =:= badarg ->
             error(badarg, [ThriftService, Function])
     end.
 
@@ -67,11 +66,11 @@ get_rpc_type(_) -> call.
 clean_opts(Options) ->
     maps:without(?WOODY_OPTS, Options).
 
--spec make_thrift_client(woody_context:ctx(), woody:service(), woody_client:options()) ->
+-spec make_thrift_client(woody:service(), woody_client:options(), woody_context:ctx()) ->
     thrift_client().
-make_thrift_client(Context, Service, TransportOpts) ->
+make_thrift_client(Service, TransportOpts, Context) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Context, TransportOpts),
+        woody_client_thrift_http_transport:new(TransportOpts, Context),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),
@@ -82,36 +81,28 @@ make_thrift_client(Context, Service, TransportOpts) ->
 do_call(Client, Function, Args, Context) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
-            %% In case a server violates the requirements and sends
-            %% #TAppiacationException{} with http status code 200.
-            throw:{Client1, {exception, #'TApplicationException'{}}} ->
-                {Client1, {error, {system,
-                    {external, result_unexpected, <<"thrift application exception unknown">>}}}};
-            throw:{Client1, {exception, ThriftExcept}} ->
-               {Client1, {error, {business, ThriftExcept}}}
+            throw:{Client1, Except = {exception, _}} -> {Client1, Except}
         end,
     _ = thrift_client:close(ClientNext),
-    handle_result(Result, Context).
+    log_result(Result, Context),
+    map_result(Result).
 
--spec handle_result(woody_client:result() | {error, _ThriftError}, woody_context:ctx()) ->
+log_result({Status, Result}, Context) ->
+    log_event(?EV_SERVICE_RESULT, Context, #{status => Status, result => Result}).
+
+-spec map_result(woody_client:result() | {error, _ThriftError}) ->
     woody_client:result().
-handle_result(Res = {ok, ok}, Context) ->
-    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ?THRIFT_CAST}),
+map_result(Res = {ok, _}) ->
     Res;
-handle_result(Res = {ok, ThRes}, Context) ->
-    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ThRes}),
+%% In case a server violates the requirements and sends
+%% #TAppiacationException{} with http status code 200.
+map_result({exception, #'TApplicationException'{}}) ->
+    {error, {external, result_unexpected, <<"thrift application exception unknown">>}};
+map_result({exception, ThriftExcept}) ->
+    {error, {business, ThriftExcept}};
+map_result(Res = {error, {system, _}}) ->
     Res;
-handle_result(Res = {error, Error = {Type,_}}, Context) when
-    Type =:= business orelse Type =:= system
-->
-    _ = log_event(?EV_SERVICE_RESULT, Context, #{status => error, result => Error}),
-    Res;
-handle_result({error, ThriftError}, Context) ->
-    _ = log_event(?EV_SERVICE_RESULT, Context, #{
-            statis => error,
-            result => woody_error:format_details(ThriftError),
-            stack  => erlang:get_stacktrace()
-        }),
+map_result({error, _ThriftError}) ->
     {error, {system, {internal, result_unexpected, <<"client thrift error">>}}}.
 
 log_event(Event, Context, Meta) ->

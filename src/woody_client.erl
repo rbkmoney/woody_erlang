@@ -10,8 +10,8 @@
 
 %% Types
 -type options() :: #{
-    protocol      => thrift,
-    transport     => http,
+    protocol      => thrift,  %% optional
+    transport     => http,    %% optional
     url           => woody:url(),
     event_handler => woody:ev_handler()
     %% Hint: for now hackney options can be passed thru this map as: key => value too
@@ -26,8 +26,6 @@
     {error , woody_error:error()}.
 -export_type([result/0]).
 
-%% Behaviour definition
--callback call(woody_context:ctx(), woody:request(), options()) ->  result().
 
 %%
 %% API
@@ -59,27 +57,24 @@ call(Request, Options = #{event_handler := EvHandler}, Context) ->
 -spec call_safe(woody:request(), options(), woody_context:ctx()) ->
     result().
 call_safe(Request, Options, Context) ->
-    ProtocolHandler = woody_util:get_protocol_handler(client, Options),
-    try ProtocolHandler:call(woody_context:new_child(Context), Request, Options) of
+    try woody_client_behaviour:call(Request, Options, woody_context:new_child(Context)) of
         Resp = {ok, _} ->
             Resp;
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
-            Error;
-        Other ->
-            handle_client_error(Other, Context)
+            Error
     catch
-        _:Reason ->
-            handle_client_error(Reason, Context)
+        Class:Reason ->
+            handle_client_error(Class, Reason, Context)
     end.
 
--spec handle_client_error(_Error, woody_context:ctx()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, woody_context:ctx()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
-handle_client_error(Error, Context) ->
+handle_client_error(Class, Error, Context) ->
     Details = woody_error:format_details(Error),
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
             role     => client,
-            severity => error,
             error    => woody_util:to_binary([?EV_CALL_SERVICE, " error"]),
+            class    => Class,
             reason   => Details,
             stack    => erlang:get_stacktrace()
         }, Context),

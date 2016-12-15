@@ -493,8 +493,8 @@ call_thrift_multiplexed_test(_) ->
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Protocol} = thrift_binary_protocol:new(
         woody_client_thrift_http_transport:new(
-            woody_context:enrich(make_context(Id), ?MODULE),
-            #{url => Url}
+            #{url => Url},
+            woody_context:enrich(make_context(Id), ?MODULE)
         ),
         [{strict_read, true}, {strict_write, true}]
     ),

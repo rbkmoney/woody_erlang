@@ -94,16 +94,15 @@
 
 %% internal events
 -type meta_internal_error() :: #{
-    role     => role(),
-    severity => severity(),
+    role     => woody:role(),
     error    => any(),
     reason   => any(),
     %% optional
-    stack => woody_error:stack()
+    stack => woody_error:stack() | undefined
 }.
 -type meta_trace() :: #{
     event => binary(),
-    role  => role(),
+    role  => woody:role(),
     %% optional
     url     => woody:url(),
     code    => woody:http_code(),
@@ -113,8 +112,7 @@
 -export_type([meta_internal_error/0, meta_trace/0]).
 
 -type status()       :: ok | error.
--type role()         :: client | server.
--export_type([status/0, role/0]).
+-export_type([status/0]).
 
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()  }.
@@ -162,7 +160,7 @@ format_event(Event, Meta, RpcId) ->
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
-    format_exception(warning, {"[client] error while handling request: ~p", [Error]}, Stack);
+    {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
 format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
@@ -194,13 +192,13 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, resul
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
     except_class:=Class})
 ->
-    format_exception(error, {"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack);
+    {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason, stack:=Stack, severity:=Severity}) ->
-    format_exception(Severity, {"[~p] internal error ~ts:~ts", [Role, Error, Reason]}, Stack);
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason, severity:=Severity}) ->
-    {Severity, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
+    {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
+    {warning, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
 format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}) ->
     {debug, {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
 format_event(?EV_TRACE, #{event:=Event, role:=Role}) ->
@@ -232,10 +230,10 @@ format_service_request(#{service:=Service, function:=Function, args:=Args}) ->
     {ArgsFormat, ArgsArgs} = format_args(Args),
     {"~s:~s(" ++ ArgsFormat ++ ")", [Service, Function] ++ ArgsArgs}.
 
--spec format_exception(severity(), msg(), woody_error:stack()) ->
-    log_msg().
-format_exception(Severity, BaseMsg, Stack) ->
-    {Severity, append_msg(BaseMsg, {"~n~s", [genlib_format:format_stacktrace(Stack, [newlines])]})}.
+-spec format_exception(msg(), woody_error:stack()) ->
+    msg().
+format_exception(BaseMsg, Stack) ->
+    append_msg(BaseMsg, {"~n~s", [genlib_format:format_stacktrace(Stack, [newlines])]}).
 
 -spec format_args(list()) ->
     msg().

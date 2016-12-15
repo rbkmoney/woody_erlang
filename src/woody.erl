@@ -41,10 +41,11 @@
 -type ev_handler()  :: handler(options()).
 -export_type([handler/1, ev_handler/0, options/0]).
 
+-type role()                :: client | server.
 -type url()                 :: binary().
 -type path()                :: '_' | iodata(). %% cowboy_router:route_match()
 -type http_handler(Handler) :: {path(), Handler}.
--export_type([url/0, path/0, http_handler/1]).
+-export_type([role/0, url/0, path/0, http_handler/1]).
 
 -type http_code()        :: pos_integer().
 -type http_header_name() :: binary().

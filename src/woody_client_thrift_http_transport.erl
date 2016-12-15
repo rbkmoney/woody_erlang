@@ -16,16 +16,16 @@
 
 
 %% Types
--type error() :: {error, {system, woody_error:system_error()}}.
-
+-type options()         :: #{url => woody:url()}.
 -type woody_transport() :: #{
-    context       => woody_context:ctx(),
-    options       => map(),
-    write_buffer  => binary(),
-    read_buffer   => binary()
+    context      => woody_context:ctx(),
+    options      => options(),
+    write_buffer => binary(),
+    read_buffer  => binary()
 }.
 
--type header_parse_value() ::none | multiple | woody:http_header_val().
+-type error()              :: {error, {system, woody_error:system_error()}}.
+-type header_parse_value() :: none | multiple | woody:http_header_val().
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
@@ -34,9 +34,9 @@
 %%
 %% API
 %%
--spec new(woody_context:ctx(), woody_client:options()) ->
+-spec new(options(), woody_context:ctx()) ->
     thrift_transport:t_transport() | no_return().
-new(Context, TransportOpts = #{url := _Url}) ->
+new(TransportOpts = #{url := _Url}, Context) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
         context       => Context,
         options       => TransportOpts,
@@ -235,8 +235,7 @@ add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
 log_internal_error(Error, Reason, Context) ->
-    log_event(?EV_INTERNAL_ERROR, Context,
-        #{error => Error, reason => woody_util:to_binary(Reason), role => client, severity => warning}).
+    log_event(?EV_INTERNAL_ERROR, Context, #{error => Error, reason => woody_util:to_binary(Reason), role => client}).
 
 log_event(Event, Context, Meta) ->
     woody_event_handler:handle_event(Event, Meta, Context).
