@@ -1,228 +1,275 @@
 -module(woody_server_thrift_handler).
 
 %% API
--export([start/4]).
+-export([init_handler/3, invoke_handler/1]).
 
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
 -include("woody_defs.hrl").
 
-%%
-%% behaviour definition
-%%
--type error_reason() :: any().
--type result()       :: any().
--type handler_opts() :: term().
--type args()         :: tuple().
--export_type([handler_opts/0, args/0, result/0, error_reason/0]).
+%% Types
+-type client_error() :: {client, woody_error:details()}.
+-export_type([client_error/0]).
 
--type except() :: {_ThriftExcept, woody_context:ctx()}.
--export_type([except/0]).
+-type state() :: #{
+    context       => woody_context:ctx(),
+    handler       => woody:handler(woody:options()),
+    service       => woody:service(),
+    function      => wooody:func(),
+    args          => woody:args(),
+    th_proto      => term(),
+    th_seqid      => term(),
+    th_param_type => term(),
+    th_msg_type   => thrift_msg_type(),
+    th_reply_type => thrift_reply_type()
+}.
+-export_type([state/0]).
 
--callback handle_function(woody_t:func(), args(),
-    woody_context:ctx(), handler_opts())
-->
-    {ok | result(), woody_context:ctx()} | no_return().
+-type thrift_msg_type() ::
+    ?tMessageType_CALL   |
+    ?tMessageType_ONEWAY |
+    ?tMessageType_REPLY  |
+    ?tMessageType_EXCEPTION.
+
+-type thrift_reply_type() :: oneway_void | tuple().
+
+-type reply_type() :: oneway_void | call.
+-export_type([reply_type/0]).
+
+-type builtin_thrift_error() :: bad_binary_protocol_version | no_binary_protocol_version | _OtherError.
+-type thrift_error()         :: unknown_function | multiplexed_request | builtin_thrift_error().
+
+%% Behaviour definition
+-callback handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
+    {ok, woody:result()} | no_return().
+
 
 %%
 %% API
 %%
--define(STAGE_READ  , protocol_read).
--define(STAGE_WRITE , protocol_write).
-
--define(ERROR_UNKNOWN_FUNCTION , no_function).
--define(ERROR_MILTIPLEXED_REQ  , multiplexed_request).
--define(ERROR_PROTOCOL_SEND    , send_error).
-
--record(state, {
-    context           :: woody_context:ctx(),
-    service           :: woody_t:service(),
-    handler           :: woody_t:handler(),
-    handler_opts      :: handler_opts(),
-    protocol          :: any(),
-    protocol_stage    :: ?STAGE_READ | ?STAGE_WRITE,
-    transport_handler :: woody_t:handler()
-}).
-
--type thrift_handler() :: {woody_t:service(), woody_t:handler(), handler_opts()}.
--export_type([thrift_handler/0]).
-
--type transport_handler() :: woody_t:handler().
-
--spec start(thrift_transport:t_transport(), thrift_handler(), transport_handler(), woody_context:ctx())
-->
-    {ok | noreply | {error, _Reason}, cowboy_req:req()}.
-start(Transport, {Service, Handler, Opts}, TransportHandler, Context) ->
-    {ok, Protocol} = thrift_binary_protocol:new(Transport,
+-spec init_handler(binary(), woody:th_handler(), woody_context:ctx()) ->
+    {ok, reply_type(), state()} | {error, client_error()}.
+init_handler(Request, {Service, Handler}, Context) ->
+    {ok, Transport} = thrift_membuffer_transport:new(Request),
+    {ok, Proto} = thrift_binary_protocol:new(Transport,
         [{strict_read, true}, {strict_write, true}]
     ),
-    {Result, Protocol1} = process(#state{
-            context           = Context,
-            service           = Service,
-            handler           = Handler,
-            handler_opts      = Opts,
-            protocol          = Protocol,
-            protocol_stage    = ?STAGE_READ,
-            transport_handler = TransportHandler
-    }),
-    {_, Req} = thrift_protocol:close_transport(Protocol1),
-    {Result, Req}.
+    try handle_decode_result(decode_request(decode_message_begin(#{
+            context  => Context,
+            service  => Service,
+            handler  => Handler,
+            th_proto => Proto
+        })))
+    catch
+        throw:{woody_decode_error, Error} ->
+            handle_decode_error(Error, Context)
+    end.
 
+-spec invoke_handler(state()) ->
+    {ok, binary()} | {error, woody_error:error()}.
+invoke_handler(State = #{th_msg_type := MsgType}) ->
+    {Result, #{th_proto := Proto}} = call_handler_safe(State),
+    {_, {ok, Reply}} = thrift_protocol:close_transport(Proto),
+    handle_result(Result, Reply, MsgType).
 
 %%
 %% Internal functions
 %%
-process(State = #state{protocol = Protocol, service = Service}) ->
-    {Protocol1, MessageBegin} = thrift_protocol:read(Protocol, message_begin),
-    State1 = State#state{protocol = Protocol1},
-    case MessageBegin of
-        #protocol_message_begin{name = Function, type = Type, seqid = SeqId} when
+
+%% Decode request
+-spec decode_message_begin(state()) ->
+    state() | no_return().
+decode_message_begin(State = #{th_proto := Proto}) ->
+    case thrift_protocol:read(Proto, message_begin) of
+        {Proto1, #protocol_message_begin{name = Function, type = Type, seqid = SeqId}} when
             Type =:= ?tMessageType_CALL orelse
             Type =:= ?tMessageType_ONEWAY
         ->
-            State2 = release_oneway(Type, State1),
-            FunctionName = get_function_name(Function),
-            prepare_response(handle_function(FunctionName,
-                get_params_type(Service, FunctionName),
-                State2,
-                SeqId
+            match_reply_type(get_params_type(
+                get_function_name(Function),
+                State#{th_proto := Proto1, th_msg_type => Type, th_seqid => SeqId}
             ));
-        {error, Reason} ->
-            {handle_protocol_error(State1, Reason), State1#state.protocol}
+        {_, {error, Reason}} ->
+            throw_decode_error(Reason)
     end.
-
-release_oneway(?tMessageType_ONEWAY, State = #state{protocol = Protocol}) ->
-    {Protocol1, ok} = thrift_protocol:flush_transport(Protocol),
-    State#state{protocol = Protocol1};
-release_oneway(_, State) ->
-    State.
 
 get_function_name(Function) ->
     case string:tokens(Function, ?MULTIPLEXED_SERVICE_SEPARATOR) of
         [_ServiceName, _FunctionName] ->
-            {error, ?ERROR_MILTIPLEXED_REQ};
+            throw_decode_error(multiplexed_request);
         _ ->
             try list_to_existing_atom(Function)
             catch
-                error:badarg -> {error, ?ERROR_UNKNOWN_FUNCTION}
+                error:badarg -> throw_decode_error(unknown_function)
             end
     end.
 
-get_params_type(Service, Function) ->
-    try get_function_info(Service, Function, params_type)
+-spec get_params_type(woody:func() , state()) ->
+    state() | no_return().
+get_params_type(Function, State = #{service := Service}) ->
+    try get_function_info(Service, Function, params_type) of
+        ParamsType ->
+            State#{function => Function, th_param_type => ParamsType}
     catch
-        error:badarg -> ?ERROR_UNKNOWN_FUNCTION
+        error:badarg -> throw_decode_error(unknown_function)
     end.
 
-handle_function(Error = {error, _}, _, State, _SeqId) ->
-    {State, Error};
-
-handle_function(_, ?ERROR_UNKNOWN_FUNCTION, State, _SeqId) ->
-    {State, {error, ?ERROR_UNKNOWN_FUNCTION}};
-
-handle_function(Function, InParams, State = #state{protocol = Protocol}, SeqId) ->
-    {Protocol1, ReadResult} = thrift_protocol:read(Protocol, InParams),
-    State1 = State#state{protocol = Protocol1},
-    case ReadResult of
-        {ok, Args} ->
-            try_call_handler(Function, Args,
-                State1#state{protocol_stage = ?STAGE_WRITE}, SeqId);
-        Error = {error, _} ->
-            {State1, Error}
+-spec match_reply_type(state()) ->
+    state() | no_return().
+match_reply_type(State = #{service := Service, function := Function, th_msg_type := ReqType}) ->
+    case get_function_info(Service, Function, reply_type) of
+        ReplyType when
+            ReplyType =:= oneway_void , ReqType =/= ?tMessageType_ONEWAY orelse
+            ReplyType =/= oneway_void , ReqType =:= ?tMessageType_ONEWAY
+        ->
+            throw_decode_error(request_reply_type_mismatch);
+        ReplyType ->
+            State#{th_reply_type => ReplyType}
     end.
 
-try_call_handler(Function, Args, State, SeqId) ->
-    try handle_result(call_handler(Function, Args, State), State, Function, SeqId)
+-spec decode_request(state()) ->
+    state() | no_return().
+decode_request(State = #{th_proto := Proto, th_param_type := ParamsType}) ->
+    case thrift_protocol:read(Proto, ParamsType) of
+        {Proto1, {ok, Args}} ->
+            State#{th_proto => Proto1, args => tuple_to_list(Args)};
+        {_, {error, Error}} ->
+            throw_decode_error(Error)
+    end.
+
+-spec handle_decode_result(state()) ->
+    {ok, reply_type(), state()}.
+handle_decode_result(State = #{th_reply_type := oneway_void}) ->
+    {ok, oneway_void, State};
+handle_decode_result(State) ->
+    {ok, call, State}.
+
+-spec handle_decode_error(thrift_error(), woody_context:ctx()) ->
+    {error, client_error()}.
+handle_decode_error(Error, Context) ->
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
+            role   => server,
+            error  => <<"thrift protocol read failed">>,
+            reason => woody_error:format_details(Error)
+        }, Context),
+    {error, client_error(Error)}.
+
+-spec client_error(thrift_error()) ->
+    client_error().
+client_error({bad_binary_protocol_version, Version}) ->
+    BinVersion = genlib:to_binary(Version),
+    {client, <<"thrift: bad binary protocol version: ", BinVersion/binary>>};
+client_error(no_binary_protocol_version) ->
+    {client, <<"thrift: no binary protocol version">>};
+client_error(unknown_function) ->
+    {client, <<"thrift: unknown method">>};
+client_error(multiplexed_request) ->
+    {client, <<"thrift: multiplexing (not supported)">>};
+client_error(request_reply_type_mismatch) ->
+    {client, <<"thrift: request reply type mismatch">>};
+client_error(_Reason) ->
+    {client, <<"thrift: decode error">>}.
+
+-spec throw_decode_error(_) ->
+    no_return().
+throw_decode_error(Error) ->
+    throw({woody_decode_error, Error}).
+
+%% Handle request
+-spec call_handler_safe(state()) ->
+    {ok | {error, woody_error:error()}, state()}.
+call_handler_safe(State) ->
+    try handle_success(call_handler(State), State)
     catch
         Class:Reason ->
-            handle_function_catch(State, Function, Class, Reason,
-                erlang:get_stacktrace(), SeqId)
+            handle_function_catch(Class, Reason, erlang:get_stacktrace(), State)
     end.
 
-call_handler(Function, Args, #state{
-    context       = Context,
-    handler       = Handler,
-    handler_opts  = Opts,
-    service       = {_, ServiceName}})
+-spec call_handler(state()) ->
+    {ok, woody:result()} | no_return().
+call_handler(#{
+    context  := Context,
+    handler  := Handler,
+    service  := {_, ServiceName},
+    function := Function,
+    args     := Args})
 ->
     _ = woody_event_handler:handle_event(
-         woody_context:get_ev_handler(Context),
-         ?EV_INVOKE_SERVICE_HANDLER,
-         woody_context:get_rpc_id(Context),
-         #{service => ServiceName, function => Function, args => Args, options => Opts, context => Context}),
-    Result = Handler:handle_function(Function, Args, Context, Opts),
-    _ = log_rpc_result(ok, Context, #{result => Result}),
-    Result.
+            ?EV_INVOKE_SERVICE_HANDLER,
+            #{
+                service  => ServiceName,
+                function => Function,
+                args     => Args
+            },
+            Context
+        ),
+    {Module, Opts} = woody_util:get_mod_opts(Handler),
+    Module:handle_function(Function, Args, woody_context:clean(Context), Opts).
 
-handle_result({ok, _Context}, State, Function, SeqId) ->
-    handle_success(State, Function, ok, SeqId);
-handle_result({Response, _Context}, State, Function, SeqId) ->
-    handle_success(State, Function, Response, SeqId).
-
-handle_success(State = #state{service = Service}, Function, Result, SeqId) ->
-    ReplyType = get_function_info(Service, Function, reply_type),
+-spec handle_success({ok, woody:result()}, state()) ->
+    {ok | {error, {system, woody_error:system_error()}}, state()}.
+handle_success(Result, State = #{
+    function      := Function,
+    th_reply_type := ReplyType,
+    context       := Context
+}) ->
+    _ = log_handler_result(ok, Context, #{result => Result}),
     StructName = atom_to_list(Function) ++ "_result",
     case Result of
-        ok when ReplyType == {struct, struct, []} ->
-            send_reply(State, Function, ?tMessageType_REPLY,
-                {ReplyType, {StructName}}, SeqId);
-        ok when ReplyType == oneway_void ->
-            {State, noreply};
-        ReplyData ->
+        {ok, ok} when ReplyType == oneway_void ->
+            {ok, State};
+        {ok, ok} when ReplyType == {struct, struct, []} ->
+            encode_reply(ok, {ReplyType, {StructName}}, State#{th_msg_type => ?tMessageType_REPLY});
+        {ok, ReplyData} ->
             Reply = {
                 {struct, struct, [{0, undefined, ReplyType, undefined, undefined}]},
                 {StructName, ReplyData}
             },
-            send_reply(State, Function, ?tMessageType_REPLY, Reply, SeqId)
+            encode_reply(ok, Reply, State#{th_msg_type => ?tMessageType_REPLY})
     end.
 
-handle_function_catch(State = #state{
-        context       = Context,
-        service       = Service
-    }, Function, Class, Reason, Stack, SeqId)
+-spec handle_function_catch(woody_error:erlang_except(), _Except,
+    woody_error:stack(), state())
 ->
-    ReplyType = get_function_info(Service, Function, reply_type),
-    case {Class, Reason} of
-        _Error when ReplyType =:= oneway_void ->
-            _ = log_rpc_result(error, Context,
-                #{class => Class, reason => Reason, ignore => true}),
-            {State, noreply};
-        {throw, {Exception, _Context}} when is_tuple(Exception), size(Exception) > 0 ->
-            _ = log_rpc_result(error, Context,
-                #{class => throw, reason => Exception, ignore => false}),
-            handle_exception(State, Function, Exception, SeqId);
-        {throw, Exception} ->
-            _ = log_rpc_result(error, Context,
-                #{class => throw, reason => Exception, ignore => false}),
-            handle_unknown_exception(State, Function, Exception, SeqId);
-        {Error, Reason} when Error =:= error orelse Error =:= exit ->
-            _ = log_rpc_result(error, Context,
-                #{class => error, reason => Reason, stack => Stack, ignore => false}),
-            Reason1 = short_reason(Reason),
-            handle_error(State, Function, Reason1, SeqId)
-    end.
-
-short_reason(Reason) when is_tuple(Reason) ->
-    element(1, Reason);
-short_reason(Reason) ->
-    Reason.
-
-handle_exception(State, Function, {exception, Exception}, SeqId) ->
-    handle_exception(State, Function, Exception, SeqId);
-handle_exception(State = #state{service = Service, transport_handler = Trans},
-    Function, Exception, SeqId)
+    {{error, woody_error:error()}, state()}.
+handle_function_catch(throw, Except, Stack, State) ->
+    handle_exception(Except, Stack, State);
+handle_function_catch(error, {woody_error, Error = {_, _, _}}, _Stack, State) ->
+    handle_woody_error(Error, State);
+handle_function_catch(Class, Error, Stack, State) when
+    Class =:= error orelse Class =:= exit
 ->
+    handle_internal_error(Error, Class, Stack, State).
+
+
+-spec handle_exception(woody_error:business_error() | _Throw, woody_error:stack(), state())
+->
+    {{error, woody_error:error()}, state()}.
+handle_exception(Except, Stack, State = #{
+    service       := Service,
+    function      := Function,
+    th_reply_type := ReplyType,
+    context       := Context
+}) ->
     {struct, _, XInfo} = ReplySpec = get_function_info(Service, Function, exceptions),
     {ExceptionList, FoundExcept} = lists:mapfoldl(
-        fun(X, A) -> get_except(Exception, X, A) end, undefined, XInfo),
-    ExceptionTuple = list_to_tuple([Function | ExceptionList]),
-    case FoundExcept of
-        undefined ->
-            handle_unknown_exception(State, Function, Exception, SeqId);
-        {Module, Type} ->
-            mark_error_to_transport(Trans, logic, get_except_name(Module, Type)),
-            send_reply(State, Function, ?tMessageType_REPLY,
-                {ReplySpec, ExceptionTuple}, SeqId)
+        fun(X, A) -> get_except(Except, X, A) end, undefined, XInfo),
+    case {FoundExcept, ReplyType} of
+        {undefined, _} ->
+            handle_internal_error(Except, throw, Stack, State);
+        {{_Module, _Type}, oneway_void} ->
+            log_handler_result(error, Context,
+                #{class => business, result => Except, ignore => true}),
+            {{error, {business, ignore}}, State};
+        {{Module, Type}, _} ->
+            log_handler_result(error, Context,
+                #{class => business, result => Except, ignore => false}),
+            ExceptTuple = list_to_tuple([Function | ExceptionList]),
+            encode_reply(
+                {error, {business, genlib:to_binary(get_except_name(Module, Type))}},
+                {ReplySpec, ExceptTuple},
+                State#{th_msg_type => ?tMessageType_REPLY}
+            )
     end.
 
 get_except(Exception, {_Fid, _, {struct, exception, {Module, Type}}, _, _}, TypesModule) ->
@@ -240,87 +287,73 @@ get_except_name(Module, Type) ->
         Field -> element(5, Field)
     end.
 
-%% Called
-%% - when an exception has been explicitly thrown by the service, but it was
-%% not one of the exceptions that was defined for the function.
-handle_unknown_exception(State, Function, Exception, SeqId) ->
-    handle_error(State, Function, {exception_not_declared_as_thrown, Exception}, SeqId).
+-spec handle_woody_error(woody_error:system_error() | _Except, state()) ->
+    {{error, {system, woody_error:system_error()}}, state()}.
+handle_woody_error(Error, State = #{context := Context, th_reply_type := oneway_void}) ->
+    log_handler_result(error, Context, #{class => system, result => Error, ignore => true}),
+    {{error, {system, Error}}, State};
+handle_woody_error(Error, State = #{context := Context}) ->
+    log_handler_result(error, Context, #{class => system, result => Error, ignore => false}),
+    {{error, {system, Error}}, State}.
 
-handle_error(State = #state{transport_handler = Trans}, Function, Error, SeqId) ->
-    Message = genlib:format("An error occurred: ~p", [Error]),
-    Exception = #'TApplicationException'{message = Message,
-        type = ?TApplicationException_UNKNOWN},
-    Reply = {?TApplicationException_Structure, Exception},
-    mark_error_to_transport(Trans, transport, "application exception unknown"),
-    send_reply(State, Function, ?tMessageType_EXCEPTION, Reply, SeqId).
+-spec handle_internal_error(_Error, woody_error:erlang_except(), woody_error:stack(), state()) ->
+    {{error, {system, {internal, woody_error:source(), woody_error:details()}}}, state()}.
+handle_internal_error(Error, ExcClass, Stack, State = #{context := Context, th_reply_type := oneway_void}) ->
+    log_handler_result(error, Context,
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => true}),
+    {{error, {system, {internal, result_unexpected, <<>>}}}, State};
+handle_internal_error(Error, ExcClass, Stack, State = #{context := Context}) ->
+    log_handler_result(error, Context,
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => false}),
+    {{error, {system, {internal, result_unexpected, woody_error:format_details_short(Error)}}}, State}.
 
-send_reply(State = #state{protocol = Protocol}, Function, ReplyMessageType, Reply, SeqId) ->
+-spec encode_reply(ok | {error, woody_error:business_error()}, _Result, state()) ->
+    {ok | {error, woody_error:error()}, state()}.
+encode_reply(Status, Reply, State = #{
+    th_proto    := Proto,
+    function    := Function,
+    th_msg_type := ReplyMessageType,
+    th_seqid    := SeqId,
+    context     := Context
+}) ->
     try
         StartMessage = #protocol_message_begin{
             name = atom_to_list(Function), type = ReplyMessageType, seqid = SeqId
         },
-        {Protocol1, ok} = thrift_protocol:write(Protocol, StartMessage),
+        {Protocol1, ok} = thrift_protocol:write(Proto, StartMessage),
         {Protocol2, ok} = thrift_protocol:write(Protocol1, Reply),
         {Protocol3, ok} = thrift_protocol:write(Protocol2, message_end),
         {Protocol4, ok} = thrift_protocol:flush_transport(Protocol3),
-        {State#state{protocol = Protocol4}, ok}
+        {Status, State#{th_proto => Protocol4}}
     catch
-        error:{badmatch, {_, {error, _} = Error}} ->
-            {State, {error, {?ERROR_PROTOCOL_SEND, [Error, erlang:get_stacktrace()]}}}
+        error:{badmatch, {_, {error, Error}}} ->
+            _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
+                    role   => server,
+                    error  => <<"thrift protocol write failed">>,
+                    reason => woody_error:format_details(Error),
+                    class  => error,
+                    stack  => erlang:get_stacktrace()
+                }, Context),
+            {{error, {system, {internal, result_unexpected, <<"thrift: encode error">>}}}, State}
     end.
 
-prepare_response({State, ok}) ->
-    {ok, State#state.protocol};
-prepare_response({State, noreply}) ->
-    {noreply, State#state.protocol};
-prepare_response({State, {error, Reason}}) ->
-    {handle_protocol_error(State, Reason), State#state.protocol}.
-
-handle_protocol_error(#state{
-    context           = Context,
-    protocol_stage    = Stage,
-    transport_handler = Trans}, Reason)
-->
-    _ = woody_event_handler:handle_event(
-        woody_context:get_ev_handler(Context),
-        ?EV_THRIFT_ERROR,
-        woody_context:get_rpc_id(Context),
-        #{stage => Stage, reason => Reason}),
-    format_protocol_error(Reason, Trans).
-
-format_protocol_error({bad_binary_protocol_version, _Version}, Trans) ->
-    mark_error_to_transport(Trans, transport, "bad binary protocol version"),
-    {error, bad_request};
-format_protocol_error(no_binary_protocol_version, Trans) ->
-    mark_error_to_transport(Trans, transport, "no binary protocol version"),
-    {error, bad_request};
-format_protocol_error({?ERROR_UNKNOWN_FUNCTION, _Fun}, Trans) ->
-    mark_error_to_transport(Trans, transport, "unknown method"),
-    {error, bad_request};
-format_protocol_error({?ERROR_MILTIPLEXED_REQ, _Fun}, Trans) ->
-    mark_error_to_transport(Trans, transport, "multiplexing not supported"),
-    {error, bad_request};
-format_protocol_error({?ERROR_PROTOCOL_SEND, _}, Trans) ->
-    mark_error_to_transport(Trans, transport, "internal error"),
-    {error, server_error};
-format_protocol_error(_Reason, Trans) ->
-    mark_error_to_transport(Trans, transport, "bad request"),
-    {error, bad_request}.
+-spec handle_result(ok | {error, woody_error:error()}, binary(), thrift_reply_type()) ->
+    {ok, binary()} | {error, woody_error:error()}.
+handle_result(_, _, oneway_void) ->
+    {ok, <<>>};
+handle_result(ok, Reply, _) ->
+    {ok, Reply};
+handle_result({error, {business, ExceptName}}, Except, _) ->
+    {error, {business, {ExceptName, Except}}};
+handle_result(Error = {error, _}, _, _) ->
+    Error.
 
 get_function_info({Module, Service}, Function, Info) ->
     Module:function_info(Service, Function, Info).
 
-%% Unfortunately there is no proper way to provide additional info to
-%% the transport, where the actual send happens: the Protocol object
-%% representing thrift protocol and transport in this module is opaque.
-%% So we have to use the hack with a proc dict here.
--spec mark_error_to_transport(transport_handler(), transport | logic, _Error) -> _.
-mark_error_to_transport(TransportHandler, Type, Error) ->
-    TransportHandler:mark_thrift_error(Type, Error).
-
-log_rpc_result(Status, Context, Meta) ->
+log_handler_result(Status, Context, Meta) ->
     woody_event_handler:handle_event(
-      woody_context:get_ev_handler(Context),
       ?EV_SERVICE_HANDLER_RESULT,
-      woody_context:get_rpc_id(Context),
-      Meta#{status => Status}).
+      Meta#{status => Status},
+      Context
+    ).

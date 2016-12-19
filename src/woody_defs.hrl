@@ -2,18 +2,14 @@
 -define(_woody_defs_included, yeah).
 
 %% Http headers
--define(CONTENT_TYPE_THRIFT         , <<"application/x-thrift">>).
--define(HEADER_NAME_PREFIX          , <<"x-rbk-">>).
--define(HEADER_NAME_RPC_ID          , << ?HEADER_NAME_PREFIX/binary, "span-id">>).
--define(HEADER_NAME_RPC_PARENT_ID   , << ?HEADER_NAME_PREFIX/binary, "parent-id">>).
--define(HEADER_NAME_RPC_ROOT_ID     , << ?HEADER_NAME_PREFIX/binary, "trace-id">>).
--define(HEADER_NAME_ERROR_TRANSPORT , << ?HEADER_NAME_PREFIX/binary, "rpc-error-thrift">>).
--define(HEADER_NAME_ERROR_LOGIC     , << ?HEADER_NAME_PREFIX/binary, "rpc-error-logic">>).
-
-%% Errors & exceptions
--define(EXCEPT_THRIFT(Exception) , {exception, Exception}).
--define(ERROR_PROTOCOL(Reason)   , {protocol_error, Reason}).
--define(ERROR_TRANSPORT(Reason)  , {transport_error, Reason}).
+-define(CONTENT_TYPE_THRIFT    , <<"application/x-thrift">>).
+-define(HEADER_PREFIX          , <<"x-rbk-">>).
+-define(HEADER_RPC_ID          , << ?HEADER_PREFIX/binary, "span-id">>).
+-define(HEADER_RPC_PARENT_ID   , << ?HEADER_PREFIX/binary, "parent-id">>).
+-define(HEADER_RPC_ROOT_ID     , << ?HEADER_PREFIX/binary, "trace-id">>).
+-define(HEADER_E_CLASS         , << ?HEADER_PREFIX/binary, "error-class">>).
+-define(HEADER_E_REASON        , << ?HEADER_PREFIX/binary, "error-reason">>).
+-define(HEADER_META_PREFIX     , << ?HEADER_PREFIX/binary, "meta-">>).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
@@ -28,8 +24,7 @@
 -define(EV_INVOKE_SERVICE_HANDLER , 'invoke service handler').
 -define(EV_SERVICE_HANDLER_RESULT , 'service handler result').
 
--define(EV_THRIFT_ERROR           , 'thrift error').
 -define(EV_INTERNAL_ERROR         , 'internal error').
+-define(EV_TRACE                  , 'trace event').
 
--define(EV_DEBUG                  , 'trace_event').
 -endif.
