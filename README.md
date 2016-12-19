@@ -1,4 +1,4 @@
-Woody [![wercker status](https://app.wercker.com/status/fd36dd241f6c38a784de7bcf7e3f4549/s "wercker status")](https://app.wercker.com/project/bykey/fd36dd241f6c38a784de7bcf7e3f4549)
+Woody [![Build Status](http://ci.rbkmoney.com/buildStatus/icon?job=rbkmoney_private/woody_erlang/master)](http://ci.rbkmoney.com/job/rbkmoney_private/view/Erlang/job/woody_erlang/job/master/)
 ======
 
 Erlang реализация [Библиотеки RPC вызовов для общения между микросервисами](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/)
