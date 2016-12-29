@@ -92,7 +92,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
     {ok, woody:result()} | no_return().
-handle_function(give_me_money, Sum = {Amount, Currency}, Context, _MyOpts) ->
+handle_function(give_me_money, Sum = [Amount, Currency], Context, _MyOpts) ->
 
     %% RpcId можно получить из Context, полученного handle_function,
     %% для использования при логировании.
