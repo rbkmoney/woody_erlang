@@ -132,11 +132,19 @@ handle_result({error, {closed, _}}, Context) ->
 handle_result({error, Reason}, Context) when
     Reason =:= timeout      ;
     Reason =:= econnaborted ;
-    Reason =:= enetreset
+    Reason =:= enetreset    ;
+    Reason =:= econnreset
 ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
+handle_result({error, Reason}, Context) when
+    Reason =:= econnrefused ;
+    Reason =:= nxdomain
+->
+    BinReason = woody_util:to_binary(Reason),
+    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
+    {error, {system, {external, resource_unavailable, BinReason}}};
 handle_result({error, Reason}, Context) ->
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => woody_error:format_details(Reason)}),
     {error, {system, {internal, result_unexpected, <<"http request send error">>}}}.
