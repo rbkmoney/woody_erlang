@@ -54,7 +54,8 @@
     call_with_client_pool_test/1,
     call_thrift_multiplexed_test/1,
     server_http_req_validation_test/1,
-    try_bad_handler_spec_test/1
+    try_bad_handler_spec_test/1,
+    find_multiple_pools_test/1
 ]).
 
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -169,7 +170,8 @@ all() ->
         call_with_client_pool_test,
         call_thrift_multiplexed_test,
         server_http_req_validation_test,
-        try_bad_handler_spec_test
+        try_bad_handler_spec_test,
+        find_multiple_pools_test
     ].
 
 %%
@@ -211,6 +213,10 @@ init_per_testcase(TC, C) when
     {ok, Sup} = start_tc_sup(),
     {ok, _} = start_error_server(TC, Sup),
     [{sup, Sup} | C];
+init_per_testcase(find_multiple_pools_test, C) ->
+    {ok, Sup} = start_tc_sup(),
+    ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [{swords, 100}, {shields, 100}]),
+    [{sup, Sup} | C];
 init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
@@ -236,6 +242,19 @@ start_woody_server(Id, Sup, Services) ->
         port          => ?SERVER_PORT
     }),
     supervisor:start_child(Sup, Server).
+
+start_woody_server_with_pools(Id, Sup, Services, Params) ->
+    Server = woody_server:child_spec(Id, #{
+        handlers      => [get_handler(S) || S <- Services],
+        event_handler => ?MODULE,
+        ip            => ?SERVER_IP,
+        port          => ?SERVER_PORT
+    }),
+    {ok, WoodyServer} = supervisor:start_child(Sup, Server),
+
+    Specs = [woody_client_thrift:child_spec(Pool, [{max_connections, Size}]) || {Pool, Size} <- Params],
+    _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
+    ok.
 
 get_handler('Powerups') ->
     {
@@ -482,6 +501,10 @@ call_with_client_pool_test(_) ->
                  #{url => Url, event_handler => ?MODULE, pool => Pool}, Context),
     {ok, _} = receive_msg(Gun, Context),
     ok = woody_client_thrift:stop_pool(Pool).
+
+find_multiple_pools_test(_) ->
+    true = is_pid(hackney_pool:find_pool(swords)),
+    true = is_pid(hackney_pool:find_pool(shields)).
 
 call_thrift_multiplexed_test(_) ->
     Client = make_thrift_multiplexed_client(<<"call_thrift_multiplexed">>,
