@@ -215,7 +215,9 @@ init_per_testcase(TC, C) when
     [{sup, Sup} | C];
 init_per_testcase(find_multiple_pools_test, C) ->
     {ok, Sup} = start_tc_sup(),
-    ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [{swords, 100}, {shields, 100}]),
+    Pool1 = {swords , {15000, 100}},
+    Pool2 = {shields, {undefined, 50}},
+    ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2]),
     [{sup, Sup} | C];
 init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
@@ -252,9 +254,12 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
 
-    Specs = [woody_client_thrift:child_spec(Pool, [{max_connections, Size}]) || {Pool, Size} <- Params],
+    Specs = [woody_client_thrift:child_spec(Pool, pool_options(Options)) || {Pool, Options} <- Params],
     _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
+
+pool_options({Timeout, MaxConnections}) ->
+    [{timeout, Timeout}, {max_connections, MaxConnections}].
 
 get_handler('Powerups') ->
     {
@@ -492,7 +497,7 @@ call_fail_w_no_headers(Id, Class, Details) ->
 
 call_with_client_pool_test(_) ->
     Pool    = guns,
-    ok      = woody_client_thrift:start_pool(Pool, 10),
+    ok      = woody_client_thrift:start_pool(Pool, [{max_connections, 10}]),
     Gun     =  <<"Enforcer">>,
     Context = make_context(<<"call_with_client_pool">>),
     {Url, Service} = get_service_endpoint('Weapons'),

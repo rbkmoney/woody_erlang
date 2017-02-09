@@ -50,10 +50,9 @@ new(TransportOpts = #{url := _Url}, Context) ->
 child_spec(Name, Options) ->
     hackney_pool:child_spec(Name, Options).
 
--spec start_client_pool(any(), pos_integer()) ->
+-spec start_client_pool(any(), list(tuple())) ->
     ok.
-start_client_pool(Name, Size) ->
-    Options = [{max_connections, Size}],
+start_client_pool(Name, Options) ->
     hackney_pool:start_pool(Name, Options).
 
 -spec stop_client_pool(any()) ->

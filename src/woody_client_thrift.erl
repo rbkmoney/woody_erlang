@@ -27,10 +27,10 @@
 child_spec(Name, Options) ->
     woody_client_thrift_http_transport:child_spec(Name, Options).
 
--spec start_pool(any(), pos_integer()) ->
+-spec start_pool(any(), list(tuple())) ->
     ok.
-start_pool(Name, PoolSize) when is_integer(PoolSize) ->
-    woody_client_thrift_http_transport:start_client_pool(Name, PoolSize).
+start_pool(Name, Options) ->
+    woody_client_thrift_http_transport:start_client_pool(Name, Options).
 
 -spec stop_pool(any()) ->
     ok | {error, not_found | simple_one_for_one}.
