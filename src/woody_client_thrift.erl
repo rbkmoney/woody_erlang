@@ -6,8 +6,9 @@
 -include("woody_defs.hrl").
 
 %% API
+-export([child_spec/2]).
 -export([start_pool/2]).
--export([stop_pool/1]).
+-export([stop_pool /1]).
 
 %% woody_client_behaviour callback
 -export([call/3]).
@@ -21,10 +22,15 @@
 %%
 %% API
 %%
--spec start_pool(any(), pos_integer()) ->
+-spec child_spec(any(), list(tuple())) ->
+    supervisor:child_spec().
+child_spec(Name, Options) ->
+    woody_client_thrift_http_transport:child_spec(Name, Options).
+
+-spec start_pool(any(), list(tuple())) ->
     ok.
-start_pool(Name, PoolSize) when is_integer(PoolSize) ->
-    woody_client_thrift_http_transport:start_client_pool(Name, PoolSize).
+start_pool(Name, Options) ->
+    woody_client_thrift_http_transport:start_client_pool(Name, Options).
 
 -spec stop_pool(any()) ->
     ok | {error, not_found | simple_one_for_one}.

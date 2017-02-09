@@ -55,7 +55,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 
 `woody_context:new/0` - можно использовать для создания контекста корневого запроса с автоматически сгенерированным уникальным RPC ID.
 
-Можно создать пул соединений для thrift клиента (например, для установления _keep alive_ соединений с сервером): `woody_client_thrift:start_pool/2` и затем использовать его при работе с `woody_client`:
+Можно создать пул соединений для thrift клиента (например, для установления _keep alive_ соединений с сервером): `woody_client_thrift:start_pool/2` и затем использовать его при работе с `woody_client`. NB: второй параметр - Options из `hackney:start_pool/2`, например `{timeout, 150000}, {max_connections, 100}`:
 
 ```erlang
 15> Pool = my_client_pool.
@@ -63,6 +63,8 @@ Erlang реализация [Библиотеки RPC вызовов для об
 17> Context2 = woody_context:new(<<"myUniqRequestID2">>).
 18> {ok, Result2} = woody_client:call(Request, Opts, Context2).
 ```
+
+Есть возможность стартовать пул в ручную. Для этого надо использовать `woody_client_thrift:child_spec/2`.
 
 Закрыть пул можно с помошью `woody_client_thrift:stop_pool/1`.
 
