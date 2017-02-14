@@ -9,7 +9,7 @@
 -export([new              /3]).
 -export([start_client_pool/2]).
 -export([stop_client_pool /1]).
--export([child_spec       /2]).
+-export([child_spec       /1]).
 
 %% Thrift transport callbacks
 -export([read/2, write/2, flush/1, close/1]).
@@ -49,10 +49,11 @@ new(Url, Opts, Context) ->
     }),
     Transport.
 
--spec child_spec(any(), options()) ->
+-spec child_spec(woody_client:child_spec_options()) ->
     supervisor:child_spec().
-child_spec(Name, Options) ->
-    hackney_pool:child_spec(Name, Options).
+child_spec(Options) ->
+    {Name, Opts} = maps:get(pool, Options),
+    hackney_pool:child_spec(Name, Opts).
 
 -spec start_client_pool(any(), options()) ->
     ok.
@@ -99,6 +100,8 @@ flush(Transport = #{
         {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
         {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
     ]),
+
+    Options1 = maps:to_list(maps:without([url], Options)),
     _ = log_event(?EV_CLIENT_SEND, Context, #{url => Url}),
     case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), Context) of
         {ok, Response} ->

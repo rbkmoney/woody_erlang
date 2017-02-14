@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([child_spec/2]).
+-export([child_spec/1]).
 -export([start_pool/2]).
 -export([stop_pool /1]).
 
@@ -22,10 +22,10 @@
 %%
 %% API
 %%
--spec child_spec(any(), list(tuple())) ->
+-spec child_spec(woody_client:child_spec_options()) ->
     supervisor:child_spec().
-child_spec(Name, Options) ->
-    woody_client_thrift_http_transport:child_spec(Name, Options).
+child_spec(ChildSpecOptions) ->
+    woody_client_thrift_http_transport:child_spec(ChildSpecOptions).
 
 -spec start_pool(any(), list(tuple())) ->
     ok.

@@ -254,7 +254,10 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
 
-    Specs = [woody_client_thrift:child_spec(Pool, pool_options(Options)) || {Pool, Options} <- Params],
+    {Url, _} = get_service_endpoint('Weapons'),
+    Options        = #{url => Url, event_handler => ?MODULE},
+
+    Specs = [woody_client:child_spec({Pool, pool_options(PoolOptions)}, Options) || {Pool, PoolOptions} <- Params],
     _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
 

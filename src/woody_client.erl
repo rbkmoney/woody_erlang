@@ -6,17 +6,24 @@
 -include("woody_defs.hrl").
 
 %% API
--export([call/2, call/3]).
+-export([child_spec/2]).
+-export([find_pool /2]).
+-export([call      /2]).
+-export([call      /3]).
 
 %% Types
 -type options() :: #{
-    url            := woody:url(),
-    event_handler  := woody:ev_handler(),
-    transport_opts => woody_client_thrift_http_transport:options(), %% See hackney:request/5 for available options.
-    protocol       => thrift,
-    transport      => http
+    protocol      => thrift,  %% optional
+    transport     => http,    %% optional
+    url           => woody:url(),
+    event_handler => woody:ev_handler()
+    %% Hint: for now hackney options can be passed thru this map as: key => value too
+    %% and will be converted to hackney options list. See hackney:request/5 for more info.
 }.
 -export_type([options/0]).
+
+-type child_spec_options() :: map().
+-export_type([child_spec_options/0]).
 
 %% Internal API
 -type result() ::
@@ -28,6 +35,16 @@
 %%
 %% API
 %%
+-spec child_spec(child_spec_options(), options()) ->
+    supervisor:child_spec().
+child_spec(ChildSpecOptions, Options) ->
+    woody_client_behaviour:child_spec(ChildSpecOptions, Options).
+
+-spec find_pool(any(), options()) ->
+    pid() | undefined.
+find_pool(Name, Options) ->
+    woody_client_behaviour:find_pool(Name, Options).
+
 -spec call(woody:request(), options()) ->
     {ok, woody:result()}                      |
     {exception, woody_error:business_error()} |
