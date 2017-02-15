@@ -125,18 +125,21 @@ handle_result({ok, 200, Headers, Ref}, Context) ->
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, Meta#{status => ok, code => 200}),
     get_body(hackney:body(Ref), Context);
-handle_result({ok, Code, Headers, _Ref}, Context) ->
+handle_result({ok, Code, Headers, Ref}, Context) ->
     {Class, Details} = check_error_headers(Code, Headers, Context),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status=>error, code=>Code, reason=>Details}),
+    %% Read the body anyway to free the connection
+    _ = hackney:body(Ref),
     {error, {system, {external, Class, Details}}};
 handle_result({error, {closed, _}}, Context) ->
     Reason = <<"partial response">>,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Reason}),
     {error, {system, {external, result_unknown, Reason}}};
 handle_result({error, Reason}, Context) when
-    Reason =:= timeout      ;
-    Reason =:= econnaborted ;
-    Reason =:= enetreset    ;
+    Reason =:= timeout         ;
+    Reason =:= connect_timeout ;
+    Reason =:= econnaborted    ;
+    Reason =:= enetreset       ;
     Reason =:= econnreset
 ->
     BinReason = woody_util:to_binary(Reason),
