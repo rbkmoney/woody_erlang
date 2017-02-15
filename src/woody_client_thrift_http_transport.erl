@@ -128,25 +128,31 @@ handle_result({ok, 200, Headers, Ref}, Context) ->
 handle_result({ok, Code, Headers, Ref}, Context) ->
     {Class, Details} = check_error_headers(Code, Headers, Context),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status=>error, code=>Code, reason=>Details}),
-    %% Read the body anyway to free the connection
-    _ = hackney:body(Ref),
-    {error, {system, {external, Class, Details}}};
+    %% Free the connection
+    case hackney:skip_body(Ref) of
+        ok ->
+            {error, {system, {external, Class, Details}}};
+        {error, Reason} ->
+            BinReason = woody_util:to_binary(Reason),
+            _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
+            {error, {system, {internal, result_unexpected, BinReason}}}
+    end;
 handle_result({error, {closed, _}}, Context) ->
     Reason = <<"partial response">>,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Reason}),
     {error, {system, {external, result_unknown, Reason}}};
 handle_result({error, Reason}, Context) when
-    Reason =:= timeout         ;
-    Reason =:= connect_timeout ;
-    Reason =:= econnaborted    ;
-    Reason =:= enetreset       ;
+    Reason =:= timeout      ;
+    Reason =:= econnaborted ;
+    Reason =:= enetreset    ;
     Reason =:= econnreset
 ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
 handle_result({error, Reason}, Context) when
-    Reason =:= econnrefused ;
+    Reason =:= econnrefused    ;
+    Reason =:= connect_timeout ;
     Reason =:= nxdomain
 ->
     BinReason = woody_util:to_binary(Reason),
