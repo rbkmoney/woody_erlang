@@ -156,9 +156,7 @@ handle_result({error, Reason}, Context) ->
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => woody_error:format_details(Reason)}),
     {error, {system, {internal, result_unexpected, <<"http request send error">>}}}.
 
--spec get_(
-           
-           ({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
+-spec get_body({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
     {ok, woody:http_body()} | error().
 get_body(B = {ok, _}, _) ->
     B;
