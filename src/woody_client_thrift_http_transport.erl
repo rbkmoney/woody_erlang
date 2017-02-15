@@ -131,12 +131,11 @@ handle_result({ok, Code, Headers, Ref}, Context) ->
     %% Free the connection
     case hackney:skip_body(Ref) of
         ok ->
-            {error, {system, {external, Class, Details}}};
+            ok;
         {error, Reason} ->
-            BinReason = woody_util:to_binary(Reason),
-            _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
-            {error, {system, {internal, result_unexpected, BinReason}}}
-    end;
+            _ = log_event(?EV_INTERNAL_ERROR, Context, #{status => error, reason => woody_util:to_binary(Reason)})
+    end,
+    {error, {system, {external, Class, Details}}};
 handle_result({error, {closed, _}}, Context) ->
     Reason = <<"partial response">>,
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Reason}),
