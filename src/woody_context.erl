@@ -27,8 +27,8 @@
 -export_type([meta_key/0]).
 
 -type ctx() :: #{
-    rpc_id     => woody:rpc_id(),
-    meta       => meta(),  %% optional
+    rpc_id     := woody:rpc_id(),
+    meta       => meta(),
     ev_handler => woody:ev_handler() %% for internal use
 }.
 

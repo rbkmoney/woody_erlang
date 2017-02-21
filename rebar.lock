@@ -1,21 +1,34 @@
+{"1.1.0",
 [{<<"certifi">>,{pkg,<<"certifi">>,<<"0.7.0">>},1},
  {<<"cowboy">>,{pkg,<<"cowboy">>,<<"1.0.4">>},0},
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"1.0.2">>},1},
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib.git",
-       {ref,"ea85932ecf19fe39c87237fe5916ba1f65fc0bd6"}},
+       {ref,"82ff16f4314fc406dd90752467a08fe401b009ef"}},
   0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.6.2">>},0},
  {<<"idna">>,{pkg,<<"idna">>,<<"1.2.0">>},1},
  {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.0.2">>},1},
- {<<"ranch">>,{pkg,<<"ranch">>,<<"1.2.1">>},1},
+ {<<"ranch">>,{pkg,<<"ranch">>,<<"1.3.2">>},1},
  {<<"snowflake">>,
   {git,"https://github.com/rbkmoney/snowflake.git",
-       {ref,"36b978a3ad711c9d9349b799a24c5499a95ae29a"}},
+       {ref,"0a598108f6582affe3b4ae550fc5b9f2062e318a"}},
   0},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.1">>},1},
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
        {ref,"aca7fca9f1a7161a1324bf5b92f8402c90d0519e"}},
-  0}].
+  0}]}.
+[
+{pkg_hash,[
+ {<<"certifi">>, <<"861A57F3808F7EB0C2D1802AFEAAE0FA5DE813B0DF0979153CBAFCD853ABABAF">>},
+ {<<"cowboy">>, <<"A324A8DF9F2316C833A470D918AAF73AE894278B8AA6226CE7A9BF699388F878">>},
+ {<<"cowlib">>, <<"9D769A1D062C9C3AC753096F868CA121E2730B9A377DE23DEC0F7E08B1DF84EE">>},
+ {<<"hackney">>, <<"96A0A5E7E65B7ACAD8031D231965718CC70A9B4131A8B033B7543BBD673B8210">>},
+ {<<"idna">>, <<"AC62EE99DA068F43C50DC69ACF700E03A62A348360126260E87F2B54ECED86B2">>},
+ {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},
+ {<<"mimerl">>, <<"993F9B0E084083405ED8252B99460C4F0563E41729AB42D9074FD5E52439BE88">>},
+ {<<"ranch">>, <<"E4965A144DC9FBE70E5C077C65E73C57165416A901BD02EA899CFD95AA890986">>},
+ {<<"ssl_verify_fun">>, <<"28A4D65B7F59893BC2C7DE786DEC1E1555BD742D336043FE644AE956C3497FBE">>}]}
+].

@@ -12,12 +12,12 @@
 -export_type([client_error/0]).
 
 -type state() :: #{
-    context       => woody_context:ctx(),
-    handler       => woody:handler(woody:options()),
-    service       => woody:service(),
-    function      => wooody:func(),
+    context       := woody_context:ctx(),
+    handler       := woody:handler(woody:options()),
+    service       := woody:service(),
+    th_proto      := term(),
+    function      => woody:func(),
     args          => woody:args(),
-    th_proto      => term(),
     th_seqid      => term(),
     th_param_type => term(),
     th_msg_type   => thrift_msg_type(),
@@ -67,8 +67,8 @@ init_handler(Request, {Service, Handler}, Context) ->
 
 -spec invoke_handler(state()) ->
     {ok, binary()} | {error, woody_error:error()}.
-invoke_handler(State = #{th_msg_type := MsgType}) ->
-    {Result, #{th_proto := Proto}} = call_handler_safe(State),
+invoke_handler(State) ->
+    {Result, #{th_proto := Proto, th_reply_type := MsgType}} = call_handler_safe(State),
     {_, {ok, Reply}} = thrift_protocol:close_transport(Proto),
     handle_result(Result, Reply, MsgType).
 
