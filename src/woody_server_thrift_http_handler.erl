@@ -37,7 +37,7 @@
     event_handler => woody:ev_handler(),
     ip            => inet:ip_address(),
     port          => inet:port_address(),
-    net_ops       => net_opts() %% optional
+    net_opts      => net_opts() %% optional
 }.
 -export_type([net_opts/0, options/0]).
 
