@@ -6,10 +6,11 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new              /3]).
+-export([new              /2]).
+-export([child_spec       /1]).
 -export([start_client_pool/2]).
 -export([stop_client_pool /1]).
--export([child_spec       /1]).
+-export([find_client_pool /1]).
 
 %% Thrift transport callbacks
 -export([read/2, write/2, flush/1, close/1]).
@@ -64,6 +65,11 @@ start_client_pool(Name, Options) ->
     ok | {error, not_found | simple_one_for_one}.
 stop_client_pool(Name) ->
     hackney_pool:stop_pool(Name).
+
+-spec find_client_pool(any()) ->
+    pid() | undefined.
+find_client_pool(Name) ->
+    hackney_pool:find_pool(Name).
 
 %%
 %% Thrift transport callbacks

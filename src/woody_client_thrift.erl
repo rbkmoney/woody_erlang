@@ -9,6 +9,7 @@
 -export([child_spec/1]).
 -export([start_pool/2]).
 -export([stop_pool /1]).
+-export([find_pool /1]).
 
 %% woody_client_behaviour callback
 -export([call/3]).
@@ -36,6 +37,11 @@ start_pool(Name, Options) ->
     ok | {error, not_found | simple_one_for_one}.
 stop_pool(Name) ->
     woody_client_thrift_http_transport:stop_client_pool(Name).
+
+-spec find_pool(any()) ->
+    pid() | undefined.
+find_pool(Name) ->
+    woody_client_thrift_http_transport:find_client_pool(Name).
 
 -spec call(woody:request(), woody_client:options(), woody_context:ctx()) ->
     woody_client:result().

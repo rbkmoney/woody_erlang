@@ -257,7 +257,7 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     {Url, _} = get_service_endpoint('Weapons'),
     Options        = #{url => Url, event_handler => ?MODULE},
 
-    Specs = [woody_client:child_spec({Pool, pool_options(PoolOptions)}, Options) || {Pool, PoolOptions} <- Params],
+    Specs = [woody_client:child_spec(#{pool => {Pool, pool_options(PoolOptions)}}, Options) || {Pool, PoolOptions} <- Params],
     _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
 
@@ -511,8 +511,8 @@ call_with_client_pool_test(_) ->
     ok = woody_client_thrift:stop_pool(Pool).
 
 find_multiple_pools_test(_) ->
-    true = is_pid(hackney_pool:find_pool(swords)),
-    true = is_pid(hackney_pool:find_pool(shields)).
+    true = is_pid(woody_client_thrift:find_pool(swords)),
+    true = is_pid(woody_client_thrift:find_pool(shields)).
 
 call_thrift_multiplexed_test(_) ->
     Client = make_thrift_multiplexed_client(<<"call_thrift_multiplexed">>,
