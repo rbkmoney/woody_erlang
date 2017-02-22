@@ -121,7 +121,7 @@
 %%
 -spec handle_event(event(), event_meta(), woody_context:ctx()) -> ok.
 handle_event(Event, Meta, Context = #{ev_handler := Handler}) ->
-    handle_event(Handler, Event, woody_context:get_rpc_id(Context), add_request_meta(Event, Meta, Context)).
+    handle_event(Handler, Event, woody_context:get_rpc_id(Context), add_context_meta(Event, Meta, Context)).
 
 -spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
@@ -195,19 +195,19 @@ format_event(UnknownEventType, Meta) ->
 %%
 %% Internal functions
 %%
--spec add_request_meta(event(), event_meta(), woody_context:ctx()) ->
+-spec add_context_meta(event(), event_meta(), woody_context:ctx()) ->
     event_meta().
-add_request_meta(Event, Meta, Context) when
+add_context_meta(Event, Meta, Context) when
     Event =:= ?EV_CALL_SERVICE orelse
     Event =:= ?EV_INVOKE_SERVICE_HANDLER
 ->
     case woody_context:get_meta(Context) of
         ReqMeta when map_size(ReqMeta) =:= 0 ->
-            Meta#{metadata => undefined};
+            Meta#{metadata => #{}};
         ReqMeta ->
             Meta#{metadata => ReqMeta}
     end;
-add_request_meta(_Event, Meta, _Context) ->
+add_context_meta(_Event, Meta, _Context) ->
     Meta.
 
 -spec format_service_request(map()) ->
