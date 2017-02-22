@@ -340,8 +340,8 @@ reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
     {ok | {error, atom()}, woody:http_body(), cowboy_req:req()}.
-get_body(Req, #{max_chunk_length := MaxBody}) ->
-    do_get_body(<<>>, Req, [{length, MaxBody}]).
+get_body(Req, #{max_chunk_length := MaxChunk}) ->
+    do_get_body(<<>>, Req, [{length, MaxChunk}]).
 
 do_get_body(Body, Req, Opts) ->
     case cowboy_req:body(Req, Opts) of
