@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new              /2]).
+-export([new              /3]).
 -export([start_client_pool/2]).
 -export([stop_client_pool /1]).
 -export([child_spec       /2]).
@@ -16,12 +16,15 @@
 
 
 %% Types
--type options()         :: #{url => woody:url()}.
+-type options() :: list(tuple()).
+-export_type([options/0]).
+
 -type woody_transport() :: #{
-    context      => woody_context:ctx(),
-    options      => options(),
-    write_buffer => binary(),
-    read_buffer  => binary()
+    url          := woody:url(),
+    context      := woody_context:ctx(),
+    options      := options(),
+    write_buffer := binary(),
+    read_buffer  := binary()
 }.
 
 -type error()              :: {error, {system, woody_error:system_error()}}.
@@ -34,23 +37,24 @@
 %%
 %% API
 %%
--spec new(options(), woody_context:ctx()) ->
+-spec new(woody:url(), options(), woody_context:ctx()) ->
     thrift_transport:t_transport() | no_return().
-new(TransportOpts = #{url := _Url}, Context) ->
+new(Url, Opts, Context) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
+        url           => Url,
+        options       => Opts,
         context       => Context,
-        options       => TransportOpts,
         write_buffer  => <<>>,
         read_buffer   => <<>>
     }),
     Transport.
 
--spec child_spec(any(), list(tuple())) ->
+-spec child_spec(any(), options()) ->
     supervisor:child_spec().
 child_spec(Name, Options) ->
     hackney_pool:child_spec(Name, Options).
 
--spec start_client_pool(any(), list(tuple())) ->
+-spec start_client_pool(any(), options()) ->
     ok.
 start_client_pool(Name, Options) ->
     hackney_pool:start_pool(Name, Options).
@@ -82,8 +86,9 @@ read(Transport = #{read_buffer := RBuffer}, Len) when is_binary(RBuffer) ->
 -spec flush(woody_transport()) ->
     {woody_transport(), ok | error()}.
 flush(Transport = #{
+    url           := Url,
     context       := Context,
-    options       := Options = #{url := Url},
+    options       := Options,
     write_buffer  := WBuffer,
     read_buffer   := RBuffer
 }) when is_binary(WBuffer), is_binary(RBuffer) ->
@@ -94,11 +99,8 @@ flush(Transport = #{
         {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
         {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
     ]),
-
-    %% ToDo: don't pass client options to hackney, when woody is coupled with nginx.
-    Options1 = maps:to_list(maps:without([url], Options)),
     _ = log_event(?EV_CLIENT_SEND, Context, #{url => Url}),
-    case handle_result(hackney:request(post, Url, Headers, WBuffer, Options1), Context) of
+    case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), Context) of
         {ok, Response} ->
             {Transport#{
                 read_buffer  => Response,

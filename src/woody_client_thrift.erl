@@ -48,7 +48,7 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, Context) ->
                 args     => Args
             }
         ),
-    do_call(make_thrift_client(Service, clean_opts(Opts), Context), Function, Args, Context).
+    do_call(make_thrift_client(Service, Opts, Context), Function, Args, Context).
 
 %%
 %% Internal functions
@@ -67,32 +67,39 @@ get_rpc_type(ThriftService = {Module, Service}, Function) ->
 get_rpc_type(?THRIFT_CAST) -> cast;
 get_rpc_type(_) -> call.
 
--spec clean_opts(woody_client:options()) ->
-    woody_client:options().
-clean_opts(Options) ->
-    maps:without(?WOODY_OPTS, Options).
-
 -spec make_thrift_client(woody:service(), woody_client:options(), woody_context:ctx()) ->
     thrift_client().
-make_thrift_client(Service, TransportOpts, Context) ->
+make_thrift_client(Service, Opts = #{url := Url}, Context) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(TransportOpts, Context),
+        woody_client_thrift_http_transport:new(Url, get_transport_opts(Opts), Context),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),
     Client.
+
+-spec get_transport_opts(woody_client:options()) ->
+    woody_client_thrift_http_transport:options().
+get_transport_opts(Opts) ->
+    maps:get(transport_opts, Opts, []).
 
 -spec do_call(thrift_client(), woody:func(), woody:args(), woody_context:ctx()) ->
     woody_client:result().
 do_call(Client, Function, Args, Context) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
-            throw:{Client1, Except = {exception, _}} -> {Client1, Except}
+            %% In case a server violates the requirements and sends
+            %% #TAppiacationException{} with http status code 200.
+            throw:{Client1, {exception, #'TApplicationException'{}}} ->
+                {Client1, {error, {external, result_unexpected, <<"thrift application exception unknown">>}}};
+            throw:{Client1, {exception, ThriftExcept}} ->
+                {Client1, {error, {business, ThriftExcept}}}
         end,
     _ = thrift_client:close(ClientNext),
     log_result(Result, Context),
     map_result(Result).
 
+log_result({error, {business, ThriftExcept}}, Context) ->
+    log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ThriftExcept});
 log_result({Status, Result}, Context) ->
     log_event(?EV_SERVICE_RESULT, Context, #{status => Status, result => Result}).
 
@@ -100,13 +107,7 @@ log_result({Status, Result}, Context) ->
     woody_client:result().
 map_result(Res = {ok, _}) ->
     Res;
-%% In case a server violates the requirements and sends
-%% #TAppiacationException{} with http status code 200.
-map_result({exception, #'TApplicationException'{}}) ->
-    {error, {external, result_unexpected, <<"thrift application exception unknown">>}};
-map_result({exception, ThriftExcept}) ->
-    {error, {business, ThriftExcept}};
-map_result(Res = {error, {system, _}}) ->
+map_result(Res = {error, {Type, _}}) when Type =:= business orelse Type =:= system ->
     Res;
 map_result({error, _ThriftError}) ->
     {error, {system, {internal, result_unexpected, <<"client thrift error">>}}}.

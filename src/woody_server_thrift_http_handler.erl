@@ -18,39 +18,32 @@
 
 %% Types
 
-%% See cowboy_protocol:opts() for details.
 %% ToDo: update/remove, when woody is coupled with nginx.
--type net_opts() :: #{
-    max_header_value_length => non_neg_integer(),
-    max_headers             => non_neg_integer(),
-    max_keepalive           => non_neg_integer(),
-    timeout                 => timeout()
-}.
 -define(COWBOY_ALLOWED_OPTS,
     [max_header_value_length, max_headers, max_keepalive, timeout]
 ).
 
 -type options() :: #{
+    handlers      := list(woody:http_handler(woody:th_handler())),
+    event_handler := woody:ev_handler(),
+    ip            := inet:ip_address(),
+    port          := inet:port_number(),
     protocol      => thrift,
     transport     => http,
-    handlers      => list(woody:http_handler(woody:th_handler())),
-    event_handler => woody:ev_handler(),
-    ip            => inet:ip_address(),
-    port          => inet:port_address(),
-    net_opts      => net_opts() %% optional
+    net_opts      => cowboy_protocol:opts()
 }.
--export_type([net_opts/0, options/0]).
+-export_type([options/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
 -type server_opts() :: #{
-    max_body_length => pos_integer() | infinity,
+    max_chunk_length => non_neg_integer(),
     regexp_meta     => re_mp()
 }.
 
 -type state() :: #{
-    th_handler  => woody:th_handler(),
-    ev_handler  => woody:ev_handler(),
-    server_opts => server_opts(),
+    th_handler  := woody:th_handler(),
+    ev_handler  := woody:ev_handler(),
+    server_opts := server_opts(),
     url         => woody:url(),
     context     => woody_context:ctx()
 }.
@@ -62,7 +55,7 @@
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 
 %% nginx should be configured to take care of various limits.
--define(MAX_BODY_LENGTH, infinity).
+-define(MAX_CHUNK_LENGTH, 65535). %% 64kbytes
 
 
 %%
@@ -122,7 +115,7 @@ get_paths(_, _, [Handler | _], _) ->
     server_opts().
 config() ->
     #{
-       max_body_length => ?MAX_BODY_LENGTH,
+       max_chunk_length => ?MAX_CHUNK_LENGTH,
        regexp_meta => compile_filter_meta()
     }.
 
@@ -132,7 +125,7 @@ compile_filter_meta() ->
     {ok, Re} = re:compile([?HEADER_META_PREFIX], [unicode, caseless]),
     Re.
 
--spec get_cowboy_opts(net_opts() | undefined) ->
+-spec get_cowboy_opts(cowboy_protocol:opts() | undefined) ->
     cowboy_protocol:opts().
 get_cowboy_opts(undefined) ->
     [];
@@ -347,12 +340,15 @@ reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
     {ok | {error, atom()}, woody:http_body(), cowboy_req:req()}.
-get_body(Req, #{max_body_length := MaxBody}) ->
-    case cowboy_req:body(Req, [{length, MaxBody}]) of
-        {ok, Body, Req1} when byte_size(Body) < MaxBody ->
-            {ok, Body, Req1};
-        {Res, Body, Req1} when Res =:= ok orelse Res =:= more->
-            {{error, body_too_large}, Body, Req1};
+get_body(Req, #{max_chunk_length := MaxChunk}) ->
+    do_get_body(<<>>, Req, [{length, MaxChunk}]).
+
+do_get_body(Body, Req, Opts) ->
+    case cowboy_req:body(Req, Opts) of
+        {ok, Body1, Req1} ->
+            {ok, <<Body/binary, Body1/binary>>, Req1};
+        {more, Body1, Req1} ->
+            do_get_body(<<Body/binary, Body1/binary>>, Req1, Opts);
         {error, Reason} ->
             {{error, Reason}, <<>>, Req}
     end.

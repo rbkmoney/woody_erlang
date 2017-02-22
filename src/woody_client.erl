@@ -10,13 +10,11 @@
 
 %% Types
 -type options() :: #{
-    protocol      => thrift,  %% optional
-    transport     => http,    %% optional
-    url           => woody:url(),
-    event_handler => woody:ev_handler()
-    %% Hint: for now hackney options can be passed thru this map as: key => value too
-    %% and will be converted to hackney options list. See hackney:request/5 for more info.
-    %% ToDo: disable this hack as soon as woody is coupled with nginx in µ container!
+    url            := woody:url(),
+    event_handler  := woody:ev_handler(),
+    transport_opts => woody_client_thrift_http_transport:options(), %% See hackney:request/5 for available options.
+    protocol       => thrift,
+    transport      => http
 }.
 -export_type([options/0]).
 
