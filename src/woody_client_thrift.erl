@@ -23,15 +23,15 @@
 %%
 %% API
 %%
--spec child_spec(woody_client:child_spec_options()) ->
+-spec child_spec(list(tuple())) ->
     supervisor:child_spec().
-child_spec(ChildSpecOptions) ->
-    woody_client_thrift_http_transport:child_spec(ChildSpecOptions).
+child_spec(Options) ->
+    woody_client_thrift_http_transport:child_spec(get_transport_opts(Options)).
 
 -spec start_pool(any(), list(tuple())) ->
     ok.
 start_pool(Name, Options) ->
-    woody_client_thrift_http_transport:start_client_pool(Name, Options).
+    woody_client_thrift_http_transport:start_client_pool(Name, get_transport_opts(Options)).
 
 -spec stop_pool(any()) ->
     ok | {error, not_found | simple_one_for_one}.

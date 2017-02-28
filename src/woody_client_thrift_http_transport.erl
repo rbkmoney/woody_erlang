@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new              /2]).
+-export([new              /3]).
 -export([child_spec       /1]).
 -export([start_client_pool/2]).
 -export([stop_client_pool /1]).
@@ -50,11 +50,11 @@ new(Url, Opts, Context) ->
     }),
     Transport.
 
--spec child_spec(woody_client:child_spec_options()) ->
+-spec child_spec(options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
-    {Name, Opts} = maps:get(pool, Options),
-    hackney_pool:child_spec(Name, Opts).
+    Name = proplists:get_value(pool_name, Options),
+    hackney_pool:child_spec(Name, Options).
 
 -spec start_client_pool(any(), options()) ->
     ok.
@@ -106,8 +106,6 @@ flush(Transport = #{
         {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
         {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
     ]),
-
-    Options1 = maps:to_list(maps:without([url], Options)),
     _ = log_event(?EV_CLIENT_SEND, Context, #{url => Url}),
     case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), Context) of
         {ok, Response} ->
