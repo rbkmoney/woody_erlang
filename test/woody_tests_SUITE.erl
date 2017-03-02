@@ -257,11 +257,12 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     {Url, _} = get_service_endpoint('Weapons'),
     Options        = #{url => Url, event_handler => ?MODULE},
 
-    Specs = [woody_client:child_spec(#{pool => {Pool, pool_options(PoolOptions)}}, Options) || {Pool, PoolOptions} <- Params],
-    _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
+    Specs = [woody_client:child_spec(#{pool => {Pool, pool_opts(PoolOpts)}}, Options) || {Pool, PoolOpts} <- Params],
+
+    _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
 
-pool_options({Timeout, MaxConnections}) ->
+pool_opts({Timeout, MaxConnections}) ->
     [{timeout, Timeout}, {max_connections, MaxConnections}].
 
 get_handler('Powerups') ->

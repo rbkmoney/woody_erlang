@@ -6,10 +6,10 @@
 -callback call(woody:request(), woody_client:options(), woody_context:ctx()) ->  woody_client:result().
 
 -spec child_spec(woody_client:options()) ->
-	supervisor:child_spec().
+    supervisor:child_spec().
 child_spec(Options) ->
-	Handler = woody_util:get_protocol_handler(client, Options),
-	Handler:child_spec(Options).
+    Handler = woody_util:get_protocol_handler(client, Options),
+    Handler:child_spec(Options).
 
 -spec find_pool(any(), woody_client:options()) ->
     pid() | undefined.

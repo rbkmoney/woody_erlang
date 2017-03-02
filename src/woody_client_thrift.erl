@@ -23,12 +23,12 @@
 %%
 %% API
 %%
--spec child_spec(list(tuple())) ->
+-spec child_spec(term()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     woody_client_thrift_http_transport:child_spec(get_transport_opts(Options)).
 
--spec start_pool(any(), list(tuple())) ->
+-spec start_pool(any(), term()) ->
     ok.
 start_pool(Name, Options) ->
     woody_client_thrift_http_transport:start_client_pool(Name, get_transport_opts(Options)).
