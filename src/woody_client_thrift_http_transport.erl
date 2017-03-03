@@ -6,10 +6,8 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new              /3]).
--export([start_client_pool/2]).
--export([stop_client_pool /1]).
--export([child_spec       /2]).
+-export([new       /3]).
+-export([connection_pool_spec/1]).
 
 %% Thrift transport callbacks
 -export([read/2, write/2, flush/1, close/1]).
@@ -49,20 +47,11 @@ new(Url, Opts, Context) ->
     }),
     Transport.
 
--spec child_spec(any(), options()) ->
+-spec connection_pool_spec(options()) ->
     supervisor:child_spec().
-child_spec(Name, Options) ->
+connection_pool_spec(Options) ->
+    Name = proplists:get_value(pool, Options),
     hackney_pool:child_spec(Name, Options).
-
--spec start_client_pool(any(), options()) ->
-    ok.
-start_client_pool(Name, Options) ->
-    hackney_pool:start_pool(Name, Options).
-
--spec stop_client_pool(any()) ->
-    ok | {error, not_found | simple_one_for_one}.
-stop_client_pool(Name) ->
-    hackney_pool:stop_pool(Name).
 
 %%
 %% Thrift transport callbacks

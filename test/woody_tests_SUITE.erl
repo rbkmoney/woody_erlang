@@ -51,7 +51,6 @@
     call_no_headers_503_test/1,
     call_no_headers_504_test/1,
     call3_ok_default_ev_handler_test/1,
-    call_with_client_pool_test/1,
     call_thrift_multiplexed_test/1,
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
@@ -167,7 +166,6 @@ all() ->
         call_no_headers_503_test,
         call_no_headers_504_test,
         call3_ok_default_ev_handler_test,
-        call_with_client_pool_test,
         call_thrift_multiplexed_test,
         server_http_req_validation_test,
         try_bad_handler_spec_test,
@@ -215,8 +213,8 @@ init_per_testcase(TC, C) when
     [{sup, Sup} | C];
 init_per_testcase(find_multiple_pools_test, C) ->
     {ok, Sup} = start_tc_sup(),
-    Pool1 = {swords , {15000, 100}},
-    Pool2 = {shields, {undefined, 50}},
+    Pool1 = {swords, 15000, 100},
+    Pool2 = {shields, undefined, 50},
     ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2]),
     [{sup, Sup} | C];
 init_per_testcase(_, C) ->
@@ -254,12 +252,21 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
 
-    Specs = [woody_client_thrift:child_spec(Pool, pool_options(Options)) || {Pool, Options} <- Params],
-    _     = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
+    Specs = [woody_client:connection_pool_spec(pool_opts(Pool)) || Pool <- Params],
+
+    _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
 
-pool_options({Timeout, MaxConnections}) ->
-    [{timeout, Timeout}, {max_connections, MaxConnections}].
+pool_opts(Pool) ->
+    {Url, _} = get_service_endpoint('Weapons'),
+    #{
+        url            => Url,
+        event_handler  => ?MODULE,
+        transport_opts => start_pool_opts(Pool)
+    }.
+
+start_pool_opts({Name, Timeout, MaxConnections}) ->
+    [{pool, Name}, {timeout, Timeout}, {max_connections, MaxConnections}].
 
 get_handler('Powerups') ->
     {
@@ -494,18 +501,6 @@ call_fail_w_no_headers(Id, Class, Details) ->
         error:{woody_error, {external, Class, Details}} ->
             ok
     end.
-
-call_with_client_pool_test(_) ->
-    Pool    = guns,
-    ok      = woody_client_thrift:start_pool(Pool, [{max_connections, 10}]),
-    Gun     =  <<"Enforcer">>,
-    Context = make_context(<<"call_with_client_pool">>),
-    {Url, Service} = get_service_endpoint('Weapons'),
-    Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
-    Expect = woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
-                 #{url => Url, event_handler => ?MODULE, pool => Pool}, Context),
-    {ok, _} = receive_msg(Gun, Context),
-    ok = woody_client_thrift:stop_pool(Pool).
 
 find_multiple_pools_test(_) ->
     true = is_pid(hackney_pool:find_pool(swords)),

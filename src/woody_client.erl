@@ -6,7 +6,9 @@
 -include("woody_defs.hrl").
 
 %% API
--export([call/2, call/3]).
+-export([connection_pool_spec/1]).
+-export([call                /2]).
+-export([call                /3]).
 
 %% Types
 -type options() :: #{
@@ -28,6 +30,11 @@
 %%
 %% API
 %%
+-spec connection_pool_spec(options()) ->
+    supervisor:child_spec().
+connection_pool_spec(Options) ->
+    woody_client_behaviour:connection_pool_spec(Options).
+
 -spec call(woody:request(), options()) ->
     {ok, woody:result()}                      |
     {exception, woody_error:business_error()} |
