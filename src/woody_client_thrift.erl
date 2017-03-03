@@ -6,8 +6,8 @@
 -include("woody_defs.hrl").
 
 %% woody_client_behaviour callback
--export([call      /3]).
--export([child_spec/1]).
+-export([call                /3]).
+-export([connection_pool_spec/1]).
 
 %% Types
 -type thrift_client() :: term().
@@ -18,10 +18,10 @@
 %%
 %% API
 %%
--spec child_spec(woody_client:options()) ->
+-spec connection_pool_spec(woody_client:options()) ->
     supervisor:child_spec().
-child_spec(Options) ->
-    woody_client_thrift_http_transport:child_spec(get_transport_opts(Options)).
+connection_pool_spec(Options) ->
+    woody_client_thrift_http_transport:connection_pool_spec(get_transport_opts(Options)).
 
 -spec call(woody:request(), woody_client:options(), woody_context:ctx()) ->
     woody_client:result().
