@@ -7,7 +7,6 @@
 
 %% API
 -export([child_spec/1]).
--export([find_pool /2]).
 -export([call      /2]).
 -export([call      /3]).
 
@@ -35,11 +34,6 @@
     supervisor:child_spec().
 child_spec(Options) ->
     woody_client_behaviour:child_spec(Options).
-
--spec find_pool(any(), options()) ->
-    pid() | undefined.
-find_pool(Name, Options) ->
-    woody_client_behaviour:find_pool(Name, Options).
 
 -spec call(woody:request(), options()) ->
     {ok, woody:result()}                      |

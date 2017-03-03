@@ -5,14 +5,9 @@
 -include_lib("thrift/include/thrift_constants.hrl").
 -include("woody_defs.hrl").
 
-%% API
--export([child_spec/1]).
--export([start_pool/2]).
--export([stop_pool /1]).
--export([find_pool /1]).
-
 %% woody_client_behaviour callback
--export([call/3]).
+-export([call      /3]).
+-export([child_spec/1]).
 
 %% Types
 -type thrift_client() :: term().
@@ -23,25 +18,10 @@
 %%
 %% API
 %%
--spec child_spec(term()) ->
+-spec child_spec(woody_client:options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     woody_client_thrift_http_transport:child_spec(get_transport_opts(Options)).
-
--spec start_pool(any(), term()) ->
-    ok.
-start_pool(Name, Options) ->
-    woody_client_thrift_http_transport:start_client_pool(Name, get_transport_opts(Options)).
-
--spec stop_pool(any()) ->
-    ok | {error, not_found | simple_one_for_one}.
-stop_pool(Name) ->
-    woody_client_thrift_http_transport:stop_client_pool(Name).
-
--spec find_pool(any()) ->
-    pid() | undefined.
-find_pool(Name) ->
-    woody_client_thrift_http_transport:find_client_pool(Name).
 
 -spec call(woody:request(), woody_client:options(), woody_context:ctx()) ->
     woody_client:result().

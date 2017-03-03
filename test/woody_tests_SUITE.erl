@@ -268,7 +268,7 @@ pool_opts(Pool) ->
     }.
 
 start_pool_opts({Name, Timeout, MaxConnections}) ->
-    [{pool_name, Name}, {timeout, Timeout}, {max_connections, MaxConnections}].
+    [{pool, Name}, {timeout, Timeout}, {max_connections, MaxConnections}].
 
 get_handler('Powerups') ->
     {
@@ -505,20 +505,18 @@ call_fail_w_no_headers(Id, Class, Details) ->
     end.
 
 call_with_client_pool_test(_) ->
-    Pool    = guns,
-    ok      = woody_client_thrift_http_transport:start_client_pool(Pool, [{max_connections, 10}]),
-    Gun     =  <<"Enforcer">>,
-    Context = make_context(<<"call_with_client_pool">>),
+    PoolName = guns,
+    Gun      = <<"Enforcer">>,
+    Context  = make_context(<<"call_with_client_pool">>),
     {Url, Service} = get_service_endpoint('Weapons'),
     Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect = woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
-                 #{url => Url, event_handler => ?MODULE, pool => Pool}, Context),
-    {ok, _} = receive_msg(Gun, Context),
-    ok = woody_client_thrift:stop_pool(Pool).
+                 #{url => Url, event_handler => ?MODULE, transport_opts => [{pool, PoolName}]}, Context),
+    {ok, _} = receive_msg(Gun, Context).
 
 find_multiple_pools_test(_) ->
-    true = is_pid(woody_client_thrift:find_pool(swords)),
-    true = is_pid(woody_client_thrift:find_pool(shields)).
+    true = is_pid(hackney_pool:find_pool(swords)),
+    true = is_pid(hackney_pool:find_pool(shields)).
 
 call_thrift_multiplexed_test(_) ->
     Client = make_thrift_multiplexed_client(<<"call_thrift_multiplexed">>,
