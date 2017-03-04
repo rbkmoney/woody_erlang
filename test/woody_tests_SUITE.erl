@@ -252,7 +252,7 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
 
-    Specs = [woody_client:connection_pool_spec(pool_opts(Pool)) || Pool <- Params],
+    Specs = [woody_client:child_spec(pool_opts(Pool)) || Pool <- Params],
 
     _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
