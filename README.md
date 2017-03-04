@@ -56,13 +56,13 @@ Erlang реализация [Библиотеки RPC вызовов для об
 `woody_context:new/0` - можно использовать для создания контекста корневого запроса с автоматически сгенерированным уникальным RPC ID.
 
 Можно создать пул соединений для thrift клиента (например, для установления _keep alive_ соединений с сервером). Для этого надо использовать
-`woody_client:connection_pool_spec/2`. Для работы с определенным пулом в Options есть поле `transport_opts => [{pool, pool_name}, {timeout, 150000}, {max_connections, 100}]`.
+`woody_client:child_spec/2`. Для работы с определенным пулом в Options есть поле `transport_opts => [{pool, pool_name}, {timeout, 150000}, {max_connections, 100}]`.
 
 ```erlang
-15> Opts = Opts#{transport_opts => [{pool, my_client_pool}]}.
-16> supervisor:start_child(Sup, woody_client:connection_pool_spec(Opts)).
+15> Opts1 = Opts#{transport_opts => [{pool, my_client_pool}]}.
+16> supervisor:start_child(Sup, woody_client:child_spec(Opts1)).
 17> Context2 = woody_context:new(<<"myUniqRequestID2">>).
-18> {ok, Result2} = woody_client:call(Request, Opts, Context2).
+18> {ok, Result2} = woody_client:call(Request, Opts1, Context2).
 ```
 
 `Context` также позволяет аннотировать RPC запросы дополнительными мета данными в виде _key-value_. `Context` передается только в запросах и его расширение возможно только в режиме _append-only_ (т.е. на попытку переопределить уже существующую запись в `context meta`, библиотека вернет ошибку). Поскольку на транспортном уровне контекст передается в виде custom HTTP заголовков, синтаксис _key-value_ должен следовать ограничениям [RFC7230 ](https://tools.ietf.org/html/rfc7230#section-3.2.6). Размер ключа записи метаданных не должен превышать _53 байта_ (см. остальные требования к метаданным в [описании библиотеки](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#rpc_2)).

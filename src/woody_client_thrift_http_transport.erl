@@ -7,7 +7,7 @@
 
 %% API
 -export([new       /3]).
--export([connection_pool_spec/1]).
+-export([child_spec/1]).
 
 %% Thrift transport callbacks
 -export([read/2, write/2, flush/1, close/1]).
@@ -47,9 +47,9 @@ new(Url, Opts, Context) ->
     }),
     Transport.
 
--spec connection_pool_spec(options()) ->
+-spec child_spec(options()) ->
     supervisor:child_spec().
-connection_pool_spec(Options) ->
+child_spec(Options) ->
     Name = proplists:get_value(pool, Options),
     hackney_pool:child_spec(Name, Options).
 
