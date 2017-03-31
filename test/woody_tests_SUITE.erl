@@ -25,6 +25,10 @@
 %% common test API
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
 -export([
+    context_add_put_get_meta_ok_test/1,
+    context_get_meta_by_key_ok_test/1,
+    context_get_empty_meta_ok_test/1,
+    context_get_empty_meta_by_key_ok_test/1,
     context_given_rpc_id_test/1,
     context_given_trace_id_test/1,
     context_generated_rpc_id_test/1,
@@ -140,6 +144,10 @@
 %%
 all() ->
     [
+        context_add_put_get_meta_ok_test,
+        context_get_meta_by_key_ok_test,
+        context_get_empty_meta_ok_test,
+        context_get_empty_meta_by_key_ok_test,
         context_given_rpc_id_test,
         context_given_trace_id_test,
         context_generated_rpc_id_test,
@@ -308,6 +316,33 @@ end_per_test_case(_, C) ->
 %%
 %% tests
 %%
+
+context_add_put_get_meta_ok_test(_) ->
+    Meta = #{
+        <<"world_says">> => <<"Hello">>,
+        <<"human_says">> => <<"Nope!">>
+    },
+
+    Context = woody_context:add_meta(woody_context:new(), Meta),
+    Meta = woody_context:get_meta(Context).
+
+
+context_get_meta_by_key_ok_test(_) ->
+    Meta = #{
+        <<"world_says">> => <<"Hello">>,
+        <<"human_says">> => <<"Nope!">>
+    },
+
+    Context = woody_context:add_meta(woody_context:new(), Meta),
+    <<"Nope!">> = woody_context:get_meta(<<"human_says">>, Context).
+
+context_get_empty_meta_ok_test(_) ->
+    #{} = woody_context:get_meta(woody_context:new()).
+
+
+context_get_empty_meta_by_key_ok_test(_) ->
+    undefined = woody_context:get_meta(<<"fox_says">>, woody_context:new()).
+
 context_given_rpc_id_test(_) ->
     ReqId = <<"context_given_rpc_id">>,
     RpcId = #{parent_id => ReqId, trace_id => ReqId, span_id => ReqId},
