@@ -80,7 +80,7 @@ get_meta(Context) ->
 -spec get_meta(meta_key(), ctx()) ->
     binary() | undefined.
 get_meta(MetaKey, Context) ->
-    maps:get(MetaKey, maps:get(meta, Context), undefined).
+    maps:get(MetaKey, maps:get(meta, Context, #{}), undefined).
 
 
 -spec get_rpc_id(ctx()) ->
