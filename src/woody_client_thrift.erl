@@ -73,16 +73,20 @@ get_transport_opts(Opts) ->
 do_call(Client, Function, Args, Context) ->
     {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
         catch
-            %% In case a server violates the requirements and sends
-            %% #TAppiacationException{} with http status code 200.
             throw:{Client1, {exception, #'TApplicationException'{}}} ->
-                {Client1, {error, {external, result_unexpected, <<"thrift application exception unknown">>}}};
+                {Client1, {error, {system, get_server_violation_error()}}};
             throw:{Client1, {exception, ThriftExcept}} ->
                 {Client1, {error, {business, ThriftExcept}}}
         end,
     _ = thrift_client:close(ClientNext),
     log_result(Result, Context),
     map_result(Result).
+
+get_server_violation_error() ->
+    {external, result_unexpected, <<
+        "server violated thrift protocol: "
+        "sent TApplicationException (unknown exception) with http code 200"
+    >>}.
 
 log_result({error, {business, ThriftExcept}}, Context) ->
     log_event(?EV_SERVICE_RESULT, Context, #{status => ok, result => ThriftExcept});
