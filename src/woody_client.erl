@@ -83,4 +83,4 @@ handle_client_error(Class, Error, Context) ->
             reason   => Details,
             stack    => erlang:get_stacktrace()
         }, Context),
-    {error, {system, {internal, result_unexpected, <<"client error">>}}}.
+    {error, {system, {internal, result_unexpected, <<"client error: ", Details/binary>>}}}.

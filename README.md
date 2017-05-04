@@ -23,7 +23,9 @@ Erlang реализация [Библиотеки RPC вызовов для об
 5>     event_handler => EventHandler,
 5>     ip => {127,0,0,1},
 5>     port => 8022
-5>      %% + optional woody_server_thrift_http_handler:net_opts()
+5>     %% optional:
+5>     %% net_opts       => cowboy_protocol:opts()
+5>     %% handler_limits => woody_server_thrift_http_handler:handler_limits()
 5> }).
 ```
 

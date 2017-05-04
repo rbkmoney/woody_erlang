@@ -30,7 +30,7 @@
     context_get_empty_meta_ok_test/1,
     context_get_empty_meta_by_key_ok_test/1,
     context_given_rpc_id_test/1,
-    context_given_trace_id_test/1,
+    context_given_id_test/1,
     context_generated_rpc_id_test/1,
     ids_monotonic_incr_test/1,
     call_ok_test/1,
@@ -131,7 +131,6 @@
 
 -define(ERR_S_THRIFT_MULTIPLEX    , <<"thrift: multiplexing (not supported)">>).
 -define(ERR_S_THRIFT_ENCODE       , <<"thrift: encode error">>).
--define(ERR_C_THRIFT              , <<"client thrift error">>).
 -define(ERR_POWERUP_UNAVAILABLE   , <<"expired">>).
 -define(ERR_POWERUP_STATE_UNKNOWN , <<"invisible">>).
 -define(ERR_BAD_PROXYING          , <<"case_clause">>).
@@ -149,7 +148,7 @@ all() ->
         context_get_empty_meta_ok_test,
         context_get_empty_meta_by_key_ok_test,
         context_given_rpc_id_test,
-        context_given_trace_id_test,
+        context_given_id_test,
         context_generated_rpc_id_test,
         ids_monotonic_incr_test,
         call_ok_test,
@@ -203,7 +202,7 @@ application_stop(App) ->
 init_per_testcase(TC, C) when
       TC =:= try_bad_handler_spec_test     ;
       TC =:= context_given_rpc_id_test     ;
-      TC =:= context_given_trace_id_test   ;
+      TC =:= context_given_id_test         ;
       TC =:= context_generated_rpc_id_test ;
       TC =:= ids_monotonic_incr_test       ;
       TC =:= call_client_error_test
@@ -350,11 +349,11 @@ context_given_rpc_id_test(_) ->
         rpc_id     := RpcId
     } = woody_context:new(RpcId).
 
-context_given_trace_id_test(_) ->
-    TraceId = <<"context_given_trace_id">>,
+context_given_id_test(_) ->
+    Id = <<"context_given_trace_id">>,
     #{
-        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := _, trace_id := TraceId}
-    } = woody_context:new(TraceId).
+        rpc_id := #{parent_id := ?ROOT_REQ_PARENT_ID, span_id := Id, trace_id := _}
+    } = woody_context:new(Id).
 
 context_generated_rpc_id_test(_) ->
     #{
@@ -418,7 +417,7 @@ call_client_error_test(_) ->
     Context = make_context(<<"call_client_error">>),
     try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
     catch
-        error:{woody_error, {internal, result_unexpected, ?ERR_C_THRIFT}} -> ok
+        error:{woody_error, {internal, result_unexpected, <<"client thrift error: ", _/binary>>}} -> ok
     end.
 
 call_server_internal_error_test(_) ->
@@ -507,33 +506,29 @@ call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass, ErrDetails) ->
     {ok, _} = receive_msg(Powerup, Context).
 
 call_no_headers_404_test(_) ->
-    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unexpected,
-        <<"http code: 404">>).
+    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unexpected, 404).
 
 call_no_headers_500_test(_) ->
-    call_fail_w_no_headers(<<"call_no_headers_500">>, result_unexpected,
-        <<"http code: 500">>).
+    call_fail_w_no_headers(<<"call_no_headers_500">>, result_unexpected, 500).
 
 call_no_headers_502_test(_) ->
-    call_fail_w_no_headers(<<"call_no_headers_502">>, result_unexpected,
-        <<"http code: 502">>).
+    call_fail_w_no_headers(<<"call_no_headers_502">>, result_unexpected, 502).
 
 call_no_headers_503_test(_) ->
-    call_fail_w_no_headers(<<"call_no_headers_503">>, resource_unavailable,
-        <<"http code: 503">>).
+    call_fail_w_no_headers(<<"call_no_headers_503">>, resource_unavailable, 503).
 
 call_no_headers_504_test(_) ->
-    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unknown,
-        <<"http code: 504">>).
+    call_fail_w_no_headers(<<"call_no_headers_404">>, result_unknown, 504).
 
-call_fail_w_no_headers(Id, Class, Details) ->
+call_fail_w_no_headers(Id, Class, Code) ->
     Gun     =  <<"Enforcer">>,
     Context = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
+    BinCode = integer_to_binary(Code),
     try woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
             #{url => Url, event_handler => ?MODULE}, Context)
     catch
-        error:{woody_error, {external, Class, Details}} ->
+        error:{woody_error, {external, Class, <<"got response with http code ", BinCode:3/binary, _/binary>>}} ->
             ok
     end.
 

@@ -95,10 +95,10 @@ get_rpc_id( _) ->
 get_rpc_id(Key, Context) ->
     maps:get(Key, get_rpc_id(Context), undefined).
 
--spec new_rpc_id(woody:trace_id()) ->
+-spec new_rpc_id(woody:span_id()) ->
     woody:rpc_id().
-new_rpc_id(TraceId) ->
-    new_rpc_id(?ROOT_REQ_PARENT_ID, TraceId, new_req_id()).
+new_rpc_id(SpanId) ->
+    new_rpc_id(?ROOT_REQ_PARENT_ID, new_req_id(), SpanId).
 
 -spec new_rpc_id(woody:parent_id(), woody:trace_id(), woody:span_id()) ->
     woody:rpc_id().
