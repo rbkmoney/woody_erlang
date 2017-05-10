@@ -24,8 +24,8 @@
 ).
 
 -type handler_limits() :: #{
-    max_heap_size       => integer(),
-    total_mem_threshold => integer()
+    max_heap_size       => integer(), %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
+    total_mem_threshold => integer()  %% bytes, see erlang:memory() for details.
 }.
 -export_type([handler_limits/0]).
 
@@ -233,7 +233,7 @@ init_handler(Req, State = #{handler_limits := Limits, context := Context}) ->
             check_headers(Req, State);
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
-            Req1 = reply(503, set_error_headers(<<"Resource Unavailable">>, Details, Req), Context),
+            Req1 = handle_error({system, {internal, resource_unavailable, Details}}, Req, Context),
             {shutdown, Req1, undefined}
     end.
 
