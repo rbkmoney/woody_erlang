@@ -17,12 +17,6 @@
 
 
 %% Types
-
-%% ToDo: update/remove, when woody is coupled with nginx.
--define(COWBOY_ALLOWED_OPTS,
-    [max_header_value_length, max_headers, max_keepalive, timeout]
-).
-
 -type handler_limits() :: #{
     max_heap_size       => integer(), %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
     total_mem_threshold => integer()  %% bytes, see erlang:memory() for details.
@@ -143,11 +137,16 @@ compile_filter_meta() ->
     Re.
 
 -spec get_cowboy_opts(cowboy_protocol:opts() | undefined) ->
-    cowboy_protocol:opts().
+    cowboy_protocol:opts() | no_return().
 get_cowboy_opts(undefined) ->
     [];
-get_cowboy_opts(NetOps) ->
-    maps:to_list(maps:with(?COWBOY_ALLOWED_OPTS, NetOps)).
+get_cowboy_opts(Opts) ->
+    case lists:keyfind(env, 1, Opts) of
+        false ->
+            Opts;
+        _ ->
+            erlang:error(env_not_allowed_in_net_opts)
+    end.
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
