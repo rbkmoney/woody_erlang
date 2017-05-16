@@ -4,7 +4,7 @@
 -module(woody_error).
 
 -export([raise/2]).
--export([format_details/1, format_details_short/1]).
+-export([format_details/1]).
 
 %% API
 
@@ -43,14 +43,5 @@ raise(system, {Source, Class, Details}) ->
 -spec format_details(term()) ->
     details().
 format_details(Error) ->
-    genlib:to_binary(io_lib:format("~p", [Error])).
+    genlib:to_binary(io_lib:format("~9999p", [Error])).
 
--spec format_details_short(term()) ->
-    details().
-format_details_short(Error) ->
-    format_details(short_reason(Error)).
-
-short_reason(Reason) when is_tuple(Reason) ->
-    element(1, Reason);
-short_reason(Reason) ->
-    Reason.

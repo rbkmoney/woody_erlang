@@ -130,10 +130,8 @@
 -define(ROOT_REQ_PARENT_ID, <<"undefined">>).
 
 -define(ERR_S_THRIFT_MULTIPLEX    , <<"thrift: multiplexing (not supported)">>).
--define(ERR_S_THRIFT_ENCODE       , <<"thrift: encode error">>).
 -define(ERR_POWERUP_UNAVAILABLE   , <<"expired">>).
 -define(ERR_POWERUP_STATE_UNKNOWN , <<"invisible">>).
--define(ERR_BAD_PROXYING          , <<"case_clause">>).
 
 -define(WEAPON_STACK_OVERFLOW  , pos_out_of_boundaries).
 -define(BAD_POWERUP_REPLY      , powerup_unknown).
@@ -183,6 +181,7 @@ all() ->
 %% starting/stopping
 %%
 init_per_suite(C) ->
+    %%Apps = genlib_app:start_application_with(woody, [{trace_http_server, true}]),
     {ok, Apps} = application:ensure_all_started(woody),
     [{apps, Apps}|C].
 
@@ -400,17 +399,21 @@ call_throw_unexpected_test(_) ->
     Id      = <<"call_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
-    Error   = genlib:to_binary(?WEAPON_STACK_OVERFLOW),
     try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, Error}} -> ok
+        error:{woody_error, {external, result_unexpected, _}} -> ok
     end,
     {ok, _} = receive_msg(Current, Context).
 
 call_system_external_error_test(_) ->
+    Id  = <<"call_system_external_error">>,
     Gun = <<"The Ultimate Super Mega Destroyer">>,
-    gun_test_basic(<<"call_system_external_error">>, Gun,
-        {error, {woody_error, {external, result_unexpected, <<"case_clause">>}}}, true).
+    Context = make_context(Id),
+    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+    catch
+        error:{woody_error, {external, result_unexpected, _}} -> ok
+    end,
+    {ok, _} = receive_msg(Gun, Context).
 
 call_client_error_test(_) ->
     Gun     = 'Wrong Type of Mega Destroyer',
@@ -425,7 +428,7 @@ call_server_internal_error_test(_) ->
     Context = make_context(<<"call_server_internal_error">>),
     try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?ERR_S_THRIFT_ENCODE}} -> ok
+        error:{woody_error, {external, result_unexpected, _}} -> ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
@@ -458,7 +461,7 @@ call_pass_thru_except_test(_) ->
     Context = woody_context:new(RpcId),
     try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?ERR_BAD_PROXYING}} ->
+        error:{woody_error, {external, result_unexpected, _}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
@@ -468,7 +471,7 @@ call_pass_thru_bad_result_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_result">>),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?ERR_S_THRIFT_ENCODE}} ->
+        error:{woody_error, {external, result_unexpected, _}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
@@ -478,29 +481,29 @@ call_pass_thru_bad_except_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_except">>),
     try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
     catch
-        error:{woody_error, {external, result_unexpected, ?ERR_BAD_PROXYING}} ->
+        error:{woody_error, {external, result_unexpected, _}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_result_unexpected_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_result_unexpected">>, <<"Helmet">>,
-        error, result_unexpected, ?ERR_S_THRIFT_ENCODE).
+        error, result_unexpected).
 
 call_pass_thru_resource_unavail_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_resource_unavail">>, <<"Damage Amplifier">>,
-        error, resource_unavailable, ?ERR_POWERUP_UNAVAILABLE).
+        error, resource_unavailable).
 
 call_pass_thru_result_unknown_test(_) ->
     call_pass_thru_error(<<"call_pass_thru_result_unknown">>, <<"Invisibility">>,
-        error, result_unknown, ?ERR_POWERUP_STATE_UNKNOWN).
+        error, result_unknown).
 
-call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass, ErrDetails) ->
+call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass) ->
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
     try call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
     catch
-        ExceptClass:{woody_error, {external, ErrClass, ErrDetails}} ->
+        ExceptClass:{woody_error, {external, ErrClass, _}} ->
             ok
     end,
     {ok, _} = receive_msg(Powerup, Context).
