@@ -30,7 +30,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 ```
 С помощью опциональных полей можно:
 * `net_opts` - задать дополнитльные опции cowboy серверу
-* `handler_limits` - поставить лимиты на _heap size_ процесса хэндлера (_beam_ убьет хэндлер при превышении лимита - см. [erlang:process_flag(max_heap_size, MaxHeapSize)](http://erlang.org/doc/man/erlang.html#process_flag-2)) и на максимальный размер памяти vm, при достижении которого woody server начнет отбрасывать входящие rpc вызовы с системной ошибкой `internal resourse unavailable`.
+* `handler_limits` - поставить лимиты на _heap size_ процесса хэндлера (_beam_ убьет хэндлер при превышении лимита - см. [erlang:process_flag(max_heap_size, MaxHeapSize)](http://erlang.org/doc/man/erlang.html#process_flag-2)) и на максимальный размер памяти vm (см. [erlang:memory(total)](http://erlang.org/doc/man/erlang.html#memory-1)), при достижении которого woody server начнет отбрасывать входящие rpc вызовы с системной ошибкой `internal resourse unavailable`.
 
 Теперь можно поднять RPC сервер в рамках supervision tree приложения. Например:
 
