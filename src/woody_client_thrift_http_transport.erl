@@ -149,8 +149,9 @@ handle_result({error, Reason}, Context) when
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
     {error, {system, {external, resource_unavailable, BinReason}}};
 handle_result({error, Reason}, Context) ->
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => woody_error:format_details(Reason)}),
-    {error, {system, {internal, result_unexpected, <<"http request send error">>}}}.
+    Details = woody_error:format_details(Reason),
+    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Details}),
+    {error, {system, {internal, result_unexpected, Details}}}.
 
 -spec get_body({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
     {ok, woody:http_body()} | error().
@@ -207,7 +208,7 @@ do_check_error_reason(none, 200, _Context) ->
 do_check_error_reason(none, Code, Context) ->
     _ = log_event(?EV_TRACE, Context, #{role => client,
             event => woody_util:to_binary([?HEADER_E_REASON, " header missing"])}),
-    woody_util:to_binary(["http code: ", Code]);
+    woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON, " header"]);
 do_check_error_reason(multiple, _, Context) ->
     _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON], Context),
     ?BAD_RESP_HEADER;

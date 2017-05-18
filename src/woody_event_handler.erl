@@ -111,7 +111,7 @@
 -export_type([status/0]).
 
 -type severity() :: debug | info | warning | error.
--type msg     () :: {list(), list()  }.
+-type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
 -export_type([severity/0, msg/0, log_msg/0]).
 
@@ -130,12 +130,14 @@ handle_event(Handler, Event, RpcId, Meta) ->
     _ = Module:handle_event(Event, RpcId, Meta, Opts),
     ok.
 
--spec format_rpc_id(woody:rpc_id()) ->
+-spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
-    {"[~s ~s ~s]", [Trace, Parent, Span]}.
+    {"[~s ~s ~s]", [Trace, Parent, Span]};
+format_rpc_id(undefined) ->
+    {"~p", [undefined]}.
 
--spec format_event(event(), event_meta(), woody:rpc_id()) ->
+-spec format_event(event(), event_meta(), woody:rpc_id() | undefined) ->
     log_msg().
 format_event(Event, Meta, RpcId) ->
     {Severity, Msg} = format_event(Event, Meta),
@@ -154,21 +156,21 @@ format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
-    {debug, {"[client] received response with code ~p and info details: ~p", [Code, Reason]}};
+    {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->
     {debug, {"[client] received response with code ~p", [Code]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}) ->
-    {warning, {"[client] received response with code ~p and details: ~p", [Code, Reason]}};
+    {warning, {"[client] received response with code ~p and details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}) ->
-    {warning, {"[client] sending request error ~p", [Reason]}};
+    {warning, {"[client] sending request error ~ts", [Reason]}};
 format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}) ->
     {debug, {"[server] request to ~s received", [URL]}};
 format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}) ->
-    {debug, {"[server] request to ~s unpacking error ~p", [URL, Reason]}};
+    {debug, {"[server] request to ~s unpacking error ~ts", [URL, Reason]}};
 format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}) ->
-    {debug, {"[server] response send with code ~p", [Code]}};
+    {debug, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
-    {warning, {"[server] response send with code ~p", [Code]}};
+    {warning, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result}) ->

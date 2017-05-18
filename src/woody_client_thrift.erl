@@ -99,8 +99,9 @@ map_result(Res = {ok, _}) ->
     Res;
 map_result(Res = {error, {Type, _}}) when Type =:= business orelse Type =:= system ->
     Res;
-map_result({error, _ThriftError}) ->
-    {error, {system, {internal, result_unexpected, <<"client thrift error">>}}}.
+map_result({error, ThriftError}) ->
+    BinError = woody_error:format_details(ThriftError),
+    {error, {system, {internal, result_unexpected, <<"client thrift error: ", BinError/binary>>}}}.
 
 log_event(Event, Context, Meta) ->
     woody_event_handler:handle_event(Event, Meta, Context).

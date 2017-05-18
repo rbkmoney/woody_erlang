@@ -17,21 +17,23 @@
 
 
 %% Types
-
-%% ToDo: update/remove, when woody is coupled with nginx.
--define(COWBOY_ALLOWED_OPTS,
-    [max_header_value_length, max_headers, max_keepalive, timeout]
-).
+-type handler_limits() :: #{
+    max_heap_size       => integer(), %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
+    total_mem_threshold => integer()  %% bytes, see erlang:memory() for details.
+}.
+-export_type([handler_limits/0]).
 
 -type options() :: #{
-    handlers      := list(woody:http_handler(woody:th_handler())),
-    event_handler := woody:ev_handler(),
-    ip            := inet:ip_address(),
-    port          := inet:port_number(),
-    protocol      => thrift,
-    transport     => http,
-    net_opts      => cowboy_protocol:opts()
+    handlers       := list(woody:http_handler(woody:th_handler())),
+    event_handler  := woody:ev_handler(),
+    ip             := inet:ip_address(),
+    port           := inet:port_number(),
+    protocol       => thrift,
+    transport      => http,
+    net_opts       => cowboy_protocol:opts(),
+    handler_limits => handler_limits()
 }.
+
 -export_type([options/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
@@ -41,11 +43,12 @@
 }.
 
 -type state() :: #{
-    th_handler  := woody:th_handler(),
-    ev_handler  := woody:ev_handler(),
-    server_opts := server_opts(),
-    url         => woody:url(),
-    context     => woody_context:ctx()
+    th_handler     := woody:th_handler(),
+    ev_handler     := woody:ev_handler(),
+    server_opts    := server_opts(),
+    handler_limits := handler_limits(),
+    url            => woody:url(),
+    context        => woody_context:ctx()
 }.
 
 -type cowboy_init_result() ::
@@ -79,13 +82,13 @@ get_socket_transport(Ip, Port) ->
 
 -spec get_cowboy_config(options()) ->
     cowboy_protocol:opts().
-get_cowboy_config(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
-    Paths      = get_paths(config(), EvHandler, Handlers, []),
+    Dispatch   = get_dispatch(Opts),
     CowboyOpts = get_cowboy_opts(maps:get(net_opts, Opts, undefined)),
     HttpTrace  = get_http_trace(EvHandler, config()),
     [
-        {env, [{dispatch, cowboy_router:compile([{'_', Paths}])}]},
+        {env, [{dispatch, Dispatch}]},
         %% Limit woody_context:meta() key length to 53 bytes
         %% according to woody requirements.
         {max_header_name_length, 64}
@@ -95,20 +98,28 @@ validate_event_handler(Handler) ->
     {_, _} = woody_util:get_mod_opts(Handler),
     ok.
 
--spec get_paths(server_opts(), woody:ev_handler(), Handlers, Paths) -> Paths when
+-spec get_dispatch(options())->
+    cowboy_router:dispatch_rules().
+get_dispatch(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+    Limits = maps:get(handler_limits, Opts, #{}),
+    Paths  = get_paths(config(), Limits, EvHandler, Handlers, []),
+    cowboy_router:compile([{'_', Paths}]).
+
+-spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Paths) -> Paths when
     Handlers :: list(woody:http_handler(woody:th_handler())),
     Paths    :: list({woody:path(), module(), state()}).
-get_paths(_, _, [], Paths) ->
+get_paths(_, _, _, [], Paths) ->
     Paths;
-get_paths(ServerOpts, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) ->
-    get_paths(ServerOpts, EvHandler, T, [
+get_paths(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) ->
+    get_paths(ServerOpts, Limits, EvHandler, T, [
         {PathMatch, ?MODULE, #{
-            th_handler  => {Service, Handler},
-            ev_handler  => EvHandler,
-            server_opts => ServerOpts
+            th_handler     => {Service, Handler},
+            ev_handler     => EvHandler,
+            server_opts    => ServerOpts,
+            handler_limits => Limits
         }} | Paths
     ]);
-get_paths(_, _, [Handler | _], _) ->
+get_paths(_, _, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 -spec config() ->
@@ -126,11 +137,16 @@ compile_filter_meta() ->
     Re.
 
 -spec get_cowboy_opts(cowboy_protocol:opts() | undefined) ->
-    cowboy_protocol:opts().
+    cowboy_protocol:opts() | no_return().
 get_cowboy_opts(undefined) ->
     [];
-get_cowboy_opts(NetOps) ->
-    maps:to_list(maps:with(?COWBOY_ALLOWED_OPTS, NetOps)).
+get_cowboy_opts(Opts) ->
+    case lists:keyfind(env, 1, Opts) of
+        false ->
+            Opts;
+        _ ->
+            erlang:error(env_not_allowed_in_net_opts)
+    end.
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
@@ -179,17 +195,55 @@ trace_resp(_, Req, _, _, _, _) ->
 %%
 -spec init({_, http}, cowboy_req:req(), state()) ->
     cowboy_init_result().
-init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler}) ->
+init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
+    ok = set_handler_limits(Limits),
     {Url, Req1} = cowboy_req:url(Req),
     State = Opts#{url => Url},
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
             Context = make_request_context(RpcId, EvHandler),
-            check_headers(Req2, State#{context => Context});
+            init_handler(Req2, State#{context => Context});
         {error, BadRpcId, Req2} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
                 Req2, State#{context => make_request_context(BadRpcId, EvHandler)}
             )
+    end.
+
+-spec set_handler_limits(handler_limits()) ->
+    ok.
+set_handler_limits(Limits) ->
+    case maps:get(max_heap_size, Limits, undefined) of
+        undefined ->
+            ok;
+        MaxHeapSize ->
+            _ = erlang:process_flag(max_heap_size, #{
+                size         => MaxHeapSize,
+                kill         => true,
+                error_logger => true
+            }),
+            ok
+    end.
+
+-spec init_handler(cowboy_req:req(), state()) ->
+    cowboy_init_result().
+init_handler(Req, State = #{handler_limits := Limits, context := Context}) ->
+    case have_resources_to_continue(Limits) of
+        true ->
+            check_headers(Req, State);
+        false ->
+            Details = <<"erlang vm exceeded total memory threshold">>,
+            Req1 = handle_error({system, {internal, resource_unavailable, Details}}, Req, Context),
+            {shutdown, Req1, undefined}
+    end.
+
+-spec have_resources_to_continue(handler_limits()) ->
+    boolean().
+have_resources_to_continue(Limits) ->
+    case maps:get(total_mem_threshold, Limits, undefined) of
+        undefined ->
+            true;
+        MaxTotalMem when is_integer(MaxTotalMem) ->
+            erlang:memory(total) < MaxTotalMem
     end.
 
 -spec handle(cowboy_req:req(), state()) ->

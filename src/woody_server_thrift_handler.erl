@@ -167,8 +167,8 @@ client_error(multiplexed_request) ->
     {client, <<"thrift: multiplexing (not supported)">>};
 client_error(request_reply_type_mismatch) ->
     {client, <<"thrift: request reply type mismatch">>};
-client_error(_Reason) ->
-    {client, <<"thrift: decode error">>}.
+client_error(Reason) ->
+    {client, woody_util:to_binary(["thrift decode error: ", woody_error:format_details(Reason)])}.
 
 -spec throw_decode_error(_) ->
     no_return().
@@ -305,7 +305,8 @@ handle_internal_error(Error, ExcClass, Stack, State = #{context := Context, th_r
 handle_internal_error(Error, ExcClass, Stack, State = #{context := Context}) ->
     log_handler_result(error, Context,
         #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => false}),
-    {{error, {system, {internal, result_unexpected, woody_error:format_details_short(Error)}}}, State}.
+    {{error, {system, {internal, result_unexpected,
+        format_unexpected_error(ExcClass, woody_error:format_details(Error), Stack)}}}, State}.
 
 -spec encode_reply(ok | {error, woody_error:business_error()}, _Result, state()) ->
     {ok | {error, woody_error:error()}, state()}.
@@ -327,14 +328,16 @@ encode_reply(Status, Reply, State = #{
         {Status, State#{th_proto => Protocol4}}
     catch
         error:{badmatch, {_, {error, Error}}} ->
+            Stack = erlang:get_stacktrace(),
+            Reason = woody_error:format_details(Error),
             _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
                     role   => server,
                     error  => <<"thrift protocol write failed">>,
-                    reason => woody_error:format_details(Error),
+                    reason => Reason,
                     class  => error,
-                    stack  => erlang:get_stacktrace()
+                    stack  => Stack
                 }, Context),
-            {{error, {system, {internal, result_unexpected, <<"thrift: encode error">>}}}, State}
+            {{error, {system, {internal, result_unexpected, format_unexpected_error(error, Reason, Stack)}}}, State}
     end.
 
 -spec handle_result(ok | {error, woody_error:error()}, binary(), thrift_reply_type()) ->
@@ -356,4 +359,9 @@ log_handler_result(Status, Context, Meta) ->
       ?EV_SERVICE_HANDLER_RESULT,
       Meta#{status => Status},
       Context
+    ).
+
+format_unexpected_error(Class, Reason, Stack) ->
+    woody_util:to_binary(
+        [Class, ":", Reason, " ", genlib_format:format_stacktrace(Stack)]
     ).
