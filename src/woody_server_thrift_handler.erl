@@ -167,8 +167,8 @@ client_error(multiplexed_request) ->
     {client, <<"thrift: multiplexing (not supported)">>};
 client_error(request_reply_type_mismatch) ->
     {client, <<"thrift: request reply type mismatch">>};
-client_error(_Reason) ->
-    {client, <<"thrift: decode error">>}.
+client_error(Reason) ->
+    {client, woody_util:to_binary(["thrift decode error: ", woody_error:format_details(Reason)])}.
 
 -spec throw_decode_error(_) ->
     no_return().
