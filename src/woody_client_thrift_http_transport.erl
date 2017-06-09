@@ -135,7 +135,10 @@ handle_result({error, Reason}, Context) when
     Reason =:= timeout      ;
     Reason =:= econnaborted ;
     Reason =:= enetreset    ;
-    Reason =:= econnreset
+    Reason =:= econnreset   ;
+    Reason =:= eshutdown    ;
+    Reason =:= etimedout    ;
+    Reason =:= closed
 ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
@@ -143,11 +146,13 @@ handle_result({error, Reason}, Context) when
 handle_result({error, Reason}, Context) when
     Reason =:= econnrefused    ;
     Reason =:= connect_timeout ;
-    Reason =:= nxdomain
+    Reason =:= nxdomain        ;
+    Reason =:= enetdown        ;
+    Reason =:= enetunreach
 ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
-    {error, {system, {external, resource_unavailable, BinReason}}};
+    {error, {system, {internal, resource_unavailable, BinReason}}};
 handle_result({error, Reason}, Context) ->
     Details = woody_error:format_details(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Details}),
