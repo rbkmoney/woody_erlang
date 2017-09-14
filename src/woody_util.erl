@@ -6,6 +6,8 @@
 -export([get_protocol_handler/2]).
 -export([get_mod_opts/1]).
 -export([to_binary/1]).
+-export([make_rpc_context/3]).
+-export([get_rpc_reply_type/1]).
 
 -define(DEFAULT_HANDLER_OPTS, undefined).
 
@@ -42,3 +44,17 @@ to_binary([], Reason) ->
 to_binary([Part | T], Reason) ->
     BinPart = genlib:to_binary(Part),
     to_binary(T, <<Reason/binary, BinPart/binary>>).
+
+-spec make_rpc_context(woody:role(), woody_context:ctx(), woody:ev_handler()) ->
+    woody:rpc_ctx().
+make_rpc_context(Role, Context, EvHandler) ->
+    #{
+        ext_ctx    => Context,
+        ev_handler => EvHandler,
+        ev_meta    => #{role => Role}
+    }.
+
+-spec get_rpc_reply_type(_ThriftReplyType) ->
+    woody:rpc_type().
+get_rpc_reply_type(oneway_void) -> cast;
+get_rpc_reply_type(_) -> call.

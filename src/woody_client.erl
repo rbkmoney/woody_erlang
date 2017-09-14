@@ -26,7 +26,6 @@
     {error , woody_error:error()}.
 -export_type([result/0]).
 
-
 %%
 %% API
 %%
@@ -47,7 +46,7 @@ call(Request, Options) ->
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    case call_safe(Request, Options, woody_context:enrich(Context, EvHandler)) of
+    case call_safe(Request, Options, woody_util:make_rpc_context(client, Context, EvHandler)) of
         Result = {ok, _} ->
             Result;
         {error, {business, Error}} ->
@@ -59,10 +58,10 @@ call(Request, Options = #{event_handler := EvHandler}, Context) ->
 %%
 %% Internal functions
 %%
--spec call_safe(woody:request(), options(), woody_context:ctx()) ->
+-spec call_safe(woody:request(), options(), woody:rpc_ctx()) ->
     result().
-call_safe(Request, Options, Context) ->
-    try woody_client_behaviour:call(Request, Options, woody_context:new_child(Context)) of
+call_safe(Request, Options, Context = #{ext_ctx := WoodyCtx}) ->
+    try woody_client_behaviour:call(Request, Options, Context#{ext_ctx => woody_context:new_child(WoodyCtx)}) of
         Resp = {ok, _} ->
             Resp;
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
@@ -72,15 +71,14 @@ call_safe(Request, Options, Context) ->
             handle_client_error(Class, Reason, Context)
     end.
 
--spec handle_client_error(woody_error:erlang_except(), _Error, woody_context:ctx()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, woody:rpc_ctx()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
 handle_client_error(Class, Error, Context) ->
     Details = woody_error:format_details(Error),
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
-            role     => client,
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, Context, #{
             error    => woody_util:to_binary([?EV_CALL_SERVICE, " error"]),
             class    => Class,
             reason   => Details,
             stack    => erlang:get_stacktrace()
-        }, Context),
+        }),
     {error, {system, {internal, result_unexpected, <<"client error: ", Details/binary>>}}}.

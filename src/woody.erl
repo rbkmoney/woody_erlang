@@ -39,7 +39,12 @@
 -type options()     :: any().
 -type handler(Opts) :: {module(), Opts} | module().
 -type ev_handler()  :: handler(options()).
--export_type([handler/1, ev_handler/0, options/0]).
+-type rpc_ctx()     :: #{
+    ext_ctx    := woody_context:ctx(),
+    ev_handler := ev_handler(),
+    ev_meta    := woody_event_handler:meta()
+}.
+-export_type([handler/1, ev_handler/0, options/0, rpc_ctx/0]).
 
 -type role()                :: client | server.
 -type url()                 :: binary().

@@ -12,7 +12,7 @@
 -export_type([client_error/0]).
 
 -type state() :: #{
-    context       := woody_context:ctx(),
+    context       := woody:rpc_ctx(),
     handler       := woody:handler(woody:options()),
     service       := woody:service(),
     th_proto      := term(),
@@ -47,7 +47,7 @@
 %%
 %% API
 %%
--spec init_handler(binary(), woody:th_handler(), woody_context:ctx()) ->
+-spec init_handler(binary(), woody:th_handler(), woody:rpc_ctx()) ->
     {ok, reply_type(), state()} | {error, client_error()}.
 init_handler(Request, {Service, Handler}, Context) ->
     {ok, Transport} = thrift_membuffer_transport:new(Request),
@@ -116,23 +116,36 @@ get_params_type(Function, State = #{service := Service}) ->
 
 -spec match_reply_type(state()) ->
     state() | no_return().
-match_reply_type(State = #{service := Service, function := Function, th_msg_type := ReqType}) ->
-    case get_function_info(Service, Function, reply_type) of
-        ReplyType when
-            ReplyType =:= oneway_void , ReqType =/= ?tMessageType_ONEWAY orelse
-            ReplyType =/= oneway_void , ReqType =:= ?tMessageType_ONEWAY
-        ->
-            throw_decode_error(request_reply_type_mismatch);
-        ReplyType ->
-            State#{th_reply_type => ReplyType}
-    end.
+match_reply_type(State = #{service := Service, function := Function, th_msg_type := ReqType, context := Context}) ->
+    ReplyType = get_function_info(Service, Function, reply_type),
+    ok = match_reply_type(ReplyType, ReqType),
+    State#{th_reply_type => ReplyType, context := enrich_context(Context, Service, Function, ReplyType)}.
+
+match_reply_type(ReplyType, ReqType) when
+    ReplyType =:= oneway_void , ReqType =/= ?tMessageType_ONEWAY orelse
+    ReplyType =/= oneway_void , ReqType =:= ?tMessageType_ONEWAY
+->
+    throw_decode_error(request_reply_type_mismatch);
+match_reply_type(_, _) ->
+    ok.
+
+enrich_context(Context= #{ev_meta := Meta}, Args) ->
+    Context#{ev_meta => Meta#{args => Args}}.
+
+enrich_context(Context = #{ev_meta := Meta}, {_, ServiceName}, Function, ReplyType) ->
+    Context#{ev_meta => Meta#{
+        service  => ServiceName,
+        function => Function,
+        type     => woody_util:get_rpc_reply_type(ReplyType)
+    }}.
 
 -spec decode_request(state()) ->
     state() | no_return().
-decode_request(State = #{th_proto := Proto, th_param_type := ParamsType}) ->
+decode_request(State = #{th_proto := Proto, th_param_type := ParamsType, context := Context}) ->
     case thrift_protocol:read(Proto, ParamsType) of
         {Proto1, {ok, Args}} ->
-            State#{th_proto => Proto1, args => tuple_to_list(Args)};
+            Args1 = tuple_to_list(Args),
+            State#{th_proto => Proto1, args => Args1, context := enrich_context(Context, Args1)};
         {_, {error, Error}} ->
             throw_decode_error(Error)
     end.
@@ -144,14 +157,13 @@ handle_decode_result(State = #{th_reply_type := oneway_void}) ->
 handle_decode_result(State) ->
     {ok, call, State}.
 
--spec handle_decode_error(thrift_error(), woody_context:ctx()) ->
+-spec handle_decode_error(thrift_error(), woody:rpc_ctx()) ->
     {error, client_error()}.
 handle_decode_error(Error, Context) ->
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
-            role   => server,
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, Context, #{
             error  => <<"thrift protocol read failed">>,
             reason => woody_error:format_details(Error)
-        }, Context),
+        }),
     {error, client_error(Error)}.
 
 -spec client_error(thrift_error()) ->
@@ -188,23 +200,14 @@ call_handler_safe(State) ->
 -spec call_handler(state()) ->
     {ok, woody:result()} | no_return().
 call_handler(#{
-    context  := Context,
+    context  := Context = #{ext_ctx := WoodyCtx},
     handler  := Handler,
-    service  := {_, ServiceName},
     function := Function,
     args     := Args})
 ->
-    _ = woody_event_handler:handle_event(
-            ?EV_INVOKE_SERVICE_HANDLER,
-            #{
-                service  => ServiceName,
-                function => Function,
-                args     => Args
-            },
-            Context
-        ),
+    _ = woody_event_handler:handle_event(?EV_INVOKE_SERVICE_HANDLER, Context, #{args => Args}),
     {Module, Opts} = woody_util:get_mod_opts(Handler),
-    Module:handle_function(Function, Args, woody_context:clean(Context), Opts).
+    Module:handle_function(Function, Args, WoodyCtx, Opts).
 
 -spec handle_success({ok, woody:result()}, state()) ->
     {ok | {error, {system, woody_error:system_error()}}, state()}.
@@ -330,13 +333,12 @@ encode_reply(Status, Reply, State = #{
         error:{badmatch, {_, {error, Error}}} ->
             Stack = erlang:get_stacktrace(),
             Reason = woody_error:format_details(Error),
-            _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, #{
-                    role   => server,
+            _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, Context, #{
                     error  => <<"thrift protocol write failed">>,
                     reason => Reason,
                     class  => error,
                     stack  => Stack
-                }, Context),
+                }),
             {{error, {system, {internal, result_unexpected, format_unexpected_error(error, Reason, Stack)}}}, State}
     end.
 
@@ -354,12 +356,8 @@ handle_result(Error = {error, _}, _, _) ->
 get_function_info({Module, Service}, Function, Info) ->
     Module:function_info(Service, Function, Info).
 
-log_handler_result(Status, Context, Meta) ->
-    woody_event_handler:handle_event(
-      ?EV_SERVICE_HANDLER_RESULT,
-      Meta#{status => Status},
-      Context
-    ).
+log_handler_result(Status, Context, ExtraMeta) ->
+    woody_event_handler:handle_event(?EV_SERVICE_HANDLER_RESULT, Context, ExtraMeta#{status => Status}).
 
 format_unexpected_error(Class, Reason, Stack) ->
     woody_util:to_binary(

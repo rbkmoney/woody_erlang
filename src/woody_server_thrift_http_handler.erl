@@ -48,7 +48,7 @@
     server_opts    := server_opts(),
     handler_limits := handler_limits(),
     url            => woody:url(),
-    context        => woody_context:ctx()
+    context        => woody:rpc_ctx()
 }.
 
 -type cowboy_init_result() ::
@@ -201,11 +201,11 @@ init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits :
     State = Opts#{url => Url},
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            Context = make_request_context(RpcId, EvHandler),
+            Context = make_rpc_context(RpcId, EvHandler),
             init_handler(Req2, State#{context => Context});
         {error, BadRpcId, Req2} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
-                Req2, State#{context => make_request_context(BadRpcId, EvHandler)}
+                Req2, State#{context => make_rpc_context(BadRpcId, EvHandler)}
             )
     end.
 
@@ -256,7 +256,7 @@ handle(Req, State = #{
 }) ->
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, #{url => Url, status => ok}, Context),
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, Context, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, Context, Req1);
         {ok, <<>>, Req1} ->
             reply_client_error(400, <<"body empty">>, Req1, State);
@@ -272,16 +272,12 @@ handle(Req, State = #{
 terminate({normal, _}, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, #{context := Context}) ->
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
-            #{
-                role     => server,
-                error    => <<"http handler terminated abnormally">>,
-                reason   => woody_error:format_details(Reason),
-                class    => undefined,
-                stack    => erlang:get_stacktrace()
-            },
-            Context
-        ),
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, Context, #{
+            error    => <<"http handler terminated abnormally">>,
+            reason   => woody_error:format_details(Reason),
+            class    => undefined,
+            stack    => erlang:get_stacktrace()
+        }),
     ok.
 
 
@@ -346,14 +342,17 @@ check_accept({BadAccept, Req1}, State) ->
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_metadata_headers({Headers, Req}, State = #{context := Context, server_opts := ServerOpts}) ->
-    {ok, Req, State#{context => add_context_meta(Context, find_metadata(Headers, ServerOpts))}}.
+    {ok, Req, State#{context => add_woody_meta(Context, find_metadata(Headers, ServerOpts))}}.
 
--spec add_context_meta(woody_context:ctx(), woody_context:meta()) ->
-    woody_context:ctx().
-add_context_meta(Context, Meta) when map_size(Meta) > 0 ->
-    woody_context:add_meta(Context, Meta);
-add_context_meta(Context, _) ->
-    Context.
+-spec add_woody_meta(woody:rpc_ctx(), woody_context:meta()) ->
+    woody:rpc_ctx().
+add_woody_meta(Context = #{ext_ctx := WoodyCtx, ev_meta := Meta}, WoodyMeta) when map_size(WoodyMeta) > 0 ->
+    Context#{
+        ext_ctx => woody_context:add_meta(WoodyCtx, WoodyMeta),
+        ev_meta => Meta#{metadata => WoodyMeta}
+    };
+add_woody_meta(Context = #{ev_meta := Meta}, _) ->
+    Context#{ev_meta => Meta#{metadata => #{}}}.
 
 -spec find_metadata(woody:http_headers(), server_opts()) ->
     woody_context:meta().
@@ -372,10 +371,10 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
         end,
       #{}, Headers).
 
--spec make_request_context(woody:rpc_id(), woody:ev_handler()) ->
-    woody_context:ctx().
-make_request_context(RpcId, EvHandler) ->
-    woody_context:enrich(woody_context:new(RpcId), EvHandler).
+-spec make_rpc_context(woody:rpc_id(), woody:ev_handler()) ->
+    woody:rpc_ctx().
+make_rpc_context(RpcId, EvHandler) ->
+    woody_util:make_rpc_context(server, woody_context:new(RpcId), EvHandler).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     {shutdown, cowboy_req:req(), undefined}.
@@ -386,9 +385,8 @@ reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
 reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
-    _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-            #{url => Url, status => error, reason => Reason}, Context
-        ),
+    _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, Context,
+            #{url => Url, status => error, reason => Reason}),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), Context).
 
 %% handle functions
@@ -407,7 +405,7 @@ do_get_body(Body, Req, Opts) ->
             {{error, Reason}, <<>>, Req}
     end.
 
--spec handle_request(woody:http_body(), woody:th_handler(), woody_context:ctx(), cowboy_req:req()) ->
+-spec handle_request(woody:http_body(), woody:th_handler(), woody:rpc_ctx(), cowboy_req:req()) ->
     cowboy_req:req().
 handle_request(Body, ThriftHander, Context, Req) ->
     case woody_server_thrift_handler:init_handler(Body, ThriftHander, Context) of
@@ -421,14 +419,14 @@ handle_request(Body, ThriftHander, Context, Req) ->
             handle_error(Error, Req, Context)
     end.
 
--spec handle_result({ok, woody:http_body()} | {error, woody_error:error()}, cowboy_req:req(), woody_context:ctx()) ->
+-spec handle_result({ok, woody:http_body()} | {error, woody_error:error()}, cowboy_req:req(), woody:rpc_ctx()) ->
     cowboy_req:req().
 handle_result({ok, Body}, Req, Context) ->
     reply(200, cowboy_req:set_resp_body(Body, Req), Context);
 handle_result({error, Error}, Req, Context) ->
     handle_error(Error, Req, Context).
 
--spec handle_error(Error, cowboy_req:req(), woody_context:ctx()) -> cowboy_req:req() when
+-spec handle_error(Error, cowboy_req:req(), woody:rpc_ctx()) -> cowboy_req:req() when
     Error :: woody_error:error() | woody_server_thrift_handler:client_error().
 handle_error({business, {ExceptName, Except}}, Req, Context) ->
     reply(200, set_error_headers(<<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)), Context);
@@ -456,7 +454,7 @@ set_error_headers(Class, Reason, Req) ->
         [{?HEADER_E_CLASS, Class}, {?HEADER_E_REASON, Reason}]
     ).
 
--spec reply(woody:http_code(), cowboy_req:req(), woody_context:ctx()) ->
+-spec reply(woody:http_code(), cowboy_req:req(), woody:rpc_ctx()) ->
     cowboy_req:req().
 reply(200, Req, Context) ->
     do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), Context);
@@ -471,5 +469,5 @@ do_reply(Code, Req, Context) ->
 reply_status(200) -> ok;
 reply_status(_) -> error.
 
-log_event(Event, Context, Meta) ->
-    woody_event_handler:handle_event(Event, Meta, Context).
+log_event(Event, Context, ExtraMeta) ->
+    woody_event_handler:handle_event(Event, Context, ExtraMeta).

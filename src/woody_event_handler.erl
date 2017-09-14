@@ -2,99 +2,89 @@
 
 %% API
 -export([handle_event/3, handle_event/4]).
--export([format_event/2, format_event/3, format_rpc_id/1]).
+-export([format_event/2, format_event/3]).
+-export([format_event_and_meta/3, format_event_and_meta/4]).
+-export([format_rpc_id/1]).
+
 -include("woody_defs.hrl").
 
 %%
 %% behaviour definition
 %%
--type event() ::
-    ?EV_CALL_SERVICE   | ?EV_INVOKE_SERVICE_HANDLER |
-    ?EV_SERVICE_RESULT | ?EV_SERVICE_HANDLER_RESULT |
-    ?EV_CLIENT_SEND    | ?EV_SERVER_RECEIVE         |
-    ?EV_CLIENT_RECEIVE | ?EV_SERVER_SEND            |
 
-    ?EV_INTERNAL_ERROR | ?EV_TRACE.
+-type event_client() ::
+    ?EV_CALL_SERVICE   |
+    ?EV_SERVICE_RESULT |
+    ?EV_CLIENT_SEND    |
+    ?EV_CLIENT_RECEIVE.
 
--type event_meta() ::
-    meta_call_service()   | meta_invoke_service_handler() |
-    meta_service_result() | meta_service_handler_result() |
-    meta_client_send()    | meta_server_receive()         |
-    meta_client_receive() | meta_server_send()            |
-    meta_internal_error() | meta_trace().
+-type event_server() ::
+    ?EV_INVOKE_SERVICE_HANDLER |
+    ?EV_SERVICE_HANDLER_RESULT |
+    ?EV_SERVER_RECEIVE         |
+    ?EV_SERVER_SEND.
 
--export_type([event/0, event_meta/0]).
+%% Layer             Client               Server
+%% App invocation    EV_CALL_SERVICE      EV_INVOKE_SERVICE_HANDLER
+%% App result        EV_SERVICE_RESULT    EV_SERVICE_HANDLER_RESULT
+%% Transport req     EV_CLIENT_SEND       EV_SERVER_RECEIVE
+%% Transport resp    EV_CLIENT_RECEIVE    EV_SERVER_SEND
 
--callback handle_event
-    (?EV_CALL_SERVICE           , woody:rpc_id(), meta_call_service   (), woody:options()) -> _;
-    (?EV_SERVICE_RESULT         , woody:rpc_id(), meta_service_result (), woody:options()) -> _;
-    (?EV_CLIENT_SEND            , woody:rpc_id(), meta_client_send    (), woody:options()) -> _;
-    (?EV_CLIENT_RECEIVE         , woody:rpc_id(), meta_client_receive (), woody:options()) -> _;
-    (?EV_SERVER_RECEIVE         , woody:rpc_id(), meta_server_receive (), woody:options()) -> _;
-    (?EV_SERVER_SEND            , woody:rpc_id(), meta_server_send    (), woody:options()) -> _;
-    (?EV_INTERNAL_ERROR         , woody:rpc_id(), meta_internal_error (), woody:options()) -> _;
-    (?EV_TRACE                  , woody:rpc_id()|undefined, meta_trace(), woody:options()) -> _;
-    (?EV_INVOKE_SERVICE_HANDLER , woody:rpc_id(), meta_invoke_service_handler (), woody:options()) -> _;
-    (?EV_SERVICE_HANDLER_RESULT , woody:rpc_id(), meta_service_handler_result (), woody:options()) -> _.
+-type event() :: event_client() | event_server() | ?EV_INTERNAL_ERROR | ?EV_TRACE.
+-export_type([event/0]).
 
-
-%% Types
-
-%% client events
--type meta_call_service() :: #{
+-type meta_client() :: #{
+    role     := client,
     service  := woody:service_name(),
     function := woody:func(),
     type     := woody:rpc_type(),
-    args     => woody:args(),
-    metadata => woody_context:meta()
-}.
--type meta_service_result() :: #{
-    status := status(),
-    result => woody:result() | woody_error:error()
-}.
--type meta_client_send() :: #{
-    url := woody:url()
-}.
--type meta_client_receive() :: #{
-    status := status(),
-    code   => woody:http_code(),
-    reason => woody_error:details()
-}.
--export_type([meta_call_service/0, meta_service_result/0, meta_client_send/0, meta_client_receive/0]).
+    args     := woody:args(),
+    metadata := woody_context:meta(),
 
-%% server events
--type meta_server_receive() :: #{
-    url    := woody:url(),
-    status := status(),
-    reason => woody_error:details()
+    url      => woody:url(),                          %% EV_CLIENT_SEND
+    code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
+    reason   => woody_error:details(),                %% EV_CLIENT_RECEIVE
+    status   => status(),                             %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT
+    result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT
 }.
--type meta_server_send() :: #{
-    status := status(),
-    code   := woody:http_code()
-}.
--type meta_invoke_service_handler() :: #{
-    service  := woody:service_name(),
-    function := woody:func(),
-    args     => woody:args(),
-    metadata => woody_context:meta()
-}.
--type meta_service_handler_result() :: #{
-    status       := status(),
-    result       := woody:result() | woody_error:business_error() | woody_error:system_error() | _Error,
-    ignore       := boolean(),
-    except_calss := woody_error:erlang_except(),
-    class        := business | system,
-    stack        := woody_error:stack()
-}.
--export_meta([meta_server_receive/0, meta_server_send/0, meta_invoke_service_handler/0, meta_service_handler_result/0]).
+-export_type([meta_client/0]).
 
-%% internal events
+-type meta_server() :: #{
+    role     := server,
+    url      => woody:url(),           %% EV_SERVER_RECEIVE
+    status   => status(),              %% EV_SERVER_RECEIVE | EV_SERVER_SEND | EV_SERVICE_HANDLER_RESULT
+    reason   => woody_error:details(), %% EV_SERVER_RECEIVE
+    code     => woody:http_code(),     %% EV_SERVER_SEND
+
+    service  => woody:service_name(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    function => woody:func(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    type     => woody:rpc_type(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    args     => woody:args(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    metadata => woody_context:meta(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+
+    result   => woody:result()               |   %% EV_SERVICE_HANDLER_RESULT
+                woody_error:business_error() |
+                woody_error:system_error()   |
+                _Error,
+    ignore       => boolean(),                   %% EV_SERVICE_HANDLER_RESULT
+    except_calss => woody_error:erlang_except(), %% EV_SERVICE_HANDLER_RESULT
+    class        => business | system,           %% EV_SERVICE_HANDLER_RESULT
+    stack        => woody_error:stack()          %% EV_SERVICE_HANDLER_RESULT
+}.
+-export_meta([meta_server/0]).
+
 -type meta_internal_error() :: #{
     role   := woody:role(),
     error  := any(),
     reason := any(),
     class  := atom(),
-    stack  => woody_error:stack() | undefined
+    stack  => woody_error:stack() | undefined,
+
+    service  => woody:service_name(),
+    function => woody:func(),
+    type     => woody:rpc_type(),
+    args     => woody:args(),
+    metadata => woody_context:meta()
 }.
 -type meta_trace() :: #{
     event       := binary(),
@@ -107,21 +97,39 @@
 }.
 -export_type([meta_internal_error/0, meta_trace/0]).
 
--type status()       :: ok | error.
+-type event_meta() :: meta_client() | meta_server() | meta_internal_error() | meta_trace().
+-export_type([event_meta/0]).
+
+-callback handle_event
+    (event_client(), woody:rpc_id(), meta_client(), woody:options()) -> _;
+    (event_server(), woody:rpc_id(), meta_server(), woody:options()) -> _;
+
+    (?EV_INTERNAL_ERROR, woody:rpc_id(), meta_internal_error(), woody:options()) -> _;
+    (?EV_TRACE, woody:rpc_id() | undefined, meta_trace(), woody:options()) -> _.
+
+
+%% Util Types
+-type status() :: ok | error.
 -export_type([status/0]).
 
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
--export_type([severity/0, msg/0, log_msg/0]).
+-type log_role() :: 'woody.client' | 'woody.server' | 'woody.undefined'.
+-type meta_key() :: atom().
+-export_type([severity/0, msg/0, log_msg/0, log_role/0]).
+
+-type meta() :: #{atom() => _}.
+-export_type([meta/0]).
 
 
 %%
 %% API
 %%
--spec handle_event(event(), event_meta(), woody_context:ctx()) -> ok.
-handle_event(Event, Meta, Context = #{ev_handler := Handler}) ->
-    handle_event(Handler, Event, woody_context:get_rpc_id(Context), add_context_meta(Event, Meta, Context)).
+-spec handle_event(event(), woody:rpc_ctx(), meta()) ->
+    ok.
+handle_event(Event, #{ev_handler := Handler, ev_meta := Meta, ext_ctx := WoodyCtx}, ExtraMeta) ->
+    handle_event(Handler, Event, woody_context:get_rpc_id(WoodyCtx), maps:merge(Meta, ExtraMeta)).
 
 -spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
@@ -142,6 +150,28 @@ format_rpc_id(undefined) ->
 format_event(Event, Meta, RpcId) ->
     {Severity, Msg} = format_event(Event, Meta),
     {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
+
+-spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
+    {severity(), msg(), {log_role() , map()}}.
+format_event_and_meta(Event, Meta, RpcID) ->
+    format_event_and_meta(Event, Meta, RpcID, [service, function, type]).
+
+-spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
+    {severity(), msg(), {log_role() , map()}}.
+format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
+    {Severity, Msg} = format_event(Event, Meta, RpcID),
+    RpcRole = get_woody_role(Meta),
+    Meta1 = get_essential_meta(Meta, Event, EssentialMetaKeys),
+    {Severity, Msg, {RpcRole, Meta1}}.
+
+get_essential_meta(Meta, Event, Keys) ->
+    Meta1 = maps:with(Keys, Meta),
+    Meta1#{event => Event}.
+
+get_woody_role(#{role := client}) ->
+    'woody.client';
+get_woody_role(#{role := server}) ->
+    'woody.server'.
 
 -spec format_event(event(), event_meta()) ->
     log_msg().
@@ -197,21 +227,6 @@ format_event(UnknownEventType, Meta) ->
 %%
 %% Internal functions
 %%
--spec add_context_meta(event(), event_meta(), woody_context:ctx()) ->
-    event_meta().
-add_context_meta(Event, Meta, Context) when
-    Event =:= ?EV_CALL_SERVICE orelse
-    Event =:= ?EV_INVOKE_SERVICE_HANDLER
-->
-    case woody_context:get_meta(Context) of
-        ReqMeta when map_size(ReqMeta) =:= 0 ->
-            Meta#{metadata => #{}};
-        ReqMeta ->
-            Meta#{metadata => ReqMeta}
-    end;
-add_context_meta(_Event, Meta, _Context) ->
-    Meta.
-
 -spec format_service_request(map()) ->
     msg().
 format_service_request(#{service:=Service, function:=Function, args:=Args}) ->

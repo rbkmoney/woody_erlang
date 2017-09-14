@@ -547,13 +547,15 @@ call_thrift_multiplexed_test(_) ->
     thrift_client:close(Client1).
 
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
+    EvHandler = ?MODULE,
+    Context = woody_util:make_rpc_context(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], woody_context:enrich(make_context(Id), ?MODULE)),
+        woody_client_thrift_http_transport:new(Url, [], Context),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
-    {ok, Context} = thrift_client:new(Protocol1, Service),
-    Context.
+    {ok, Client} = thrift_client:new(Protocol1, Service),
+    Client.
 
 server_http_req_validation_test(_) ->
     Id  = <<"server_http_req_validation">>,
