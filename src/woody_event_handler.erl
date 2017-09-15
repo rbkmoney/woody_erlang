@@ -115,9 +115,9 @@
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
--type log_role() :: 'woody.client' | 'woody.server' | 'woody.undefined'.
--type meta_key() :: atom().
--export_type([severity/0, msg/0, log_msg/0, log_role/0]).
+-type log_role() :: 'woody.client' | 'woody.server'.
+-type meta_key() :: event | role | service | function | type | args | metadata | status | url | code | result.
+-export_type([severity/0, msg/0, log_msg/0, log_role/0, meta_key/0]).
 
 -type meta() :: #{atom() => _}.
 -export_type([meta/0]).
@@ -166,7 +166,12 @@ format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
 
 get_essential_meta(Meta, Event, Keys) ->
     Meta1 = maps:with(Keys, Meta),
-    Meta1#{event => Event}.
+    case lists:member(event, Keys) of
+        true ->
+            Meta1#{event => Event};
+        false ->
+            Meta1
+    end.
 
 get_woody_role(#{role := client}) ->
     'woody.client';
