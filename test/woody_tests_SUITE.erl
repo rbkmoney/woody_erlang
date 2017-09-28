@@ -548,9 +548,9 @@ call_thrift_multiplexed_test(_) ->
 
 make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     EvHandler = ?MODULE,
-    Context = woody_util:make_rpc_context(client, make_context(Id), EvHandler),
+    WoodyState = woody_state:new(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], Context),
+        woody_client_thrift_http_transport:new(Url, [], WoodyState),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),

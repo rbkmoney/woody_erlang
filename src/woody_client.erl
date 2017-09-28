@@ -46,7 +46,7 @@ call(Request, Options) ->
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    case call_safe(Request, Options, woody_util:make_rpc_context(client, Context, EvHandler)) of
+    case call_safe(Request, Options, woody_state:new(client, woody_context:new_child(Context), EvHandler)) of
         Result = {ok, _} ->
             Result;
         {error, {business, Error}} ->
@@ -58,24 +58,24 @@ call(Request, Options = #{event_handler := EvHandler}, Context) ->
 %%
 %% Internal functions
 %%
--spec call_safe(woody:request(), options(), woody:rpc_ctx()) ->
+-spec call_safe(woody:request(), options(), woody_state:st()) ->
     result().
-call_safe(Request, Options, Context = #{ext_ctx := WoodyCtx}) ->
-    try woody_client_behaviour:call(Request, Options, Context#{ext_ctx => woody_context:new_child(WoodyCtx)}) of
+call_safe(Request, Options, WoodyState) ->
+    try woody_client_behaviour:call(Request, Options, WoodyState) of
         Resp = {ok, _} ->
             Resp;
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error
     catch
         Class:Reason ->
-            handle_client_error(Class, Reason, Context)
+            handle_client_error(Class, Reason, WoodyState)
     end.
 
--spec handle_client_error(woody_error:erlang_except(), _Error, woody:rpc_ctx()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, woody_state:st()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
-handle_client_error(Class, Error, Context) ->
+handle_client_error(Class, Error, WoodyState) ->
     Details = woody_error:format_details(Error),
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, Context, #{
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
             error    => woody_util:to_binary([?EV_CALL_SERVICE, " error"]),
             class    => Class,
             reason   => Details,

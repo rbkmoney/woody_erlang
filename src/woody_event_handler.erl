@@ -126,10 +126,15 @@
 %%
 %% API
 %%
--spec handle_event(event(), woody:rpc_ctx(), meta()) ->
+-spec handle_event(event(), woody_state:st(), meta()) ->
     ok.
-handle_event(Event, #{ev_handler := Handler, ev_meta := Meta, ext_ctx := WoodyCtx}, ExtraMeta) ->
-    handle_event(Handler, Event, woody_context:get_rpc_id(WoodyCtx), maps:merge(Meta, ExtraMeta)).
+handle_event(Event, WoodyState, ExtraMeta) ->
+    handle_event(
+        woody_state:get_ev_handler(WoodyState),
+        Event,
+        woody_context:get_rpc_id(woody_state:get_context(WoodyState)),
+        maps:merge(woody_state:get_ev_meta(WoodyState), ExtraMeta)
+    ).
 
 -spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
