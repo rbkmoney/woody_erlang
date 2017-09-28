@@ -115,9 +115,8 @@
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
--type log_role() :: 'woody.client' | 'woody.server'.
 -type meta_key() :: event | role | service | function | type | args | metadata | status | url | code | result.
--export_type([severity/0, msg/0, log_msg/0, log_role/0, meta_key/0]).
+-export_type([severity/0, msg/0, log_msg/0, meta_key/0]).
 
 -type meta() :: #{atom() => _}.
 -export_type([meta/0]).
@@ -157,17 +156,15 @@ format_event(Event, Meta, RpcId) ->
     {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
-    {severity(), msg(), {log_role() , map()}}.
+    {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID) ->
-    format_event_and_meta(Event, Meta, RpcID, [service, function, type]).
+    format_event_and_meta(Event, Meta, RpcID, [role, service, function, type]).
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
-    {severity(), msg(), {log_role() , map()}}.
+    {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
     {Severity, Msg} = format_event(Event, Meta, RpcID),
-    RpcRole = get_woody_role(Meta),
-    Meta1 = get_essential_meta(Meta, Event, EssentialMetaKeys),
-    {Severity, Msg, {RpcRole, Meta1}}.
+    {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
     Meta1 = maps:with(Keys, Meta),
@@ -177,11 +174,6 @@ get_essential_meta(Meta, Event, Keys) ->
         false ->
             Meta1
     end.
-
-get_woody_role(#{role := client}) ->
-    'woody.client';
-get_woody_role(#{role := server}) ->
-    'woody.server'.
 
 -spec format_event(event(), event_meta()) ->
     log_msg().
