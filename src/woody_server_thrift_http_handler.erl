@@ -273,10 +273,11 @@ terminate({normal, _}, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, #{woody_state := WoodyState}) ->
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
-            error    => <<"http handler terminated abnormally">>,
-            reason   => woody_error:format_details(Reason),
-            class    => undefined,
-            stack    => erlang:get_stacktrace()
+            error  => <<"http handler terminated abnormally">>,
+            reason => woody_error:format_details(Reason),
+            class  => undefined,
+            stack  => erlang:get_stacktrace(),
+            final  => true
         }),
     ok.
 

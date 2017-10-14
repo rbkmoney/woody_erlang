@@ -78,6 +78,7 @@
     error  := any(),
     reason := any(),
     class  := atom(),
+    final  => true,
     stack  => woody_error:stack() | undefined,
 
     service  => woody:service_name(),
