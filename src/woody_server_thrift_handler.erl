@@ -210,7 +210,7 @@ call_handler(#{
     function    := Function,
     args        := Args})
 ->
-    _ = woody_event_handler:handle_event(?EV_INVOKE_SERVICE_HANDLER, WoodyState, #{args => Args}),
+    _ = woody_event_handler:handle_event(?EV_INVOKE_SERVICE_HANDLER, WoodyState, #{}),
     {Module, Opts} = woody_util:get_mod_opts(Handler),
     Module:handle_function(Function, Args, woody_state:get_context(WoodyState), Opts).
 

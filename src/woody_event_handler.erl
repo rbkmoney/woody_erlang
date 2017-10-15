@@ -67,7 +67,7 @@
                 woody_error:system_error()   |
                 _Error,
     ignore       => boolean(),                   %% EV_SERVICE_HANDLER_RESULT
-    except_calss => woody_error:erlang_except(), %% EV_SERVICE_HANDLER_RESULT
+    except_class => woody_error:erlang_except(), %% EV_SERVICE_HANDLER_RESULT
     class        => business | system,           %% EV_SERVICE_HANDLER_RESULT
     stack        => woody_error:stack()          %% EV_SERVICE_HANDLER_RESULT
 }.
