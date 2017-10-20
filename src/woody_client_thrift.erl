@@ -27,11 +27,12 @@ child_spec(Options) ->
 call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     WoodyState1 = woody_state:add_ev_meta(
         #{
-            service  => ServiceName,
-            function => Function,
-            type     => get_rpc_type(Service, Function),
-            args     => Args,
-            metadata => woody_context:get_meta(woody_state:get_context(WoodyState))
+            service        => ServiceName,
+            service_schema => Service,
+            function       => Function,
+            type           => get_rpc_type(Service, Function),
+            args           => Args,
+            metadata       => woody_context:get_meta(woody_state:get_context(WoodyState))
         },
         WoodyState
     ),

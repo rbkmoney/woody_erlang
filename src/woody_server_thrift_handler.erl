@@ -137,11 +137,12 @@ match_reply_type(_, _) ->
 add_ev_meta(WoodyState, Args) ->
     woody_state:add_ev_meta(#{args => Args}, WoodyState).
 
-add_ev_meta(WoodyState, {_, ServiceName}, Function, ReplyType) ->
+add_ev_meta(WoodyState, Service = {_, ServiceName}, Function, ReplyType) ->
     woody_state:add_ev_meta(#{
-        service  => ServiceName,
-        function => Function,
-        type     => woody_util:get_rpc_reply_type(ReplyType)
+        service        => ServiceName,
+        service_schema => Service,
+        function       => Function,
+        type           => woody_util:get_rpc_reply_type(ReplyType)
     }, WoodyState).
 
 -spec decode_request(state()) ->

@@ -34,12 +34,13 @@
 -export_type([event/0]).
 
 -type meta_client() :: #{
-    role     := client,
-    service  := woody:service_name(),
-    function := woody:func(),
-    type     := woody:rpc_type(),
-    args     := woody:args(),
-    metadata := woody_context:meta(),
+    role           := client,
+    service        := woody:service_name(),
+    service_schema := woody:service(),
+    function       := woody:func(),
+    type           := woody:rpc_type(),
+    args           := woody:args(),
+    metadata       := woody_context:meta(),
 
     url      => woody:url(),                          %% EV_CLIENT_SEND
     code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
@@ -56,11 +57,12 @@
     reason   => woody_error:details(), %% EV_SERVER_RECEIVE
     code     => woody:http_code(),     %% EV_SERVER_SEND
 
-    service  => woody:service_name(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
-    function => woody:func(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
-    type     => woody:rpc_type(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
-    args     => woody:args(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
-    metadata => woody_context:meta(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    service        => woody:service_name(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    service_schema => woody:service(),       %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    function       => woody:func(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    type           => woody:rpc_type(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    args           => woody:args(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    metadata       => woody_context:meta(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
 
     result   => woody:result()               |   %% EV_SERVICE_HANDLER_RESULT
                 woody_error:business_error() |
@@ -78,10 +80,14 @@
     error  := any(),
     reason := any(),
     class  := atom(),
-    final  => true,
     stack  => woody_error:stack() | undefined,
+    final  => true,  %% Server handler failed and woody_server_thrift_http_handler:terminate/3
+                     %% is called abnormally.
+                     %% Cleanup proc dict if necessary: this is the last event in request flow
+                     %% on woody server and the proces is about to be returned to cowboy pool.
 
-    service  => woody:service_name(),
+    service        => woody:service_name(),
+    service_schema => woody:service(),
     function => woody:func(),
     type     => woody:rpc_type(),
     args     => woody:args(),
@@ -116,7 +122,8 @@
 -type severity() :: debug | info | warning | error.
 -type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
--type meta_key() :: event | role | service | function | type | args | metadata | status | url | code | result.
+-type meta_key() :: event | role | service | service_schema | function | type | args |
+                    metadata | status | url | code | result.
 -export_type([severity/0, msg/0, log_msg/0, meta_key/0]).
 
 -type meta() :: #{atom() => _}.
