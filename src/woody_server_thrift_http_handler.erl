@@ -48,7 +48,7 @@
     server_opts    := server_opts(),
     handler_limits := handler_limits(),
     url            => woody:url(),
-    context        => woody_context:ctx()
+    woody_state    => woody_state:st()
 }.
 
 -type cowboy_init_result() ::
@@ -201,11 +201,11 @@ init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits :
     State = Opts#{url => Url},
     case get_rpc_id(Req1) of
         {ok, RpcId, Req2} ->
-            Context = make_request_context(RpcId, EvHandler),
-            init_handler(Req2, State#{context => Context});
+            WoodyState = make_woody_state(RpcId, EvHandler),
+            init_handler(Req2, State#{woody_state => WoodyState});
         {error, BadRpcId, Req2} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
-                Req2, State#{context => make_request_context(BadRpcId, EvHandler)}
+                Req2, State#{woody_state => make_woody_state(BadRpcId, EvHandler)}
             )
     end.
 
@@ -226,13 +226,13 @@ set_handler_limits(Limits) ->
 
 -spec init_handler(cowboy_req:req(), state()) ->
     cowboy_init_result().
-init_handler(Req, State = #{handler_limits := Limits, context := Context}) ->
+init_handler(Req, State = #{handler_limits := Limits, woody_state := WoodyState}) ->
     case have_resources_to_continue(Limits) of
         true ->
             check_headers(Req, State);
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
-            Req1 = handle_error({system, {internal, resource_unavailable, Details}}, Req, Context),
+            Req1 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
             {shutdown, Req1, undefined}
     end.
 
@@ -250,14 +250,14 @@ have_resources_to_continue(Limits) ->
     {ok, cowboy_req:req(), _}.
 handle(Req, State = #{
     url         := Url,
-    context     := Context,
+    woody_state := WoodyState,
     server_opts := ServerOpts,
     th_handler  := ThriftHandler
 }) ->
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, #{url => Url, status => ok}, Context),
-            handle_request(Body, ThriftHandler, Context, Req1);
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
+            handle_request(Body, ThriftHandler, WoodyState, Req1);
         {ok, <<>>, Req1} ->
             reply_client_error(400, <<"body empty">>, Req1, State);
         {{error, body_too_large}, _, Req1} ->
@@ -271,17 +271,14 @@ handle(Req, State = #{
     ok.
 terminate({normal, _}, _Req, _Status) ->
     ok;
-terminate(Reason, _Req, #{context := Context}) ->
-    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
-            #{
-                role     => server,
-                error    => <<"http handler terminated abnormally">>,
-                reason   => woody_error:format_details(Reason),
-                class    => undefined,
-                stack    => erlang:get_stacktrace()
-            },
-            Context
-        ),
+terminate(Reason, _Req, #{woody_state := WoodyState}) ->
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
+            error  => <<"http handler terminated abnormally">>,
+            reason => woody_error:format_details(Reason),
+            class  => undefined,
+            stack  => erlang:get_stacktrace(),
+            final  => true
+        }),
     ok.
 
 
@@ -345,15 +342,8 @@ check_accept({BadAccept, Req1}, State) ->
 
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
-check_metadata_headers({Headers, Req}, State = #{context := Context, server_opts := ServerOpts}) ->
-    {ok, Req, State#{context => add_context_meta(Context, find_metadata(Headers, ServerOpts))}}.
-
--spec add_context_meta(woody_context:ctx(), woody_context:meta()) ->
-    woody_context:ctx().
-add_context_meta(Context, Meta) when map_size(Meta) > 0 ->
-    woody_context:add_meta(Context, Meta);
-add_context_meta(Context, _) ->
-    Context.
+check_metadata_headers({Headers, Req}, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
+    {ok, Req, State#{woody_state => woody_state:add_context_meta(find_metadata(Headers, ServerOpts), WoodyState)}}.
 
 -spec find_metadata(woody:http_headers(), server_opts()) ->
     woody_context:meta().
@@ -372,10 +362,10 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
         end,
       #{}, Headers).
 
--spec make_request_context(woody:rpc_id(), woody:ev_handler()) ->
-    woody_context:ctx().
-make_request_context(RpcId, EvHandler) ->
-    woody_context:enrich(woody_context:new(RpcId), EvHandler).
+-spec make_woody_state(woody:rpc_id(), woody:ev_handler()) ->
+    woody_state:st().
+make_woody_state(RpcId, EvHandler) ->
+    woody_state:new(server, woody_context:new(RpcId), EvHandler).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     {shutdown, cowboy_req:req(), undefined}.
@@ -385,11 +375,10 @@ reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
 
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
-reply_client_error(Code, Reason, Req, #{url := Url, context := Context}) ->
-    _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-            #{url => Url, status => error, reason => Reason}, Context
-        ),
-    reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), Context).
+reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) ->
+    _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+            #{url => Url, status => error, reason => Reason}),
+    reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).
 
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
@@ -407,45 +396,45 @@ do_get_body(Body, Req, Opts) ->
             {{error, Reason}, <<>>, Req}
     end.
 
--spec handle_request(woody:http_body(), woody:th_handler(), woody_context:ctx(), cowboy_req:req()) ->
+-spec handle_request(woody:http_body(), woody:th_handler(), woody_state:st(), cowboy_req:req()) ->
     cowboy_req:req().
-handle_request(Body, ThriftHander, Context, Req) ->
-    case woody_server_thrift_handler:init_handler(Body, ThriftHander, Context) of
+handle_request(Body, ThriftHander, WoodyState, Req) ->
+    case woody_server_thrift_handler:init_handler(Body, ThriftHander, WoodyState) of
         {ok, oneway_void, HandlerState} ->
-            Req1 = reply(200, Req, Context),
+            Req1 = reply(200, Req, WoodyState),
             _ = woody_server_thrift_handler:invoke_handler(HandlerState),
             Req1;
         {ok, call, HandlerState} ->
-            handle_result(woody_server_thrift_handler:invoke_handler(HandlerState), Req, Context);
+            handle_result(woody_server_thrift_handler:invoke_handler(HandlerState), Req, WoodyState);
         {error, Error} ->
-            handle_error(Error, Req, Context)
+            handle_error(Error, Req, WoodyState)
     end.
 
--spec handle_result({ok, woody:http_body()} | {error, woody_error:error()}, cowboy_req:req(), woody_context:ctx()) ->
+-spec handle_result({ok, woody:http_body()} | {error, woody_error:error()}, cowboy_req:req(), woody_state:st()) ->
     cowboy_req:req().
-handle_result({ok, Body}, Req, Context) ->
-    reply(200, cowboy_req:set_resp_body(Body, Req), Context);
-handle_result({error, Error}, Req, Context) ->
-    handle_error(Error, Req, Context).
+handle_result({ok, Body}, Req, WoodyState) ->
+    reply(200, cowboy_req:set_resp_body(Body, Req), WoodyState);
+handle_result({error, Error}, Req, WoodyState) ->
+    handle_error(Error, Req, WoodyState).
 
--spec handle_error(Error, cowboy_req:req(), woody_context:ctx()) -> cowboy_req:req() when
+-spec handle_error(Error, cowboy_req:req(), woody_state:st()) -> cowboy_req:req() when
     Error :: woody_error:error() | woody_server_thrift_handler:client_error().
-handle_error({business, {ExceptName, Except}}, Req, Context) ->
-    reply(200, set_error_headers(<<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)), Context);
-handle_error({client, Error}, Req, Context) ->
-    reply(400, set_error_headers(<<"Result Unexpected">>, Error, Req), Context);
-handle_error({system, {internal, result_unexpected, Details}}, Req, Context) ->
-    reply(500, set_error_headers(<<"Result Unexpected">>, Details, Req), Context);
-handle_error({system, {internal, resource_unavailable, Details}}, Req, Context) ->
-    reply(503, set_error_headers(<<"Resource Unavailable">>, Details, Req), Context);
-handle_error({system, {internal, result_unknown, Details}}, Req, Context) ->
-    reply(504, set_error_headers(<<"Result Unknown">>, Details, Req), Context);
-handle_error({system, {external, result_unexpected, Details}}, Req, Context) ->
-    reply(502, set_error_headers(<<"Result Unexpected">>, Details, Req), Context);
-handle_error({system, {external, resource_unavailable, Details}}, Req, Context) ->
-    reply(502, set_error_headers(<<"Resource Unavailable">>, Details, Req), Context);
-handle_error({system, {external, result_unknown, Details}}, Req, Context) ->
-    reply(502, set_error_headers(<<"Result Unknown">>, Details, Req), Context).
+handle_error({business, {ExceptName, Except}}, Req, WoodyState) ->
+    reply(200, set_error_headers(<<"Business Error">>, ExceptName, cowboy_req:set_resp_body(Except, Req)), WoodyState);
+handle_error({client, Error}, Req, WoodyState) ->
+    reply(400, set_error_headers(<<"Result Unexpected">>, Error, Req), WoodyState);
+handle_error({system, {internal, result_unexpected, Details}}, Req, WoodyState) ->
+    reply(500, set_error_headers(<<"Result Unexpected">>, Details, Req), WoodyState);
+handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState) ->
+    reply(503, set_error_headers(<<"Resource Unavailable">>, Details, Req), WoodyState);
+handle_error({system, {internal, result_unknown, Details}}, Req, WoodyState) ->
+    reply(504, set_error_headers(<<"Result Unknown">>, Details, Req), WoodyState);
+handle_error({system, {external, result_unexpected, Details}}, Req, WoodyState) ->
+    reply(502, set_error_headers(<<"Result Unexpected">>, Details, Req), WoodyState);
+handle_error({system, {external, resource_unavailable, Details}}, Req, WoodyState) ->
+    reply(502, set_error_headers(<<"Resource Unavailable">>, Details, Req), WoodyState);
+handle_error({system, {external, result_unknown, Details}}, Req, WoodyState) ->
+    reply(502, set_error_headers(<<"Result Unknown">>, Details, Req), WoodyState).
 
 -spec set_error_headers(woody:http_header_val(), woody:http_header_val(), cowboy_req:req()) ->
     cowboy_req:req().
@@ -456,20 +445,20 @@ set_error_headers(Class, Reason, Req) ->
         [{?HEADER_E_CLASS, Class}, {?HEADER_E_REASON, Reason}]
     ).
 
--spec reply(woody:http_code(), cowboy_req:req(), woody_context:ctx()) ->
+-spec reply(woody:http_code(), cowboy_req:req(), woody_state:st()) ->
     cowboy_req:req().
-reply(200, Req, Context) ->
-    do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), Context);
-reply(Code, Req, Context) ->
-    do_reply(Code, Req, Context).
+reply(200, Req, WoodyState) ->
+    do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), WoodyState);
+reply(Code, Req, WoodyState) ->
+    do_reply(Code, Req, WoodyState).
 
-do_reply(Code, Req, Context) ->
-    _ = log_event(?EV_SERVER_SEND, Context, #{code => Code, status => reply_status(Code)}),
+do_reply(Code, Req, WoodyState) ->
+    _ = log_event(?EV_SERVER_SEND, WoodyState, #{code => Code, status => reply_status(Code)}),
     {ok, Req2} = cowboy_req:reply(Code, Req),
     Req2.
 
 reply_status(200) -> ok;
 reply_status(_) -> error.
 
-log_event(Event, Context, Meta) ->
-    woody_event_handler:handle_event(Event, Meta, Context).
+log_event(Event, WoodyState, ExtraMeta) ->
+    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).

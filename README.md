@@ -143,4 +143,4 @@ check_loan_limits(Limits, Context, N) ->
 ```
 
 ### Woody Event Handler
-Интерфейс для получения и логирования событий RPC библиотеки. Пример реализации _event handler_'а - [woody_event_handler_default.erl](src/woody_event_handler_default.erl).
+Интерфейс для получения и логирования событий RPC библиотеки. Также содержит вспомогательные функции для удобного форматирования событий. Пример реализации _event handler_'а - [woody_event_handler_default.erl](src/woody_event_handler_default.erl).

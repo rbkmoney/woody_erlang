@@ -19,7 +19,7 @@
 
 -type woody_transport() :: #{
     url          := woody:url(),
-    context      := woody_context:ctx(),
+    woody_state  := woody_state:st(),
     options      := options(),
     write_buffer := binary(),
     read_buffer  := binary()
@@ -35,13 +35,13 @@
 %%
 %% API
 %%
--spec new(woody:url(), options(), woody_context:ctx()) ->
+-spec new(woody:url(), options(), woody_state:st()) ->
     thrift_transport:t_transport() | no_return().
-new(Url, Opts, Context) ->
+new(Url, Opts, WoodyState) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
         url           => Url,
         options       => Opts,
-        context       => Context,
+        woody_state   => WoodyState,
         write_buffer  => <<>>,
         read_buffer   => <<>>
     }),
@@ -76,20 +76,14 @@ read(Transport = #{read_buffer := RBuffer}, Len) when is_binary(RBuffer) ->
     {woody_transport(), ok | error()}.
 flush(Transport = #{
     url           := Url,
-    context       := Context,
+    woody_state   := WoodyState,
     options       := Options,
     write_buffer  := WBuffer,
     read_buffer   := RBuffer
 }) when is_binary(WBuffer), is_binary(RBuffer) ->
-    Headers = add_metadata_headers(Context, [
-        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
-    ]),
-    _ = log_event(?EV_CLIENT_SEND, Context, #{url => Url}),
-    case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), Context) of
+    Headers = make_woody_headers(WoodyState),
+    _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
+    case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), WoodyState) of
         {ok, Response} ->
             {Transport#{
                 read_buffer  => Response,
@@ -107,31 +101,31 @@ close(Transport) ->
 %%
 %% Internal functions
 %%
--spec handle_result(_, woody_context:ctx()) ->
+-spec handle_result(_, woody_state:st()) ->
     {ok, woody:http_body()} | error().
-handle_result({ok, 200, Headers, Ref}, Context) ->
-    Meta = case check_error_reason(Headers, 200, Context) of
+handle_result({ok, 200, Headers, Ref}, WoodyState) ->
+    Meta = case check_error_reason(Headers, 200, WoodyState) of
         <<>>   -> #{};
         Reason -> #{reason => Reason}
     end,
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, Meta#{status => ok, code => 200}),
-    get_body(hackney:body(Ref), Context);
-handle_result({ok, Code, Headers, Ref}, Context) ->
-    {Class, Details} = check_error_headers(Code, Headers, Context),
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status=>error, code=>Code, reason=>Details}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
+    get_body(hackney:body(Ref), WoodyState);
+handle_result({ok, Code, Headers, Ref}, WoodyState) ->
+    {Class, Details} = check_error_headers(Code, Headers, WoodyState),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status=>error, code=>Code, reason=>Details}),
     %% Free the connection
     case hackney:skip_body(Ref) of
         ok ->
             ok;
         {error, Reason} ->
-            _ = log_event(?EV_INTERNAL_ERROR, Context, #{status => error, reason => woody_util:to_binary(Reason)})
+            _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => woody_util:to_binary(Reason)})
     end,
     {error, {system, {external, Class, Details}}};
-handle_result({error, {closed, _}}, Context) ->
+handle_result({error, {closed, _}}, WoodyState) ->
     Reason = <<"partial response">>,
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Reason}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Reason}),
     {error, {system, {external, result_unknown, Reason}}};
-handle_result({error, Reason}, Context) when
+handle_result({error, Reason}, WoodyState) when
     Reason =:= timeout      ;
     Reason =:= econnaborted ;
     Reason =:= enetreset    ;
@@ -141,9 +135,9 @@ handle_result({error, Reason}, Context) when
     Reason =:= closed
 ->
     BinReason = woody_util:to_binary(Reason),
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
-handle_result({error, Reason}, Context) when
+handle_result({error, Reason}, WoodyState) when
     Reason =:= econnrefused    ;
     Reason =:= connect_timeout ;
     Reason =:= nxdomain        ;
@@ -151,27 +145,27 @@ handle_result({error, Reason}, Context) when
     Reason =:= enetunreach
 ->
     BinReason = woody_util:to_binary(Reason),
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => BinReason}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {internal, resource_unavailable, BinReason}}};
-handle_result({error, Reason}, Context) ->
+handle_result({error, Reason}, WoodyState) ->
     Details = woody_error:format_details(Reason),
-    _ = log_event(?EV_CLIENT_RECEIVE, Context, #{status => error, reason => Details}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Details}),
     {error, {system, {internal, result_unexpected, Details}}}.
 
--spec get_body({ok, woody:http_body()} | {error, atom()}, woody_context:ctx()) ->
+-spec get_body({ok, woody:http_body()} | {error, atom()}, woody_state:st()) ->
     {ok, woody:http_body()} | error().
 get_body(B = {ok, _}, _) ->
     B;
-get_body({error, Reason}, Context) ->
-    _ = log_internal_error(?ERROR_RESP_BODY, Reason, Context),
+get_body({error, Reason}, WoodyState) ->
+    _ = log_internal_error(?ERROR_RESP_BODY, Reason, WoodyState),
     {error, {system, {internal, result_unknown, ?ERROR_RESP_BODY}}}.
 
--spec check_error_headers(woody:http_code(), woody:http_headers(), woody_context:ctx()) ->
+-spec check_error_headers(woody:http_code(), woody:http_headers(), woody_state:st()) ->
     {woody_error:class(), woody_error:details()}.
-check_error_headers(502, Headers,  Context) ->
-    check_502_error_class(get_error_class_header_value(Headers), Headers, Context);
-check_error_headers(Code, Headers, Context) ->
-    {get_error_class(Code), check_error_reason(Headers, Code, Context)}.
+check_error_headers(502, Headers,  WoodyState) ->
+    check_502_error_class(get_error_class_header_value(Headers), Headers, WoodyState);
+check_error_headers(Code, Headers, WoodyState) ->
+    {get_error_class(Code), check_error_reason(Headers, Code, WoodyState)}.
 
 -spec get_error_class(woody:http_code()) ->
     woody_error:class().
@@ -182,40 +176,38 @@ get_error_class(504) ->
 get_error_class(_) ->
     result_unexpected.
 
--spec check_502_error_class(header_parse_value(), woody:http_headers(), woody_context:ctx()) ->
+-spec check_502_error_class(header_parse_value(), woody:http_headers(), woody_state:st()) ->
     {woody_error:class(), woody_error:details()}.
-check_502_error_class(none, Headers, Context) ->
-    _ = log_event(?EV_TRACE, Context, #{role => client,
-            event => woody_util:to_binary([?HEADER_E_CLASS, " header missing"])}),
-    {result_unexpected, check_error_reason(Headers, 502, Context)};
-check_502_error_class(multiple, _, Context) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_CLASS], Context),
+check_502_error_class(none, Headers, WoodyState) ->
+    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS, " header missing"])}),
+    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(multiple, _, WoodyState) ->
+    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_CLASS], WoodyState),
     {result_unexpected, ?BAD_RESP_HEADER};
-check_502_error_class(<<"result unexpected">>, Headers, Context) ->
-    {result_unexpected, check_error_reason(Headers, 502, Context)};
-check_502_error_class(<<"resource unavailable">>, Headers, Context) ->
-    {resource_unavailable, check_error_reason(Headers, 502, Context)};
-check_502_error_class(<<"result unknown">>, Headers, Context) ->
-    {result_unknown, check_error_reason(Headers, 502, Context)};
-check_502_error_class(Bad, _, Context) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["unknown ", ?HEADER_E_CLASS, " header value: ", Bad], Context),
+check_502_error_class(<<"result unexpected">>, Headers, WoodyState) ->
+    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(<<"resource unavailable">>, Headers, WoodyState) ->
+    {resource_unavailable, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(<<"result unknown">>, Headers, WoodyState) ->
+    {result_unknown, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(Bad, _, WoodyState) ->
+    _ = log_internal_error(?ERROR_RESP_HEADER, ["unknown ", ?HEADER_E_CLASS, " header value: ", Bad], WoodyState),
     {result_unexpected, ?BAD_RESP_HEADER}.
 
--spec check_error_reason(woody:http_headers(), woody:http_code(), woody_context:ctx()) ->
+-spec check_error_reason(woody:http_headers(), woody:http_code(), woody_state:st()) ->
     woody_error:details().
-check_error_reason(Headers, Code, Context) ->
-    do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, Context).
+check_error_reason(Headers, Code, WoodyState) ->
+    do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, WoodyState).
 
--spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_context:ctx()) ->
+-spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_state:st()) ->
     woody_error:details().
-do_check_error_reason(none, 200, _Context) ->
+do_check_error_reason(none, 200, _WoodyState) ->
     <<>>;
-do_check_error_reason(none, Code, Context) ->
-    _ = log_event(?EV_TRACE, Context, #{role => client,
-            event => woody_util:to_binary([?HEADER_E_REASON, " header missing"])}),
+do_check_error_reason(none, Code, WoodyState) ->
+    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON, " header missing"])}),
     woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON, " header"]);
-do_check_error_reason(multiple, _, Context) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON], Context),
+do_check_error_reason(multiple, _, WoodyState) ->
+    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON], WoodyState),
     ?BAD_RESP_HEADER;
 do_check_error_reason(Reason, _, _) ->
     Reason.
@@ -239,6 +231,18 @@ get_header_value(Name, Headers) ->
         _       -> multiple
     end.
 
+-spec make_woody_headers(woody_state:st()) ->
+    woody:http_headers().
+make_woody_headers(WoodyState) ->
+    Context = woody_state:get_context(WoodyState),
+    add_metadata_headers(Context, [
+        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
+        {?HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
+        {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
+        {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
+    ]).
+
 -spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
 add_metadata_headers(Context, Headers) ->
@@ -251,8 +255,8 @@ add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
-log_internal_error(Error, Reason, Context) ->
-    log_event(?EV_INTERNAL_ERROR, Context, #{error => Error, reason => woody_util:to_binary(Reason), role => client}).
+log_internal_error(Error, Reason, WoodyState) ->
+    log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).
 
-log_event(Event, Context, Meta) ->
-    woody_event_handler:handle_event(Event, Meta, Context).
+log_event(Event, WoodyState, ExtraMeta) ->
+    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
