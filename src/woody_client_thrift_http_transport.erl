@@ -28,6 +28,9 @@
 -type error()              :: {error, {system, woody_error:system_error()}}.
 -type header_parse_value() :: none | multiple | woody:http_header_val().
 
+-define(DEFAULT_CONNECT_TIMEOUT , 1000). %% millisec
+-define(DEFAULT_SEND_TIMEOUT    , 1000). %% millisec
+
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
 -define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
@@ -81,9 +84,10 @@ flush(Transport = #{
     write_buffer  := WBuffer,
     read_buffer   := RBuffer
 }) when is_binary(WBuffer), is_binary(RBuffer) ->
-    Headers = make_woody_headers(WoodyState),
-    _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-    case handle_result(hackney:request(post, Url, Headers, WBuffer, Options), WoodyState) of
+    case handle_result(
+        send(Url, WBuffer, Options, WoodyState),
+        WoodyState
+    ) of
         {ok, Response} ->
             {Transport#{
                 read_buffer  => Response,
@@ -91,6 +95,47 @@ flush(Transport = #{
             }, ok};
         Error ->
             {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
+    end.
+
+send(Url, Body, Options, WoodyState) ->
+    Context = woody_state:get_context(WoodyState),
+    case deadline_reached(Context) of
+        true ->
+            _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => <<"Deadline reached">>}),
+            {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
+        false ->
+            _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
+            Headers = make_woody_headers(Context),
+            _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
+            hackney:request(post, Url, Headers, Body, set_timeouts(Options, Context))
+    end.
+
+set_timeouts(Options, Context) ->
+    case woody_context:get_deadline(Context) of
+        undefined ->
+            Options;
+        Deadline ->
+            Timeout = woody_deadline:to_timeout(Deadline),
+            SendTimeout = calc_send_timeout(Timeout)
+            Options ++ [
+                {connect_timeout, SendTimeout},
+                {send_timeout,    SendTimeout},
+                {recv_tieout,     woody_deadline:to_timeout(Deadline)}
+            ]
+    end.
+
+calc_send_timeout(Timeout) ->
+    case Timeout div 5 of
+        T when T > ?DEFAULT_SEND_TIMEOUT -> ?DEFAULT_SEND_TIMEOUT;
+        T -> T
+    end.
+
+deadline_reached(Context) ->
+    case woody_context:get_deadline(Context) of
+        undefined ->
+            false;
+        Deadline ->
+            woody_deadline:reached(Deadline)
     end.
 
 -spec close(woody_transport()) ->
@@ -147,6 +192,8 @@ handle_result({error, Reason}, WoodyState) when
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {internal, resource_unavailable, BinReason}}};
+handle_result(Error = {error, {system, _}}, _) ->
+    Error;
 handle_result({error, Reason}, WoodyState) ->
     Details = woody_error:format_details(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Details}),
@@ -231,17 +278,21 @@ get_header_value(Name, Headers) ->
         _       -> multiple
     end.
 
--spec make_woody_headers(woody_state:st()) ->
+-spec make_woody_headers(woody_context:ctx()) ->
     woody:http_headers().
-make_woody_headers(WoodyState) ->
-    Context = woody_state:get_context(WoodyState),
-    add_metadata_headers(Context, [
+make_woody_headers(Context) ->
+    add_optional_headers(Context, [
         {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
         {?HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
         {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
         {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
     ]).
+
+-spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
+    woody:http_headers().
+add_optional_headers(Context, Headers) ->
+    add_deadline_header(Context, add_metadata_headers(Context, Headers)).
 
 -spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
@@ -254,6 +305,14 @@ add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
     [{<< ?HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
+
+add_deadline_header(Context, Headers) ->
+    do_add_deadline_header(woody_context:get_deadline(Context), Headers).
+
+do_add_deadline_header(undefined, Headers) ->
+    Headers;
+do_add_deadline_header(Deadline, Headers) ->
+    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers]
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

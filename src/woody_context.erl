@@ -13,6 +13,9 @@
 -export([add_meta/2]).
 -export([get_meta/1, get_meta/2]).
 
+-export([set_deadline/2]).
+-export([get_deadline/1]).
+
 -export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
 -export([new_unique_int/0]).
@@ -27,7 +30,8 @@
 
 -type ctx() :: #{
     rpc_id     := woody:rpc_id(),
-    meta       => meta()
+    meta       => meta(),
+    deadline   => woody:deadline()
 }.
 
 -type meta_value() :: binary().
@@ -117,6 +121,18 @@ new_req_id() ->
 new_unique_int() ->
     <<Id:64>> = snowflake:new(?MODULE),
     Id.
+
+-spec set_deadline(woody:deadline(), ctx()) ->
+    ctx().
+set_deadline(Deadline, Context) ->
+    Context#{deadline => Deadline}.
+
+-spec get_deadline(ctx()) ->
+    woody:deadline() | undefined.
+get_deadline(#{deadline := Deadline}) ->
+    Deadline;
+get_deadline(_) ->
+    undefined.
 
 %%
 %% Internal functions

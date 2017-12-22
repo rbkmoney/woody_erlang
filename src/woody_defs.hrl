@@ -10,6 +10,7 @@
 -define(HEADER_E_CLASS         , << ?HEADER_PREFIX/binary, "error-class">>).
 -define(HEADER_E_REASON        , << ?HEADER_PREFIX/binary, "error-reason">>).
 -define(HEADER_META_PREFIX     , << ?HEADER_PREFIX/binary, "meta-">>).
+-define(HEADER_DEADLINE        , << ?HEADER_PREFIX/binary, "deadline">>).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
