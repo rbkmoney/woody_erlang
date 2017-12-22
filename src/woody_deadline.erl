@@ -78,11 +78,13 @@ from_binary(Bin) ->
 %%
 %% Internal functions
 %%
+-spec to_unixtime(deadline()) ->
+    pos_integer().
 to_unixtime({DateTime, Millisec}) ->
     genlib_time:daytime_to_unixtime(DateTime)*1000 + Millisec.
 
 -spec unow() ->
-    millisec().
+    pos_integer().
 unow() ->
     erlang:system_time(millisecond).
 

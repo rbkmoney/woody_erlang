@@ -582,7 +582,7 @@ call_fail_w_no_headers(Id, Class, Code) ->
     try woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
             #{url => Url, event_handler => ?MODULE}, Context)
     catch
-        error:{woody_error, {external, Class, <<"got response with http code ", BinCode:3/binary, _/binary>>}} ->
+        error:{woody_error, {external, Class, <<"response code: ", BinCode:3/binary, ", no headers", _/binary>>}} ->
             ok
     end.
 

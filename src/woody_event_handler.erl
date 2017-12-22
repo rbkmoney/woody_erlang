@@ -81,20 +81,20 @@
     role   := woody:role(),
     error  := any(),
     reason := any(),
-    class  := atom(),
+    class  => atom(),
     stack  => woody_error:stack() | undefined,
     final  => true,  %% Server handler failed and woody_server_thrift_http_handler:terminate/3
                      %% is called abnormally.
                      %% Cleanup proc dict if necessary: this is the last event in request flow
                      %% on woody server and the proces is about to be returned to cowboy pool.
-
-    service        => woody:service_name(),
-    service_schema => woody:service(),
     function => woody:func(),
     type     => woody:rpc_type(),
     args     => woody:args(),
-    metadata => woody_context:meta()
+    metadata => woody_context:meta(),
+    service  => woody:service_name(),
+    service_schema => woody:service()
 }.
+
 -type meta_trace() :: #{
     event       := binary(),
     role        := woody:role(),

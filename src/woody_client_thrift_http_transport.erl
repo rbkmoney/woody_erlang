@@ -28,10 +28,6 @@
 -type error()              :: {error, {system, woody_error:system_error()}}.
 -type header_parse_value() :: none | multiple | woody:http_header_val().
 
--define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
--define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
--define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
-
 %%
 %% API
 %%
@@ -98,7 +94,7 @@ send(Url, Body, Options, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
     case is_deadline_reached(Context) of
         true ->
-            _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => <<"Deadline reached">>}),
+            _ = log_internal_error([?EV_CLIENT_SEND, " error"], <<"Deadline reached">>, WoodyState),
             {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
         false ->
             Headers = make_woody_headers(Context),
@@ -151,9 +147,9 @@ close(Transport) ->
 -spec handle_result(_, woody_state:st()) ->
     {ok, woody:http_body()} | error().
 handle_result({ok, 200, Headers, Ref}, WoodyState) ->
-    Meta = case check_error_reason(Headers, 200, WoodyState) of
-        <<>>   -> #{};
-        Reason -> #{reason => Reason}
+    Meta = case check_error_headers(200, Headers, WoodyState) of
+        {business_error, <<>>} -> #{};
+        {_, Reason}            -> #{reason => Reason}
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
     get_body(hackney:body(Ref), WoodyState);
@@ -165,7 +161,7 @@ handle_result({ok, Code, Headers, Ref}, WoodyState) ->
         ok ->
             ok;
         {error, Reason} ->
-            _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => woody_util:to_binary(Reason)})
+            _ = log_internal_error("skip http response body error", Reason, WoodyState)
     end,
     {error, {system, {external, Class, Details}}};
 handle_result({error, {closed, _}}, WoodyState) ->
@@ -206,70 +202,138 @@ handle_result({error, Reason}, WoodyState) ->
 get_body(B = {ok, _}, _) ->
     B;
 get_body({error, Reason}, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_BODY, Reason, WoodyState),
-    {error, {system, {internal, result_unknown, ?ERROR_RESP_BODY}}}.
+    Error = <<"parse http response body error">>,
+    _ = log_internal_error(Error, Reason, WoodyState),
+    {error, {system, {internal, result_unknown, Error}}}.
 
 -spec check_error_headers(woody:http_code(), woody:http_headers(), woody_state:st()) ->
-    {woody_error:class(), woody_error:details()}.
-check_error_headers(502, Headers,  WoodyState) ->
-    check_502_error_class(get_error_class_header_value(Headers), Headers, WoodyState);
+    {woody_error:class() | business_error, woody_error:details()}.
 check_error_headers(Code, Headers, WoodyState) ->
-    {get_error_class(Code), check_error_reason(Headers, Code, WoodyState)}.
+    format_error(Code, get_error_headers(Headers), WoodyState).
 
--spec get_error_class(woody:http_code()) ->
-    woody_error:class().
-get_error_class(503) ->
+get_error_headers(Headers) ->
+    {
+        case get_header_value(?HEADER_E_CLASS, Headers) of
+            C when is_binary(C) -> genlib_string:to_lower(C);
+            C -> C
+        end,
+        get_header_value(?HEADER_E_REASON, Headers)
+    }.
+
+format_error(Code, Headers = {Class, _}, WoodyState) ->
+    Details = get_error_details(Code, Headers),
+    _ = maybe_trace_event(Headers, Details, WoodyState),
+    {get_error_class(Code, Class), Details}.
+
+-spec get_error_class(woody:http_code(), header_parse_value()) ->
+    woody_error:class() | business_error.
+get_error_class(200, _) ->
+    business_error;
+get_error_class(502, <<"resource unavailable">>) ->
     resource_unavailable;
-get_error_class(504) ->
+get_error_class(502, <<"result unknown">>) ->
     result_unknown;
-get_error_class(_) ->
+get_error_class(502, _ErrorClass) ->
+    result_unexpected;
+get_error_class(503, _ErrorClass) ->
+    resource_unavailable;
+get_error_class(504, _ErrorClass) ->
+    result_unknown;
+get_error_class(_Code, _ErrorClass) ->
     result_unexpected.
 
--spec check_502_error_class(header_parse_value(), woody:http_headers(), woody_state:st()) ->
-    {woody_error:class(), woody_error:details()}.
-check_502_error_class(none, Headers, WoodyState) ->
-    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS, " header missing"])}),
-    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
-check_502_error_class(multiple, _, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_CLASS], WoodyState),
-    {result_unexpected, ?BAD_RESP_HEADER};
-check_502_error_class(<<"result unexpected">>, Headers, WoodyState) ->
-    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
-check_502_error_class(<<"resource unavailable">>, Headers, WoodyState) ->
-    {resource_unavailable, check_error_reason(Headers, 502, WoodyState)};
-check_502_error_class(<<"result unknown">>, Headers, WoodyState) ->
-    {result_unknown, check_error_reason(Headers, 502, WoodyState)};
-check_502_error_class(Bad, _, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["unknown ", ?HEADER_E_CLASS, " header value: ", Bad], WoodyState),
-    {result_unexpected, ?BAD_RESP_HEADER}.
+maybe_trace_event({Class, Reason}, Event, WoodyState) when
+    Class  =:= none     ;
+    Class  =:= multiple ;
+    Reason =:= none     ;
+    Reason =:= multiple
+->
+    log_event(?EV_TRACE, WoodyState, #{event => Event});
+maybe_trace_event(_Headers, _Event, _WoodyState) ->
+    ok.
 
--spec check_error_reason(woody:http_headers(), woody:http_code(), woody_state:st()) ->
-    woody_error:details().
-check_error_reason(Headers, Code, WoodyState) ->
-    do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, WoodyState).
+get_error_details(Code, {Class, Reason}) ->
+    woody_util:to_binary(error_details(Code, Class, Reason)).
 
--spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_state:st()) ->
-    woody_error:details().
-do_check_error_reason(none, 200, _WoodyState) ->
+error_details(200, none, none) ->
     <<>>;
-do_check_error_reason(none, Code, WoodyState) ->
-    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON, " header missing"])}),
-    woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON, " header"]);
-do_check_error_reason(multiple, _, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON], WoodyState),
-    ?BAD_RESP_HEADER;
-do_check_error_reason(Reason, _, _) ->
-    Reason.
+error_details(Code, none, none) ->
+    [
+        "response code: ", Code, ", no headers: ", ?HEADER_E_CLASS, ", ", ?HEADER_E_REASON
+    ];
+error_details(Code, none, multiple) ->
+    [
+        "response code: ", Code, ", no ", ?HEADER_E_CLASS, " header, ",
+        "multiple ", ?HEADER_E_REASON, " headers."
+    ];
+error_details(Code, none, Reason) ->
+    [
+        "response code: ", Code, ", no ", ?HEADER_E_CLASS, " header, ",
+        ?HEADER_E_REASON, ": ", Reason
+    ];
+error_details(Code, multiple, none) ->
+    [
+        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
+        "no ", ?HEADER_E_REASON, " header."
+    ];
+error_details(Code, multiple, multiple) ->
+    [
+        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
+        "multiple ", ?HEADER_E_REASON, " headers."
+    ];
+error_details(Code, multiple, Reason) ->
+    [
+        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
+        ?HEADER_E_REASON, ": ", Reason
+    ];
+error_details(Code, Class, none) ->
+    [
+        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class,
+        ", no headers: ", ?HEADER_E_REASON
+    ];
+error_details(Code, Class, multiple) ->
+    [
+        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class,
+        ", multiple ", ?HEADER_E_REASON, " headers."
+    ];
+error_details(Code, Class, Reason) when
+    Code =:= 200 ;
+    Code =:= 500 ;
+    Code =:= 502 ;
+    Code =:= 503 ;
+    Code =:= 504 ;
+    Code >= 400 andalso Code < 500
+->
+    woody_error_details(Code, Class, Reason);
+error_details(Code, Class, Reason) ->
+    default_error_details(Code, Class, Reason).
 
--spec get_error_class_header_value(woody:http_headers()) ->
-    header_parse_value().
-get_error_class_header_value(Headers) ->
-    case get_header_value(?HEADER_E_CLASS, Headers) of
-        None when None =:= none orelse None =:= multiple ->
-            None;
-        Value ->
-            genlib_string:to_lower(Value)
-    end.
+woody_error_details(200, <<"business error">>, Reason) ->
+    Reason;
+woody_error_details(Code, <<"result unexpected">>, Reason) when
+    Code >= 400 andalso Code < 500
+->
+    Reason;
+woody_error_details(500, <<"result unexpected">>, Reason) ->
+    Reason;
+woody_error_details(502, Class, Reason) when
+     Class =:= <<"result unexpected">>    ;
+     Class =:= <<"resource unavailable">> ;
+     Class =:= <<"result unknown">>
+->
+    Reason;
+woody_error_details(503, <<"resource unavailable">>, Reason) ->
+    Reason;
+woody_error_details(504, <<"result unknown">>, Reason) ->
+    Reason;
+woody_error_details(Code, Class, Reason) ->
+    default_error_details(Code, Class, Reason).
+
+default_error_details(Code, Class, Reason) ->
+    [
+        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class, ", ",
+        ?HEADER_E_REASON, ": ", Reason
+    ].
 
 -spec get_header_value(woody:http_header_name(), woody:http_headers()) ->
     header_parse_value().
@@ -304,7 +368,9 @@ add_metadata_headers(Context, Headers) ->
 -spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
 add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
-    [{<< ?HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
+    [
+        {<< ?HEADER_META_PREFIX/binary, H/binary >>, V}
+    | Headers];
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
@@ -314,7 +380,9 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
+    [
+        {?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)}
+    | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).
