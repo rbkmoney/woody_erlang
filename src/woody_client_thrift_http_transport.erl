@@ -116,11 +116,11 @@ set_timeouts(Options, Context) ->
             Options;
         Deadline ->
             Timeout = woody_deadline:to_timeout(Deadline),
-            SendTimeout = calc_send_timeout(Timeout)
+            SendTimeout = calc_send_timeout(Timeout),
             Options ++ [
                 {connect_timeout, SendTimeout},
                 {send_timeout,    SendTimeout},
-                {recv_tieout,     woody_deadline:to_timeout(Deadline)}
+                {recv_timeout,     woody_deadline:to_timeout(Deadline)}
             ]
     end.
 
@@ -312,7 +312,7 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers]
+    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).
