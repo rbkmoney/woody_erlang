@@ -312,7 +312,43 @@ check_ids(Map = #{req := Req}) ->
 -spec check_headers(cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_headers(Req, State) ->
-    check_method(cowboy_req:method(Req), State).
+    check_deadline_header(cowboy_req:header(?HEADER_DEADLINE, Req), State).
+
+-spec check_deadline_header({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
+    cowboy_init_result().
+check_deadline_header({undefined, Req}, State) ->
+    check_method(cowboy_req:method(Req), State);
+check_deadline_header({DeadlineBin, Req}, State) ->
+    case woody_deadline:from_binary(DeadlineBin) of
+        {ok, Deadline} ->
+            check_deadline(Deadline, Req, State);
+        {error, Error} ->
+            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_DEADLINE, " header: ", Error]), Req, State)
+    end.
+
+-spec check_deadline(woody:deadline(), cowboy_req:req(), state()) ->
+    cowboy_init_result().
+check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) ->
+    case woody_deadline:reached(Deadline) of
+        true ->
+            woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+                                             #{url => Url, status => error, reason => <<"Deadline reached">>}),
+            Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
+            {shutdown, Req1, undefined};
+        false ->
+            check_method(cowboy_req:method(Req), State#{woody_state => set_deadline(Deadline, WoodyState)})
+    end.
+
+-spec set_deadline(woody:deadline(), woody_state:st()) ->
+    woody_state:st().
+set_deadline(Deadline, WoodyState) ->
+    woody_state:update_context(
+        woody_context:set_deadline(
+            Deadline,
+            woody_state:get_context(WoodyState)
+        ),
+        WoodyState
+    ).
 
 -spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
