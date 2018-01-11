@@ -11,7 +11,7 @@
 -export([from_binary/1]).
 
 %% Types
--type millisec() :: non_neg_integer().
+-type millisec() :: 0..1000.
 -type deadline() :: {calendar:datetime(), millisec()}.
 -export_type([deadline/0, millisec/0]).
 

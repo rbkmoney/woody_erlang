@@ -41,6 +41,7 @@
     type           := woody:rpc_type(),
     args           := woody:args(),
     metadata       := woody_context:meta(),
+    deadline       := woody:deadline() | undefined,
 
     url      => woody:url(),                          %% EV_CLIENT_SEND
     code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
@@ -63,6 +64,8 @@
     type           => woody:rpc_type(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     args           => woody:args(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     metadata       => woody_context:meta(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    deadline       => woody:deadline() |
+                      undefined,             %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
 
     result   => woody:result()               |   %% EV_SERVICE_HANDLER_RESULT
                 woody_error:business_error() |
@@ -123,7 +126,7 @@
 -type msg     () :: {list(), list()}.
 -type log_msg () :: {severity(), msg()}.
 -type meta_key() :: event | role | service | service_schema | function | type | args |
-                    metadata | status | url | code | result.
+                    metadata | deadline | status | url | code | result.
 -export_type([severity/0, msg/0, log_msg/0, meta_key/0]).
 
 -type meta() :: #{atom() => _}.
@@ -176,12 +179,19 @@ format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
 
 get_essential_meta(Meta, Event, Keys) ->
     Meta1 = maps:with(Keys, Meta),
-    case lists:member(event, Keys) of
+    Meta2 = case lists:member(event, Keys) of
         true ->
             Meta1#{event => Event};
         false ->
             Meta1
-    end.
+    end,
+    format_deadline(Meta2).
+
+format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
+    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
+    Meta#{deadline => DeadlineBin};
+format_deadline(Meta) ->
+    Meta.
 
 -spec format_event(event(), event_meta()) ->
     log_msg().

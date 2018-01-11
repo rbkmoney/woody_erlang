@@ -117,17 +117,23 @@ set_timeouts(Options, Context) ->
         Deadline ->
             Timeout = woody_deadline:to_timeout(Deadline),
             SendTimeout = calc_send_timeout(Timeout),
+
+            %% It is intentional, that application can override the timeout values
+            %% calculated from the deadline (first option value in the list takes
+            %% the precedence).
             Options ++ [
                 {connect_timeout, SendTimeout},
                 {send_timeout,    SendTimeout},
-                {recv_timeout,     woody_deadline:to_timeout(Deadline)}
+                {recv_timeout,    Timeout}
             ]
     end.
 
 calc_send_timeout(Timeout) ->
     case Timeout div 5 of
-        T when T > ?DEFAULT_SEND_TIMEOUT -> ?DEFAULT_SEND_TIMEOUT;
-        T -> T
+        T when (T*2) > ?DEFAULT_SEND_TIMEOUT ->
+            ?DEFAULT_SEND_TIMEOUT;
+        T ->
+            T
     end.
 
 deadline_reached(Context) ->
@@ -312,7 +318,8 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
+    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
+    [{?HEADER_DEADLINE, DeadlineBin} | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

@@ -342,13 +342,7 @@ check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) 
 -spec set_deadline(woody:deadline(), woody_state:st()) ->
     woody_state:st().
 set_deadline(Deadline, WoodyState) ->
-    woody_state:update_context(
-        woody_context:set_deadline(
-            Deadline,
-            woody_state:get_context(WoodyState)
-        ),
-        WoodyState
-    ).
+    woody_state:add_context_deadline(Deadline, WoodyState).
 
 -spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
@@ -379,7 +373,12 @@ check_accept({BadAccept, Req1}, State) ->
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_metadata_headers({Headers, Req}, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
-    {ok, Req, State#{woody_state => woody_state:add_context_meta(find_metadata(Headers, ServerOpts), WoodyState)}}.
+    {ok, Req, State#{woody_state => set_metadata(find_metadata(Headers, ServerOpts), WoodyState)}}.
+
+-spec set_metadata(woody_context:meta(), woody_state:st()) ->
+    woody_state:st().
+set_metadata(Meta, WoodyState) ->
+    woody_state:add_context_meta(Meta, WoodyState).
 
 -spec find_metadata(woody:http_headers(), server_opts()) ->
     woody_context:meta().

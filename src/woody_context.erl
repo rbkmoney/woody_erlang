@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/0, new/1, new/2]).
+-export([new/0, new/1, new/2, new/3]).
 
 -export([get_rpc_id/1, get_rpc_id/2]).
 
@@ -58,6 +58,11 @@ new(Id) ->
     ctx().
 new(Id, Meta) ->
     make_ctx(expand_rpc_id(Id), Meta).
+
+-spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline()) ->
+    ctx().
+new(Id, Meta, Deadline) ->
+    set_deadline(Deadline, new(Id, Meta)).
 
 -spec new_child(ctx()) ->
     ctx().

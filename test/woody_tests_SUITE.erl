@@ -33,6 +33,9 @@
     context_given_id_test/1,
     context_generated_rpc_id_test/1,
     ids_monotonic_incr_test/1,
+    deadline_reached_test/1,
+    deadline_to_from_timeout_test/1,
+    deadline_to_from_binary_test/1,
     call_ok_test/1,
     call3_ok_test/1,
     call_oneway_void_test/1,
@@ -56,6 +59,9 @@
     call_no_headers_504_test/1,
     call3_ok_default_ev_handler_test/1,
     call_thrift_multiplexed_test/1,
+    call_deadline_ok_test/1,
+    call_deadline_reached_on_client_test/1,
+    call_deadline_timeout_test/1,
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
     find_multiple_pools_test/1
@@ -149,6 +155,9 @@ all() ->
         context_given_id_test,
         context_generated_rpc_id_test,
         ids_monotonic_incr_test,
+        deadline_reached_test,
+        deadline_to_from_timeout_test,
+        deadline_to_from_binary_test,
         call_ok_test,
         call3_ok_test,
         call_oneway_void_test,
@@ -172,6 +181,9 @@ all() ->
         call_no_headers_504_test,
         call3_ok_default_ev_handler_test,
         call_thrift_multiplexed_test,
+        call_deadline_ok_test,
+        call_deadline_reached_on_client_test,
+        call_deadline_timeout_test,
         server_http_req_validation_test,
         try_bad_handler_spec_test,
         find_multiple_pools_test
@@ -204,6 +216,9 @@ init_per_testcase(TC, C) when
       TC =:= context_given_id_test         ;
       TC =:= context_generated_rpc_id_test ;
       TC =:= ids_monotonic_incr_test       ;
+      TC =:= deadline_reached_test         ;
+      TC =:= deadline_to_from_timeout_test ;
+      TC =:= deadline_to_from_binary_test  ;
       TC =:= call_client_error_test
 ->
     C;
@@ -324,7 +339,6 @@ context_add_put_get_meta_ok_test(_) ->
     Context = woody_context:add_meta(woody_context:new(), Meta),
     Meta = woody_context:get_meta(Context).
 
-
 context_get_meta_by_key_ok_test(_) ->
     Meta = #{
         <<"world_says">> => <<"Hello">>,
@@ -336,7 +350,6 @@ context_get_meta_by_key_ok_test(_) ->
 
 context_get_empty_meta_ok_test(_) ->
     #{} = woody_context:get_meta(woody_context:new()).
-
 
 context_get_empty_meta_by_key_ok_test(_) ->
     undefined = woody_context:get_meta(<<"fox_says">>, woody_context:new()).
@@ -369,6 +382,32 @@ ids_monotonic_incr_test(_) ->
                     Span1 < Span2
                 end,
     Children = lists:sort(SortFun, Children).
+
+deadline_reached_test(_) ->
+    {Date, {H, M, S}} = calendar:universal_time(),
+    true  = woody_deadline:reached({{Date, {H, M, S - 1}}, 0}),
+    false = woody_deadline:reached({{Date, {H, M, S + 1}}, 745}).
+
+deadline_to_from_timeout_test(_) ->
+    {Date, {H, M, S}} = calendar:universal_time(),
+    Timeout = woody_deadline:to_timeout({{Date, {H, M, S + 1}}, 500}),
+    true = Timeout > 0 andalso Timeout =< 1500,
+
+    Timeout1 = 300,
+    Deadline = woody_deadline:from_timeout(Timeout1),
+    false = woody_deadline:reached(Deadline),
+    ok = timer:sleep(Timeout1),
+    true = woody_deadline:reached(Deadline).
+
+deadline_to_from_binary_test(_) ->
+    Deadline    = {{{2010, 4, 11}, {22, 35, 41}}, 29},
+    DeadlineBin = <<"2010-04-11T22:35:41.029000Z">>,
+    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
+    {ok, Deadline}    = woody_deadline:from_binary(DeadlineBin),
+
+    Deadline1          = {calendar:universal_time(), 542},
+    {ok, DeadlineBin1} = woody_deadline:to_binary(Deadline1),
+    {ok, Deadline1}    = woody_deadline:from_binary(DeadlineBin1).
 
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
@@ -557,6 +596,49 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Client} = thrift_client:new(Protocol1, Service),
     Client.
 
+call_deadline_ok_test(_) ->
+    Id = <<"call_deadline_timeout">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    Gun     = <<"Enforcer">>,
+    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Opts    = #{url => Url, event_handler => ?MODULE},
+    Deadline = woody_deadline:from_timeout(3000),
+    Context  = woody_context:new(Id, #{<<"sleep">> => <<"100">>}, Deadline),
+    Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect  = woody_client:call(Request, Opts, Context).
+
+call_deadline_reached_on_client_test(_) ->
+    Id = <<"call_deadline_reached_on_client">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    Gun     = <<"Enforcer">>,
+    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Opts    = #{url => Url, event_handler => ?MODULE},
+    Deadline = woody_deadline:from_timeout(0),
+    Context = woody_context:new(Id, #{<<"sleep">> => <<"1000">>}, Deadline),
+    try woody_client:call(Request, Opts, Context)
+    catch
+        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
+    end.
+
+call_deadline_timeout_test(_) ->
+    Id = <<"call_deadline_timeout">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    Gun     = <<"Enforcer">>,
+    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Opts    = #{url => Url, event_handler => ?MODULE},
+    Deadline = woody_deadline:from_timeout(500),
+    Context = woody_context:new(Id, #{<<"sleep">> => <<"3000">>}, Deadline),
+
+    try woody_client:call(Request, Opts, Context)
+    catch
+        error:{woody_error, {external, result_unknown, <<"timeout">>}} -> ok
+    end,
+
+    try woody_client:call(Request, Opts, Context)
+    catch
+        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
+    end.
+
 server_http_req_validation_test(_) ->
     Id  = <<"server_http_req_validation">>,
     {Url, _Service} = get_service_endpoint('Weapons'),
@@ -621,6 +703,7 @@ handle_function(switch_weapon, [CurrentWeapon, Direction, Shift, To], Context, #
     switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot);
 
 handle_function(get_weapon, [Name, To], Context, _Opts) ->
+    ok = handle_sleep(Context),
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     case genlib_map:get(Name, ?WEAPONS) of
         #'Weapon'{ammo = 0}  ->
@@ -697,9 +780,12 @@ handle_proxy_event(Event, Code, Descr) ->
     erlang:error(badarg, [Event, Code, Descr]).
 
 log_event(Event, RpcId, Meta) ->
-    %% woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
-    {_Severity, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
-    ct:pal(Format, Msg).
+    %% _ woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
+    {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
+        Event, Meta, RpcId,
+        [event, role, service, service_schema, function, type, args, metadata, deadline, status, url, code, result]
+    ),
+    ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
 
 %%
 %% cowboy_http_handler callbacks
@@ -828,4 +914,12 @@ check_meta(true, Context, #'Weapon'{name = WName, slot_pos = WSlot}) ->
     ok;
 check_meta(_, _, _) ->
     ok.
+
+handle_sleep(Context) ->
+    case woody_context:get_meta(<<"sleep">>, Context) of
+        undefined ->
+            ok;
+        BinTimer ->
+            timer:sleep(binary_to_integer(BinTimer))
+    end.
 
