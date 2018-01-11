@@ -70,17 +70,28 @@ Erlang реализация [Библиотеки RPC вызовов для об
 18> {ok, Result2} = woody_client:call(Request, Opts1, Context2).
 ```
 
-`Context` также позволяет аннотировать RPC запросы дополнительными мета данными в виде _key-value_. `Context` передается только в запросах и его расширение возможно только в режиме _append-only_ (т.е. на попытку переопределить уже существующую запись в `context meta`, библиотека вернет ошибку). Поскольку на транспортном уровне контекст передается в виде custom HTTP заголовков, синтаксис _key-value_ должен следовать ограничениям [RFC7230 ](https://tools.ietf.org/html/rfc7230#section-3.2.6). Размер ключа записи метаданных не должен превышать _53 байта_ (см. остальные требования к метаданным в [описании библиотеки](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#rpc_2)).
+`Context` позволяет аннотировать RPC запросы дополнительными мета данными в виде _key-value_. `Context` передается только в запросах и изменение мета данных возможно только в режиме _append-only_ (т.е. на попытку переопределить уже существующую запись в `context meta`, библиотека вернет ошибку). Поскольку на транспортном уровне контекст передается в виде custom HTTP заголовков, синтаксис метаданных _key-value_ должен следовать ограничениям [RFC7230 ](https://tools.ietf.org/html/rfc7230#section-3.2.6). Размер ключа записи метаданных не должен превышать _53 байта_ (см. остальные требования к метаданным в [описании библиотеки](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#rpc_2)).
 
 ```erlang
 19> Meta1 = #{<<"client1-name">> => <<"Vasya">>}.
-20> Context3 = woody_context:new(<<"myUniqRequestID4">>, Meta1).
+20> Context3 = woody_context:new(<<"myUniqRequestID3">>, Meta1).
 21> Meta1 = woody_context:get_meta(Context3).
 22> Meta2 = #{<<"client2-name">> => <<"Masha">>}.
 23> Context4 = woody_context:add_meta(Context4, Meta2).
 24> <<"Masha">> = woody_context:get_meta(<<"client2-name">>, Context4).
 25> FullMeta = maps:merge(Meta1, Meta2).
 26> FullMeta = woody_context:get_meta(Context4).
+```
+
+`Context` также позволяет задать [deadline](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#deadline) на исполнение запроса. Значение _deadline_ вложенных запросов можно менять произвольным образом. Также timeout'ы на запрос, [вычисляемые по deadline](src/woody_client_thrift_http_transport.erl), можно явно переопределить из приложения через _transport_opts_ в `woody_client:options()`. Модуль [woody_deadline](src/woody_deadline.erl) содержит API для работы с deadline'ами.
+
+```erlang
+27> Deadline = {{{2017, 12, 31}, {23, 59, 59}}, 350}.
+28> Context5 = woody_context:set_deadline(Deadline, Context4).
+29> Context6 = woody_context:new(<<"myUniqRequestID6">>, undefined, Deadline).
+30> Deadline = woody_context:get_deadline(Context5).
+31> Deadline = woody_context:get_deadline(Context6).
+32> true     = woody_deadline:reached(Deadline).
 ```
 
 ### Woody Server Thrift Handler
