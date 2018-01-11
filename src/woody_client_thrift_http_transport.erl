@@ -318,8 +318,7 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
-    [{?HEADER_DEADLINE, DeadlineBin} | Headers].
+    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

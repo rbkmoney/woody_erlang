@@ -319,10 +319,10 @@ check_headers(Req, State) ->
 check_deadline_header({undefined, Req}, State) ->
     check_method(cowboy_req:method(Req), State);
 check_deadline_header({DeadlineBin, Req}, State) ->
-    case woody_deadline:from_binary(DeadlineBin) of
-        {ok, Deadline} ->
-            check_deadline(Deadline, Req, State);
-        {error, Error} ->
+    try woody_deadline:from_binary(DeadlineBin) of
+        Deadline -> check_deadline(Deadline, Req, State)
+    catch
+        error:{bad_deadline, Error} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_DEADLINE, " header: ", Error]), Req, State)
     end.
 

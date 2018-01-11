@@ -83,7 +83,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 26> FullMeta = woody_context:get_meta(Context4).
 ```
 
-`Context` также позволяет задать [deadline](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#deadline) на исполнение запроса. Значение _deadline_ вложенных запросов можно менять произвольным образом. Также timeout'ы на запрос, [вычисляемые по deadline](src/woody_client_thrift_http_transport.erl), можно явно переопределить из приложения через _transport_opts_ в `woody_client:options()`. Модуль [woody_deadline](src/woody_deadline.erl) содержит API для работы с deadline'ами.
+`Context` также позволяет задать [deadline](http://coredocs.rbkmoney.com/design/ms/platform/rpc-lib/#deadline) на исполнение запроса. Значение _deadline_ вложенных запросов можно менять произвольным образом. Также таймауты на запрос, [вычисляемые по deadline](src/woody_client_thrift_http_transport.erl), можно явно переопределить из приложения через _transport_opts_ в `woody_client:options()`. Модуль [woody_deadline](src/woody_deadline.erl) содержит API для работы с deadline.
 
 ```erlang
 27> Deadline = {{{2017, 12, 31}, {23, 59, 59}}, 350}.

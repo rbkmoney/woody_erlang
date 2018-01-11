@@ -188,8 +188,7 @@ get_essential_meta(Meta, Event, Keys) ->
     format_deadline(Meta2).
 
 format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
-    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
-    Meta#{deadline => DeadlineBin};
+    Meta#{deadline => woody_deadline:to_binary(Deadline)};
 format_deadline(Meta) ->
     Meta.
 

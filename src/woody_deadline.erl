@@ -40,20 +40,30 @@ from_timeout(TimeoutMillisec) ->
     {genlib_time:unixtime_to_daytime(DeadlineSec div 1000), DeadlineSec rem 1000}.
 
 -spec to_binary(deadline()) ->
-    {ok, binary()} | {error, rfc3339:error()}.
+    binary().
 to_binary({{Date, Time}, Millisec}) ->
-    rfc3339:format({Date, Time, Millisec * 1000, 0}).
+    try rfc3339:format({Date, Time, Millisec * 1000, 0}) of
+        {ok, DeadlineBin} when is_binary(DeadlineBin) ->
+            DeadlineBin;
+        Error ->
+            %% rfc3339:format/1 has a broken spec and ugly (if not to say broken) code,
+            %% so just throw any non succeess case here.
+            erlang:error({bad_deadline, Error})
+    catch
+        error:Error ->
+            erlang:error({bad_deadline, {Error, erlang:get_stacktrace()}})
+    end.
 
 -spec from_binary(binary()) ->
-    {ok, deadline()} | {error, not_utc | rfc3339:error()}.
+    deadline().
 from_binary(Bin) ->
     case rfc3339:parse(Bin) of
         {ok, {Date, Time, Usec, TZ}} when TZ =:= 0 orelse TZ =:= undefined ->
-            {ok, {to_calendar_datetime(Date, Time), Usec div 1000}};
+            {to_calendar_datetime(Date, Time), Usec div 1000};
         {ok, _} ->
-            {error, not_utc};
-        Error = {error, _} ->
-            Error
+            erlang:error({bad_deadline, not_utc});
+        {error, Error} ->
+            erlang:error({bad_deadline, Error})
     end.
 
 %%

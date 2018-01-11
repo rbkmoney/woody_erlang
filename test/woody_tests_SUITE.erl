@@ -402,12 +402,24 @@ deadline_to_from_timeout_test(_) ->
 deadline_to_from_binary_test(_) ->
     Deadline    = {{{2010, 4, 11}, {22, 35, 41}}, 29},
     DeadlineBin = <<"2010-04-11T22:35:41.029000Z">>,
-    {ok, DeadlineBin} = woody_deadline:to_binary(Deadline),
-    {ok, Deadline}    = woody_deadline:from_binary(DeadlineBin),
+    DeadlineBin = woody_deadline:to_binary(Deadline),
+    Deadline    = woody_deadline:from_binary(DeadlineBin),
 
-    Deadline1          = {calendar:universal_time(), 542},
-    {ok, DeadlineBin1} = woody_deadline:to_binary(Deadline1),
-    {ok, Deadline1}    = woody_deadline:from_binary(DeadlineBin1).
+    Deadline1    = {calendar:universal_time(), 542},
+    DeadlineBin1 = woody_deadline:to_binary(Deadline1),
+    Deadline1    = woody_deadline:from_binary(DeadlineBin1),
+
+    try woody_deadline:to_binary({{baddate, {22, 35, 41}}, 29})
+    catch
+        error:{bad_deadline, _} ->
+            ok
+    end,
+
+    try woody_deadline:from_binary(<<"badboy">>)
+    catch
+        error:{bad_deadline, _} ->
+            ok
+    end.
 
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
