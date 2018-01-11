@@ -28,8 +28,7 @@
 -type error()              :: {error, {system, woody_error:system_error()}}.
 -type header_parse_value() :: none | multiple | woody:http_header_val().
 
--define(DEFAULT_CONNECT_TIMEOUT , 1000). %% millisec
--define(DEFAULT_SEND_TIMEOUT    , 1000). %% millisec
+-define(DEFAULT_SEND_TIMEOUT, 1000). %% millisec
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
