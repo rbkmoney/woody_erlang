@@ -60,6 +60,7 @@
 %% nginx should be configured to take care of various limits.
 -define(MAX_CHUNK_LENGTH, 65535). %% 64kbytes
 
+-define(DUMMY_REQ_ID, <<"undefined">>).
 
 %%
 %% woody_server callback
@@ -198,15 +199,21 @@ trace_resp(_, Req, _, _, _, _) ->
 init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
     {Url, Req1} = cowboy_req:url(Req),
-    State = Opts#{url => Url},
-    case get_rpc_id(Req1) of
-        {ok, RpcId, Req2} ->
-            WoodyState = make_woody_state(RpcId, EvHandler),
-            init_handler(Req2, State#{woody_state => WoodyState});
-        {error, BadRpcId, Req2} ->
-            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
-                Req2, State#{woody_state => make_woody_state(BadRpcId, EvHandler)}
-            )
+    DummyRpcID = #{
+        span_id   => ?DUMMY_REQ_ID,
+        trace_id  => ?DUMMY_REQ_ID,
+        parent_id => ?DUMMY_REQ_ID
+    },
+    WoodyState = woody_state:new(server, woody_context:new(DummyRpcID), EvHandler),
+    case have_resources_to_continue(Limits) of
+        true ->
+            check_method(cowboy_req:method(Req1), Opts#{url => Url, woody_state => WoodyState});
+        false ->
+            Details = <<"erlang vm exceeded total memory threshold">>,
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+                #{url => Url, status => error, reason => Details}),
+            Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req1, WoodyState),
+            {shutdown, Req2, undefined}
     end.
 
 -spec set_handler_limits(handler_limits()) ->
@@ -222,18 +229,6 @@ set_handler_limits(Limits) ->
                 error_logger => true
             }),
             ok
-    end.
-
--spec init_handler(cowboy_req:req(), state()) ->
-    cowboy_init_result().
-init_handler(Req, State = #{handler_limits := Limits, woody_state := WoodyState}) ->
-    case have_resources_to_continue(Limits) of
-        true ->
-            check_headers(Req, State);
-        false ->
-            Details = <<"erlang vm exceeded total memory threshold">>,
-            Req1 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
-            {shutdown, Req1, undefined}
     end.
 
 -spec have_resources_to_continue(handler_limits()) ->
@@ -283,66 +278,9 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
 
 
 %% init functions
--spec get_rpc_id(cowboy_req:req()) ->
-    {ok | error, woody:rpc_id(), cowboy_req:req()}.
-get_rpc_id(Req) ->
-    check_ids(maps:fold(
-        fun get_rpc_id/3,
-        #{req => Req},
-        #{
-            span_id   => ?HEADER_RPC_ID,
-            trace_id  => ?HEADER_RPC_ROOT_ID,
-            parent_id => ?HEADER_RPC_PARENT_ID
-        }
-    )).
 
-get_rpc_id(Id, Header, Acc = #{req := Req}) ->
-    case cowboy_req:header(Header, Req) of
-        {undefined, Req1} ->
-            Acc#{Id => <<"undefined">>, req => Req1, status => error};
-        {IdVal, Req1} ->
-            Acc#{Id => IdVal, req => Req1}
-    end.
-
-check_ids(Map = #{status := error, req := Req}) ->
-    {error, maps:without([req, status], Map), Req};
-check_ids(Map = #{req := Req}) ->
-    {ok, maps:without([req], Map), Req}.
-
--spec check_headers(cowboy_req:req(), state()) ->
-    cowboy_init_result().
-check_headers(Req, State) ->
-    check_deadline_header(cowboy_req:header(?HEADER_DEADLINE, Req), State).
-
--spec check_deadline_header({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
-    cowboy_init_result().
-check_deadline_header({undefined, Req}, State) ->
-    check_method(cowboy_req:method(Req), State);
-check_deadline_header({DeadlineBin, Req}, State) ->
-    try woody_deadline:from_binary(DeadlineBin) of
-        Deadline -> check_deadline(Deadline, Req, State)
-    catch
-        error:{bad_deadline, Error} ->
-            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_DEADLINE, " header: ", Error]), Req, State)
-    end.
-
--spec check_deadline(woody:deadline(), cowboy_req:req(), state()) ->
-    cowboy_init_result().
-check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) ->
-    case woody_deadline:reached(Deadline) of
-        true ->
-            woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
-                                             #{url => Url, status => error, reason => <<"Deadline reached">>}),
-            Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
-            {shutdown, Req1, undefined};
-        false ->
-            check_method(cowboy_req:method(Req), State#{woody_state => set_deadline(Deadline, WoodyState)})
-    end.
-
--spec set_deadline(woody:deadline(), woody_state:st()) ->
-    woody_state:st().
-set_deadline(Deadline, WoodyState) ->
-    woody_state:add_context_deadline(Deadline, WoodyState).
+%% First perform basic http checks: method, content type, etc,
+%% then check woody related headers: IDs, deadline, meta.
 
 -spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
@@ -366,19 +304,80 @@ check_accept({Accept, Req}, State) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
-    check_metadata_headers(cowboy_req:headers(Req), State);
+    check_woody_headers(Req, State);
 check_accept({BadAccept, Req1}, State) ->
     reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]), Req1, State).
+
+-spec check_woody_headers(cowboy_req:req(), state()) ->
+    cowboy_init_result().
+check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
+    case get_rpc_id(Req) of
+        {ok, RpcId, Req1} ->
+            check_deadline_header(
+                cowboy_req:header(?HEADER_DEADLINE, Req1),
+                State#{woody_state => set_rpc_id(RpcId, WoodyState)}
+            );
+        {error, BadRpcId, Req1} ->
+            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
+                Req1, State#{woody_state => set_rpc_id(BadRpcId, WoodyState)}
+            )
+    end.
+
+-spec get_rpc_id(cowboy_req:req()) ->
+    {ok | error, woody:rpc_id(), cowboy_req:req()}.
+get_rpc_id(Req) ->
+    check_ids(maps:fold(
+        fun get_rpc_id/3,
+        #{req => Req},
+        #{
+            span_id   => ?HEADER_RPC_ID,
+            trace_id  => ?HEADER_RPC_ROOT_ID,
+            parent_id => ?HEADER_RPC_PARENT_ID
+        }
+    )).
+
+get_rpc_id(Id, Header, Acc = #{req := Req}) ->
+    case cowboy_req:header(Header, Req) of
+        {undefined, Req1} ->
+            Acc#{Id => ?DUMMY_REQ_ID, req => Req1, status => error};
+        {IdVal, Req1} ->
+            Acc#{Id => IdVal, req => Req1}
+    end.
+
+check_ids(Map = #{status := error, req := Req}) ->
+    {error, maps:without([req, status], Map), Req};
+check_ids(Map = #{req := Req}) ->
+    {ok, maps:without([req], Map), Req}.
+
+-spec check_deadline_header({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
+    cowboy_init_result().
+check_deadline_header({undefined, Req}, State) ->
+    check_metadata_headers(cowboy_req:headers(Req), State);
+check_deadline_header({DeadlineBin, Req}, State) ->
+    try woody_deadline:from_binary(DeadlineBin) of
+        Deadline -> check_deadline(Deadline, Req, State)
+    catch
+        error:{bad_deadline, Error} ->
+            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_DEADLINE, " header: ", Error]), Req, State)
+    end.
+
+-spec check_deadline(woody:deadline(), cowboy_req:req(), state()) ->
+    cowboy_init_result().
+check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) ->
+    case woody_deadline:reached(Deadline) of
+        true ->
+            woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+                #{url => Url, status => error, reason => <<"Deadline reached">>}),
+            Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
+            {shutdown, Req1, undefined};
+        false ->
+            check_metadata_headers(cowboy_req:headers(Req), State#{woody_state => set_deadline(Deadline, WoodyState)})
+    end.
 
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_metadata_headers({Headers, Req}, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
     {ok, Req, State#{woody_state => set_metadata(find_metadata(Headers, ServerOpts), WoodyState)}}.
-
--spec set_metadata(woody_context:meta(), woody_state:st()) ->
-    woody_state:st().
-set_metadata(Meta, WoodyState) ->
-    woody_state:add_context_meta(Meta, WoodyState).
 
 -spec find_metadata(woody:http_headers(), server_opts()) ->
     woody_context:meta().
@@ -397,10 +396,20 @@ find_metadata(Headers, #{regexp_meta := Re}) ->
         end,
       #{}, Headers).
 
--spec make_woody_state(woody:rpc_id(), woody:ev_handler()) ->
+-spec set_rpc_id(woody:rpc_id(), woody_state:st()) ->
     woody_state:st().
-make_woody_state(RpcId, EvHandler) ->
-    woody_state:new(server, woody_context:new(RpcId), EvHandler).
+set_rpc_id(RpcId, WoodyState) ->
+    woody_state:update_context(woody_context:new(RpcId), WoodyState).
+
+-spec set_deadline(woody:deadline(), woody_state:st()) ->
+    woody_state:st().
+set_deadline(Deadline, WoodyState) ->
+    woody_state:add_context_deadline(Deadline, WoodyState).
+
+-spec set_metadata(woody_context:meta(), woody_state:st()) ->
+    woody_state:st().
+set_metadata(Meta, WoodyState) ->
+    woody_state:add_context_meta(Meta, WoodyState).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     {shutdown, cowboy_req:req(), undefined}.
