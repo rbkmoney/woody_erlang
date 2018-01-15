@@ -12,7 +12,7 @@
 
 %% Types
 -type millisec() :: 0..1000.
--type deadline() :: {calendar:datetime(), millisec()}.
+-type deadline() :: {calendar:datetime(), millisec()} | undefined.
 -export_type([deadline/0, millisec/0]).
 
 %%
@@ -20,17 +20,21 @@
 %%
 -spec reached(deadline()) ->
     boolean().
+reached(undefined) ->
+    false;
 reached(Deadline) ->
     unow() >= to_unixtime(Deadline).
 
 -spec to_timeout(deadline()) ->
     timeout().
+to_timeout(Deadline = undefined) ->
+    erlang:error(bad_deadline, [Deadline]);
 to_timeout(Deadline) ->
     case to_unixtime(Deadline) - unow() of
         Timeout when Timeout > 0 ->
             Timeout;
         _ ->
-            erlang:error(deadline_reached)
+            erlang:error(deadline_reached, [Deadline])
     end.
 
 -spec from_timeout(millisec()) ->
@@ -41,17 +45,19 @@ from_timeout(TimeoutMillisec) ->
 
 -spec to_binary(deadline()) ->
     binary().
-to_binary({{Date, Time}, Millisec}) ->
+to_binary(Deadline = undefined) ->
+    erlang:error(bad_deadline, [Deadline]);
+to_binary(Deadline = {{Date, Time}, Millisec}) ->
     try rfc3339:format({Date, Time, Millisec * 1000, 0}) of
         {ok, DeadlineBin} when is_binary(DeadlineBin) ->
             DeadlineBin;
         Error ->
             %% rfc3339:format/1 has a broken spec and ugly (if not to say broken) code,
             %% so just throw any non succeess case here.
-            erlang:error({bad_deadline, Error})
+            erlang:error({bad_deadline, Error}, [Deadline])
     catch
         error:Error ->
-            erlang:error({bad_deadline, {Error, erlang:get_stacktrace()}})
+            erlang:error({bad_deadline, {Error, erlang:get_stacktrace()}}, [Deadline])
     end.
 
 -spec from_binary(binary()) ->
@@ -61,16 +67,14 @@ from_binary(Bin) ->
         {ok, {Date, Time, Usec, TZ}} when TZ =:= 0 orelse TZ =:= undefined ->
             {to_calendar_datetime(Date, Time), Usec div 1000};
         {ok, _} ->
-            erlang:error({bad_deadline, not_utc});
+            erlang:error({bad_deadline, not_utc}, [Bin]);
         {error, Error} ->
-            erlang:error({bad_deadline, Error})
+            erlang:error({bad_deadline, Error}, [Bin])
     end.
 
 %%
 %% Internal functions
 %%
--spec to_unixtime(deadline()) ->
-    millisec().
 to_unixtime({DateTime, Millisec}) ->
     genlib_time:daytime_to_unixtime(DateTime)*1000 + Millisec.
 

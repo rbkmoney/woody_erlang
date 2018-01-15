@@ -41,7 +41,7 @@
     type           := woody:rpc_type(),
     args           := woody:args(),
     metadata       := woody_context:meta(),
-    deadline       := woody:deadline() | undefined,
+    deadline       := woody:deadline(),
 
     url      => woody:url(),                          %% EV_CLIENT_SEND
     code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
@@ -64,8 +64,7 @@
     type           => woody:rpc_type(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     args           => woody:args(),          %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     metadata       => woody_context:meta(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
-    deadline       => woody:deadline() |
-                      undefined,             %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
+    deadline       => woody:deadline(),      %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
 
     result   => woody:result()               |   %% EV_SERVICE_HANDLER_RESULT
                 woody_error:business_error() |

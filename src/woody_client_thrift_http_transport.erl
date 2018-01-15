@@ -136,12 +136,7 @@ calc_send_timeout(Timeout) ->
     end.
 
 deadline_reached(Context) ->
-    case woody_context:get_deadline(Context) of
-        undefined ->
-            false;
-        Deadline ->
-            woody_deadline:reached(Deadline)
-    end.
+    woody_deadline:reached(woody_context:get_deadline(Context)).
 
 -spec close(woody_transport()) ->
     {woody_transport(), ok}.
