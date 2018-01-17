@@ -103,7 +103,6 @@ send(Url, Body, Options, WoodyState) ->
             _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => <<"Deadline reached">>}),
             {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
         false ->
-            _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             hackney:request(post, Url, Headers, Body, set_timeouts(Options, Context))
