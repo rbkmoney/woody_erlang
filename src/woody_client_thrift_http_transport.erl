@@ -28,8 +28,6 @@
 -type error()              :: {error, {system, woody_error:system_error()}}.
 -type header_parse_value() :: none | multiple | woody:http_header_val().
 
--define(DEFAULT_SEND_TIMEOUT, 1000). %% millisec
-
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
 -define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
@@ -98,7 +96,7 @@ flush(Transport = #{
 
 send(Url, Body, Options, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
-    case deadline_reached(Context) of
+    case is_deadline_reached(Context) of
         true ->
             _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => <<"Deadline reached">>}),
             {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
@@ -114,27 +112,32 @@ set_timeouts(Options, Context) ->
             Options;
         Deadline ->
             Timeout = woody_deadline:to_timeout(Deadline),
-            SendTimeout = calc_send_timeout(Timeout),
+            ConnectTimeout = SendTimeout = calc_send_timeout(Timeout),
 
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
             %% the precedence).
             Options ++ [
-                {connect_timeout, SendTimeout},
+                {connect_timeout, ConnectTimeout},
                 {send_timeout,    SendTimeout},
                 {recv_timeout,    Timeout}
             ]
     end.
 
+-define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
+
 calc_send_timeout(Timeout) ->
+    %% It is assumed that connect and send timeouts each
+    %% should take no more than 20% of the total request time
+    %% and in any case no more, than DEFAULT_CONNECT_AND_SEND_TIMEOUT together.
     case Timeout div 5 of
-        T when (T*2) > ?DEFAULT_SEND_TIMEOUT ->
-            ?DEFAULT_SEND_TIMEOUT;
+        T when (T*2) > ?DEFAULT_CONNECT_AND_SEND_TIMEOUT ->
+            ?DEFAULT_CONNECT_AND_SEND_TIMEOUT;
         T ->
             T
     end.
 
-deadline_reached(Context) ->
+is_deadline_reached(Context) ->
     woody_deadline:reached(woody_context:get_deadline(Context)).
 
 -spec close(woody_transport()) ->

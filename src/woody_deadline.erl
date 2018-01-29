@@ -12,7 +12,8 @@
 
 %% Types
 -type millisec() :: 0..1000.
--type deadline() :: {calendar:datetime(), millisec()} | undefined.
+-type deadline() :: {calendar:datetime(), millisec()} | undefined. %% deadline may be not set for a request,
+                                                                   %% that's why  'undefined' is here as well.
 -export_type([deadline/0, millisec/0]).
 
 %%
@@ -27,8 +28,8 @@ reached(Deadline) ->
 
 -spec to_timeout(deadline()) ->
     timeout().
-to_timeout(Deadline = undefined) ->
-    erlang:error(bad_deadline, [Deadline]);
+to_timeout(undefined) ->
+    infinity;
 to_timeout(Deadline) ->
     case to_unixtime(Deadline) - unow() of
         Timeout when Timeout > 0 ->
@@ -37,8 +38,10 @@ to_timeout(Deadline) ->
             erlang:error(deadline_reached, [Deadline])
     end.
 
--spec from_timeout(millisec()) ->
+-spec from_timeout(timeout()) ->
     deadline().
+from_timeout(infinity) ->
+    undefined;
 from_timeout(TimeoutMillisec) ->
     DeadlineSec = unow() + TimeoutMillisec,
     {genlib_time:unixtime_to_daytime(DeadlineSec div 1000), DeadlineSec rem 1000}.

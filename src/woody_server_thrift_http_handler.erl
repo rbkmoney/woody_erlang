@@ -207,7 +207,7 @@ init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits :
     WoodyState = woody_state:new(server, woody_context:new(DummyRpcID), EvHandler),
     case have_resources_to_continue(Limits) of
         true ->
-            check_method(cowboy_req:method(Req1), Opts#{url => Url, woody_state => WoodyState});
+            check_request(Req1, Opts#{url => Url, woody_state => WoodyState});
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
@@ -281,6 +281,11 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
 
 %% First perform basic http checks: method, content type, etc,
 %% then check woody related headers: IDs, deadline, meta.
+
+-spec check_request(cowboy_req:req(), state()) ->
+    cowboy_init_result().
+check_request(Req, State) ->
+    check_method(cowboy_req:method(Req), State).
 
 -spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
