@@ -385,8 +385,8 @@ ids_monotonic_incr_test(_) ->
 
 deadline_reached_test(_) ->
     {Date, {H, M, S}} = calendar:universal_time(),
-    true  = woody_deadline:reached({{Date, {H, M, S - 1}}, 0}),
-    false = woody_deadline:reached({{Date, {H, M, S + 1}}, 745}).
+    true  = woody_deadline:is_reached({{Date, {H, M, S - 1}}, 0}),
+    false = woody_deadline:is_reached({{Date, {H, M, S + 1}}, 745}).
 
 deadline_to_from_timeout_test(_) ->
     {Date, {H, M, S}} = calendar:universal_time(),
@@ -395,9 +395,9 @@ deadline_to_from_timeout_test(_) ->
 
     Timeout1 = 300,
     Deadline = woody_deadline:from_timeout(Timeout1),
-    false = woody_deadline:reached(Deadline),
+    false = woody_deadline:is_reached(Deadline),
     ok = timer:sleep(Timeout1),
-    true = woody_deadline:reached(Deadline).
+    true = woody_deadline:is_reached(Deadline).
 
 deadline_to_from_binary_test(_) ->
     Deadline    = {{{2010, 4, 11}, {22, 35, 41}}, 29},

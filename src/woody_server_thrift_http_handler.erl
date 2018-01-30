@@ -369,7 +369,7 @@ check_deadline_header({DeadlineBin, Req}, State) ->
 -spec check_deadline(woody:deadline(), cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) ->
-    case woody_deadline:reached(Deadline) of
+    case woody_deadline:is_reached(Deadline) of
         true ->
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),

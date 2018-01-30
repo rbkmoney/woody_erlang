@@ -91,7 +91,7 @@ Erlang реализация [Библиотеки RPC вызовов для об
 29> Context6 = woody_context:new(<<"myUniqRequestID6">>, undefined, Deadline).
 30> Deadline = woody_context:get_deadline(Context5).
 31> Deadline = woody_context:get_deadline(Context6).
-32> true     = woody_deadline:reached(Deadline).
+32> true     = woody_deadline:is_reached(Deadline).
 ```
 
 ### Woody Server Thrift Handler

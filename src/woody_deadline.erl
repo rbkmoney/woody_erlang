@@ -4,7 +4,7 @@
 -module(woody_deadline).
 
 %% API
--export([reached/1]).
+-export([is_reached/1]).
 -export([to_timeout/1]).
 -export([from_timeout/1]).
 -export([to_binary/1]).
@@ -19,11 +19,11 @@
 %%
 %% API
 %%
--spec reached(deadline()) ->
+-spec is_reached(deadline()) ->
     boolean().
-reached(undefined) ->
+is_reached(undefined) ->
     false;
-reached(Deadline) ->
+is_reached(Deadline) ->
     unow() >= to_unixtime(Deadline).
 
 -spec to_timeout(deadline()) ->

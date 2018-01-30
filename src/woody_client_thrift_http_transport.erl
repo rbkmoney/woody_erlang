@@ -112,7 +112,7 @@ set_timeouts(Options, Context) ->
             Options;
         Deadline ->
             Timeout = woody_deadline:to_timeout(Deadline),
-            ConnectTimeout = SendTimeout = calc_send_timeout(Timeout),
+            ConnectTimeout = SendTimeout = calc_send_timeouts(Timeout),
 
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
@@ -126,7 +126,7 @@ set_timeouts(Options, Context) ->
 
 -define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
 
-calc_send_timeout(Timeout) ->
+calc_send_timeouts(Timeout) ->
     %% It is assumed that connect and send timeouts each
     %% should take no more than 20% of the total request time
     %% and in any case no more, than DEFAULT_CONNECT_AND_SEND_TIMEOUT together.
@@ -138,7 +138,7 @@ calc_send_timeout(Timeout) ->
     end.
 
 is_deadline_reached(Context) ->
-    woody_deadline:reached(woody_context:get_deadline(Context)).
+    woody_deadline:is_reached(woody_context:get_deadline(Context)).
 
 -spec close(woody_transport()) ->
     {woody_transport(), ok}.
