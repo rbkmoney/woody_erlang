@@ -9,7 +9,8 @@
         genlib,
         cowboy,
         hackney,
-        thrift
+        thrift,
+        rfc3339
     ]},
     {env, [
         {acceptors_pool_size, 100},

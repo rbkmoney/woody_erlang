@@ -7,7 +7,7 @@ UTILS_PATH := build_utils
 # with handling of the varriable in build_utils is fixed
 TEMPLATES_PATH := .
 SERVICE_NAME := woody
-BUILD_IMAGE_TAG := 317d28640a5dd2ec6e732d81283628d8ad3f3f52
+BUILD_IMAGE_TAG := eee42f2ca018c313190bc350fe47d4dea70b6d27
 
 CALL_W_CONTAINER := all submodules rebar-update compile xref lint test dialyze clean distclean
 

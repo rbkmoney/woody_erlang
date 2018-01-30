@@ -22,6 +22,10 @@
 -export_type([dapper_id/0, span_id/0, parent_id/0, trace_id/0]).
 -export_type([req_id/0, rpc_id/0]).
 
+-type millisec() :: woody_deadline:millisec().
+-type deadline() :: woody_deadline:deadline().
+-export_type([deadline/0, millisec/0]).
+
 %% Thrift
 -type service_name() :: atom().
 -type service()      :: {module(), service_name()}.

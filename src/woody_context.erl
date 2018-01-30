@@ -6,12 +6,15 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/0, new/1, new/2]).
+-export([new/0, new/1, new/2, new/3]).
 
 -export([get_rpc_id/1, get_rpc_id/2]).
 
 -export([add_meta/2]).
 -export([get_meta/1, get_meta/2]).
+
+-export([set_deadline/2]).
+-export([get_deadline/1]).
 
 -export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
@@ -27,6 +30,7 @@
 
 -type ctx() :: #{
     rpc_id     := woody:rpc_id(),
+    deadline   := woody:deadline(),
     meta       => meta()
 }.
 
@@ -53,7 +57,12 @@ new(Id) ->
 -spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined) ->
     ctx().
 new(Id, Meta) ->
-    make_ctx(expand_rpc_id(Id), Meta).
+    new(Id, Meta, undefined).
+
+-spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline()) ->
+    ctx().
+new(Id, Meta, Deadline) ->
+    make_ctx(expand_rpc_id(Id), Meta, Deadline).
 
 -spec new_child(ctx()) ->
     ctx().
@@ -118,6 +127,16 @@ new_unique_int() ->
     <<Id:64>> = snowflake:new(?MODULE),
     Id.
 
+-spec set_deadline(woody:deadline(), ctx()) ->
+    ctx().
+set_deadline(Deadline, Context) ->
+    Context#{deadline => Deadline}.
+
+-spec get_deadline(ctx()) ->
+    woody:deadline().
+get_deadline(#{deadline := Deadline}) ->
+    Deadline.
+
 %%
 %% Internal functions
 %%
@@ -128,13 +147,13 @@ expand_rpc_id(RpcId = #{}) ->
 expand_rpc_id(TraceId) ->
     new_rpc_id(TraceId).
 
--spec make_ctx(woody:rpc_id(), meta() | undefined) ->
+-spec make_ctx(woody:rpc_id(), meta() | undefined, woody:deadline()) ->
     ctx() | no_return().
-make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta) ->
+make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline) ->
     _ = genlib_map:foreach(fun check_req_id_limit/2, RpcId),
-    init_meta(#{rpc_id => RpcId}, Meta);
-make_ctx(RpcId, Meta) ->
-    error(badarg, [RpcId, Meta]).
+    init_meta(#{rpc_id => RpcId, deadline => Deadline}, Meta);
+make_ctx(RpcId, Meta, Deadline) ->
+    error(badarg, [RpcId, Meta, Deadline]).
 
 check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 32 ->
     ok;
