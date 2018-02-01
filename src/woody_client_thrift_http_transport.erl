@@ -25,8 +25,9 @@
     read_buffer  := binary()
 }.
 
--type error()              :: {error, {system, woody_error:system_error()}}.
--type header_parse_value() :: none | multiple | woody:http_header_val().
+-type error()               :: {error, {system, woody_error:system_error()}}.
+-type header_parse_value()  :: none | multiple | woody:http_header_val().
+-type e_headers_parse_res() :: {woody:header_type(), {header_parse_value(), header_parse_value()}}.
 
 %%
 %% API
@@ -301,8 +302,10 @@ handle_body(skip, Ref, WoodyState) ->
 check_error_headers(Code, Headers, WoodyState) ->
     format_error(Code, get_error_headers(Headers), WoodyState).
 
+-spec get_error_headers(woody:http_headers()) ->
+    e_headers_parse_res().
 get_error_headers(Headers) ->
-    get_error_headers(Headers, {?HEADER_E_CLASS, ?HEADER_E_REASON}).
+    fallback_to_old_headers(get_error_headers(Headers, {?HEADER_E_CLASS, ?HEADER_E_REASON}), Headers).
 
 get_error_headers(Headers, {HeaderClass, HeaderReason}) ->
     {
@@ -312,10 +315,18 @@ get_error_headers(Headers, {HeaderClass, HeaderReason}) ->
         end,
         get_header_value(HeaderReason, Headers)
     }.
+-spec fallback_to_old_headers({header_parse_value(), header_parse_value()}, woody:http_headers()) ->
+    e_headers_parse_res().
+fallback_to_old_headers({none, none}, Headers) ->
+    {old, get_error_headers(Headers, {?HEADER_E_CLASS_OLD, ?HEADER_E_REASON_OLD})};
+fallback_to_old_headers(Result, _) ->
+    {new, Result}.
 
-format_error(Code, Headers = {Class, _}, WoodyState) ->
-    Details = get_error_details(Code, Headers),
-    _ = maybe_trace_event(Code, Headers, Details, WoodyState),
+-spec format_error(woody:http_code(), e_headers_parse_res(), woody_state:st()) ->
+    {woody_error:class() | business_error, woody_error:details()}.
+format_error(Code, HeaderParseRes = {_, HeaderValues = {Class, _}}, WoodyState) ->
+    Details = get_error_details(HeaderParseRes, Code),
+    _ = maybe_trace_event(Code, HeaderValues, Details, WoodyState),
     {get_error_class(Code, Class), Details}.
 
 -spec get_error_class(woody:http_code(), header_parse_value()) ->
@@ -345,51 +356,59 @@ maybe_trace_event(Code, {Class, Reason}, Event, WoodyState) when
 maybe_trace_event(_Code, _Headers, _Event, _WoodyState) ->
     ok.
 
-get_error_details(Code, {Class, Reason}) ->
-    woody_util:to_binary(error_details(Code, Class, Reason)).
+-spec get_error_details(e_headers_parse_res(), woody:http_code()) ->
+    woody_error:details().
+get_error_details({new, HeaderValues}, Code) ->
+    do_get_error_details(Code, HeaderValues, {?HEADER_E_CLASS, ?HEADER_E_REASON});
+get_error_details({old, HeaderValues}, Code) ->
+    do_get_error_details(Code, HeaderValues, {?HEADER_E_CLASS_OLD, ?HEADER_E_REASON_OLD}).
 
-error_details(200, none, none) ->
+do_get_error_details(Code, HeaderValues, HeaderNames) ->
+    woody_util:to_binary(error_details(Code, HeaderValues, HeaderNames)).
+
+error_details(200, {none, none}, _) ->
     <<>>;
-error_details(Code, none, none) ->
+error_details(Code, {none, none}, _) ->
     [
-        "response code: ", Code, ", no headers: ", ?HEADER_E_CLASS, ", ", ?HEADER_E_REASON
+        "response code: ", Code, ", no headers: " |
+        lists:join(", ", [?HEADER_E_CLASS, ?HEADER_E_REASON, ?HEADER_E_CLASS_OLD, ?HEADER_E_REASON_OLD])
     ];
-error_details(Code, none, multiple) ->
+error_details(Code, {none, multiple}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", no ", ?HEADER_E_CLASS, " header, ",
-        "multiple ", ?HEADER_E_REASON, " headers."
+        "response code: ", Code, ", no ", HeaderClass, " header, ",
+        "multiple ", HeaderReason, " headers."
     ];
-error_details(Code, none, Reason) ->
+error_details(Code, {none, Reason}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", no ", ?HEADER_E_CLASS, " header, ",
-        ?HEADER_E_REASON, ": ", Reason
+        "response code: ", Code, ", no ", HeaderClass, " header, ",
+        HeaderReason, ": ", Reason
     ];
-error_details(Code, multiple, none) ->
+error_details(Code, {multiple, none}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
-        "no ", ?HEADER_E_REASON, " header."
+        "response code: ", Code, ", multiple ", HeaderClass, " headers, ",
+        "no ", HeaderReason, " header."
     ];
-error_details(Code, multiple, multiple) ->
+error_details(Code, {multiple, multiple}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
-        "multiple ", ?HEADER_E_REASON, " headers."
+        "response code: ", Code, ", multiple ", HeaderClass, " headers, ",
+        "multiple ", HeaderReason, " headers."
     ];
-error_details(Code, multiple, Reason) ->
+error_details(Code, {multiple, Reason}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", multiple ", ?HEADER_E_CLASS, " headers, ",
-        ?HEADER_E_REASON, ": ", Reason
+        "response code: ", Code, ", multiple ", HeaderClass, " headers, ",
+        HeaderReason, ": ", Reason
     ];
-error_details(Code, Class, none) ->
+error_details(Code, {Class, none}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class,
-        ", no headers: ", ?HEADER_E_REASON
+        "response code: ", Code, ", ", HeaderClass, ": ", Class,
+        ", no headers: ", HeaderReason
     ];
-error_details(Code, Class, multiple) ->
+error_details(Code, {Class, multiple}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class,
-        ", multiple ", ?HEADER_E_REASON, " headers."
+        "response code: ", Code, ", ", HeaderClass, ": ", Class,
+        ", multiple ", HeaderReason, " headers."
     ];
-error_details(Code, Class, Reason) when
+error_details(Code, HeaderValues, HeaderNames) when
     Code =:= 200 ;
     Code =:= 500 ;
     Code =:= 502 ;
@@ -397,35 +416,35 @@ error_details(Code, Class, Reason) when
     Code =:= 504 ;
     Code >= 400 andalso Code < 500
 ->
-    woody_error_details(Code, Class, Reason);
-error_details(Code, Class, Reason) ->
-    default_error_details(Code, Class, Reason).
+    woody_error_details(Code, HeaderValues, HeaderNames);
+error_details(Code, HeaderValues, HeaderNames) ->
+    default_error_details(Code, HeaderValues, HeaderNames).
 
-woody_error_details(200, <<"business error">>, Reason) ->
+woody_error_details(200, {<<"business error">>, Reason}, _) ->
     Reason;
-woody_error_details(Code, <<"result unexpected">>, Reason) when
+woody_error_details(Code, {<<"result unexpected">>, Reason}, _) when
     Code >= 400 andalso Code < 500
 ->
     Reason;
-woody_error_details(500, <<"result unexpected">>, Reason) ->
+woody_error_details(500, {<<"result unexpected">>, Reason}, _) ->
     Reason;
-woody_error_details(502, Class, Reason) when
+woody_error_details(502, {Class, Reason}, _) when
      Class =:= <<"result unexpected">>    ;
      Class =:= <<"resource unavailable">> ;
      Class =:= <<"result unknown">>
 ->
     Reason;
-woody_error_details(503, <<"resource unavailable">>, Reason) ->
+woody_error_details(503, {<<"resource unavailable">>, Reason}, _) ->
     Reason;
-woody_error_details(504, <<"result unknown">>, Reason) ->
+woody_error_details(504, {<<"result unknown">>, Reason}, _) ->
     Reason;
-woody_error_details(Code, Class, Reason) ->
-    default_error_details(Code, Class, Reason).
+woody_error_details(Code, HeaderValues, HeaderNames) ->
+    default_error_details(Code, HeaderValues, HeaderNames).
 
-default_error_details(Code, Class, Reason) ->
+default_error_details(Code, {Class, Reason}, {HeaderClass, HeaderReason}) ->
     [
-        "response code: ", Code, ", ", ?HEADER_E_CLASS, ": ", Class, ", ",
-        ?HEADER_E_REASON, ": ", Reason
+        "response code: ", Code, ", ", HeaderClass, ": ", Class, ", ",
+        HeaderReason, ": ", Reason
     ].
 
 -spec get_header_value(woody:http_header_name(), woody:http_headers()) ->

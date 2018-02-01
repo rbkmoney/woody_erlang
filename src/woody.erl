@@ -26,6 +26,9 @@
 -type deadline() :: woody_deadline:deadline().
 -export_type([deadline/0, millisec/0]).
 
+-type header_type() :: new | old.
+-export_type([header_type/0]).
+
 %% Thrift
 -type service_name() :: atom().
 -type service()      :: {module(), service_name()}.

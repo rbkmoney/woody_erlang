@@ -36,8 +36,7 @@
 
 -export_type([options/0]).
 
--type woody_header_type() :: new | old.
--type re_mp() :: #{woody_header_type() := tuple()}. %% fuck otp for hiding the types.
+-type re_mp() :: #{woody:header_type() := tuple()}. %% fuck otp for hiding the types.
 -type server_opts() :: #{
     max_chunk_length => non_neg_integer(),
     regexp_meta     => re_mp()
@@ -50,7 +49,7 @@
     handler_limits := handler_limits(),
     url            => woody:url(),
     woody_state    => woody_state:st(),
-    woody_header_type => woody_header_type()
+    woody_header_type => woody:header_type()
 }.
 
 -type cowboy_init_result() ::
@@ -347,7 +346,7 @@ reply_bad_rpcid_header(Req, Reason, State) ->
     reply_bad_header(400, woody_util:to_binary(Reason), Req, State).
 
 -spec get_rpc_id(cowboy_req:req()) ->
-    {woody_header_type(), {ok | error, woody:rpc_id(), cowboy_req:req()}}.
+    {woody:header_type(), {ok | error, woody:rpc_id(), cowboy_req:req()}}.
 get_rpc_id(Req) ->
     fallback_to_old_rpc_id_headers(get_rpc_id(Req, #{
         span_id   => ?HEADER_RPC_ID,
@@ -439,7 +438,7 @@ check_metadata_headers({Headers, Req}, State = #{
 }) ->
     {ok, Req, State#{woody_state => set_metadata(find_metadata(Headers, ServerOpts, HeaderType), WoodyState)}}.
 
--spec find_metadata(woody:http_headers(), server_opts(), woody_header_type()) ->
+-spec find_metadata(woody:http_headers(), server_opts(), woody:header_type()) ->
     woody_context:meta().
 find_metadata(Headers, #{regexp_meta := #{new := Re}}, new) ->
     find_metadata(Headers, Re, ?HEADER_RPC_ID, ?HEADER_RPC_ROOT_ID, ?HEADER_RPC_PARENT_ID);
