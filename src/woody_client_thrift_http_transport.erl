@@ -90,6 +90,17 @@ flush(Transport = #{
             {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
     end.
 
+-spec close(woody_transport()) ->
+    {woody_transport(), ok}.
+close(Transport) ->
+    {Transport#{}, ok}.
+
+%%
+%% Internal functions
+%%
+
+%% Request
+
 send(Url, Body, Options, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
     case is_deadline_reached(Context) of
@@ -136,39 +147,108 @@ calc_timeouts(Timeout) ->
 is_deadline_reached(Context) ->
     woody_deadline:is_reached(woody_context:get_deadline(Context)).
 
--spec close(woody_transport()) ->
-    {woody_transport(), ok}.
-close(Transport) ->
-    {Transport#{}, ok}.
+-spec make_woody_headers(woody_context:ctx()) ->
+    woody:http_headers().
+make_woody_headers(Context) ->
+    add_optional_headers(Context, [
+        {<<"content-type">> , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>       , ?CONTENT_TYPE_THRIFT}
+    ] ++ [add_rpc_id_header(H, Context) || H <- [
+        {trace_id  , ?HEADER_RPC_ROOT_ID},
+        {span_id   , ?HEADER_RPC_ID},
+        {parent_id , ?HEADER_RPC_PARENT_ID},
 
-%%
-%% Internal functions
-%%
+        {trace_id  , ?HEADER_RPC_ROOT_ID_OLD},
+        {span_id   , ?HEADER_RPC_ID_OLD},
+        {parent_id , ?HEADER_RPC_PARENT_ID_OLD}
+    ]]).
+
+add_rpc_id_header({Id, HeaderName}, Context) ->
+    {HeaderName, woody_context:get_rpc_id(Id, Context)}.
+
+-spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
+    woody:http_headers().
+add_optional_headers(Context, Headers) ->
+    add_deadline_header(Context, add_metadata_headers(Context, Headers)).
+
+-spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
+    woody:http_headers().
+add_metadata_headers(Context, Headers) ->
+    maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
+
+-spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
+    woody:http_headers() | no_return().
+add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
+    [
+        {<< ?HEADER_META_PREFIX/binary, H/binary >>, V},
+        {<< ?HEADER_META_PREFIX_OLD/binary, H/binary >>, V}
+    | Headers];
+add_metadata_header(H, V, Headers) ->
+    error(badarg, [H, V, Headers]).
+
+add_deadline_header(Context, Headers) ->
+    do_add_deadline_header(woody_context:get_deadline(Context), Headers).
+
+do_add_deadline_header(undefined, Headers) ->
+    Headers;
+do_add_deadline_header(Deadline, Headers) ->
+    [
+        {?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)},
+        {?HEADER_DEADLINE_OLD, woody_deadline:to_binary(Deadline)}
+    | Headers].
+
+%% Response
+
 -spec handle_result(_, woody_state:st()) ->
     {ok, woody:http_body()} | error().
-handle_result({ok, 200, Headers, Ref}, WoodyState) ->
+handle_result(Result, WoodyState) ->
+    Result1 = case genlib_app:env(woody, trace_http_client) of
+        true ->
+            trace_http_reponse(Result, WoodyState);
+        _ ->
+            Result
+    end,
+    do_handle_result(Result1, WoodyState).
+
+trace_http_reponse({ok, Code, Headers, Ref}, WoodyState) ->
+    {Body, Meta} = case hackney:body(Ref) of
+        E = {error, Error} ->
+            {E, #{
+                body_status => Error
+            }};
+        {ok, B} ->
+            {{ok, B}, #{
+                body => B,
+                body_status => ok
+            }}
+    end,
+    log_event(?EV_TRACE, WoodyState, Meta#{
+        event   =>  <<"http response received">>,
+        code    => Code,
+        headers => Headers
+    }),
+    {ok, Code, Headers, Body};
+trace_http_reponse(ErrorResult, _WoodyState) ->
+    ErrorResult.
+
+do_handle_result({ok, 200, Headers, Body}, WoodyState) ->
     Meta = case check_error_headers(200, Headers, WoodyState) of
         {business_error, <<>>} -> #{};
         {_, Reason}            -> #{reason => Reason}
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
-    get_body(hackney:body(Ref), WoodyState);
-handle_result({ok, Code, Headers, Ref}, WoodyState) ->
+    handle_body(get, Body, WoodyState);
+do_handle_result({ok, Code, Headers, Body}, WoodyState) ->
     {Class, Details} = check_error_headers(Code, Headers, WoodyState),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status=>error, code=>Code, reason=>Details}),
     %% Free the connection
-    case hackney:skip_body(Ref) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            _ = log_internal_error("skip http response body error", Reason, WoodyState)
-    end,
+    _ = handle_body(skip, Body, WoodyState),
     {error, {system, {external, Class, Details}}};
-handle_result({error, {closed, _}}, WoodyState) ->
+do_handle_result({error, {closed, _}}, WoodyState) ->
     Reason = <<"partial response">>,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Reason}),
     {error, {system, {external, result_unknown, Reason}}};
-handle_result({error, Reason}, WoodyState) when
+do_handle_result({error, Reason}, WoodyState) when
     Reason =:= timeout      ;
     Reason =:= econnaborted ;
     Reason =:= enetreset    ;
@@ -180,7 +260,7 @@ handle_result({error, Reason}, WoodyState) when
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
-handle_result({error, Reason}, WoodyState) when
+do_handle_result({error, Reason}, WoodyState) when
     Reason =:= econnrefused    ;
     Reason =:= connect_timeout ;
     Reason =:= nxdomain        ;
@@ -190,21 +270,31 @@ handle_result({error, Reason}, WoodyState) when
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {internal, resource_unavailable, BinReason}}};
-handle_result(Error = {error, {system, _}}, _) ->
+do_handle_result(Error = {error, {system, _}}, _) ->
     Error;
-handle_result({error, Reason}, WoodyState) ->
+do_handle_result({error, Reason}, WoodyState) ->
     Details = woody_error:format_details(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Details}),
     {error, {system, {internal, result_unexpected, Details}}}.
 
--spec get_body({ok, woody:http_body()} | {error, atom()}, woody_state:st()) ->
-    {ok, woody:http_body()} | error().
-get_body(B = {ok, _}, _) ->
-    B;
-get_body({error, Reason}, WoodyState) ->
+%% -spec get_body({ok, woody:http_body()} | {error, atom()}, woody_state:st()) ->
+%%     {ok, woody:http_body()} | error().
+handle_body(_, Ok = {ok, _}, _) ->
+    Ok;
+handle_body(_, {error, Reason}, WoodyState) ->
     Error = <<"parse http response body error">>,
     _ = log_internal_error(Error, Reason, WoodyState),
-    {error, {system, {internal, result_unknown, Error}}}.
+    {error, {system, {internal, result_unknown, Error}}};
+handle_body(get, Ref, WoodyState) ->
+    handle_body(get, hackney:body(Ref), WoodyState);
+handle_body(skip, Ref, WoodyState) ->
+  case hackney:skip_body(Ref) of
+      ok ->
+          ok;
+      {error, Reason} ->
+          _ = log_internal_error("skip http response body error", Reason, WoodyState),
+          ok
+  end.
 
 -spec check_error_headers(woody:http_code(), woody:http_headers(), woody_state:st()) ->
     {woody_error:class() | business_error, woody_error:details()}.
@@ -212,17 +302,20 @@ check_error_headers(Code, Headers, WoodyState) ->
     format_error(Code, get_error_headers(Headers), WoodyState).
 
 get_error_headers(Headers) ->
+    get_error_headers(Headers, {?HEADER_E_CLASS, ?HEADER_E_REASON}).
+
+get_error_headers(Headers, {HeaderClass, HeaderReason}) ->
     {
-        case get_header_value(?HEADER_E_CLASS, Headers) of
+        case get_header_value(HeaderClass, Headers) of
             C when is_binary(C) -> genlib_string:to_lower(C);
             C -> C
         end,
-        get_header_value(?HEADER_E_REASON, Headers)
+        get_header_value(HeaderReason, Headers)
     }.
 
 format_error(Code, Headers = {Class, _}, WoodyState) ->
     Details = get_error_details(Code, Headers),
-    _ = maybe_trace_event(Headers, Details, WoodyState),
+    _ = maybe_trace_event(Code, Headers, Details, WoodyState),
     {get_error_class(Code, Class), Details}.
 
 -spec get_error_class(woody:http_code(), header_parse_value()) ->
@@ -242,14 +335,14 @@ get_error_class(504, _ErrorClass) ->
 get_error_class(_Code, _ErrorClass) ->
     result_unexpected.
 
-maybe_trace_event({Class, Reason}, Event, WoodyState) when
+maybe_trace_event(Code, {Class, Reason}, Event, WoodyState) when
     Class  =:= none     ;
     Class  =:= multiple ;
     Reason =:= none     ;
     Reason =:= multiple
 ->
-    log_event(?EV_TRACE, WoodyState, #{event => Event});
-maybe_trace_event(_Headers, _Event, _WoodyState) ->
+    log_event(?EV_TRACE, WoodyState, #{event => Event, code => Code});
+maybe_trace_event(_Code, _Headers, _Event, _WoodyState) ->
     ok.
 
 get_error_details(Code, {Class, Reason}) ->
@@ -343,46 +436,6 @@ get_header_value(Name, Headers) ->
         []      -> none;
         _       -> multiple
     end.
-
--spec make_woody_headers(woody_context:ctx()) ->
-    woody:http_headers().
-make_woody_headers(Context) ->
-    add_optional_headers(Context, [
-        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
-    ]).
-
--spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
-    woody:http_headers().
-add_optional_headers(Context, Headers) ->
-    add_deadline_header(Context, add_metadata_headers(Context, Headers)).
-
--spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
-    woody:http_headers().
-add_metadata_headers(Context, Headers) ->
-    maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
-
--spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
-    woody:http_headers() | no_return().
-add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
-    [
-        {<< ?HEADER_META_PREFIX/binary, H/binary >>, V}
-    | Headers];
-add_metadata_header(H, V, Headers) ->
-    error(badarg, [H, V, Headers]).
-
-add_deadline_header(Context, Headers) ->
-    do_add_deadline_header(woody_context:get_deadline(Context), Headers).
-
-do_add_deadline_header(undefined, Headers) ->
-    Headers;
-do_add_deadline_header(Deadline, Headers) ->
-    [
-        {?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)}
-    | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).
