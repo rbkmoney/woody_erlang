@@ -3,14 +3,23 @@
 
 %% Http headers
 -define(CONTENT_TYPE_THRIFT    , <<"application/x-thrift">>).
--define(HEADER_PREFIX          , <<"x-rbk-">>).
+-define(HEADER_PREFIX          , <<"woody.">>).
 -define(HEADER_RPC_ID          , << ?HEADER_PREFIX/binary, "span-id">>).
 -define(HEADER_RPC_PARENT_ID   , << ?HEADER_PREFIX/binary, "parent-id">>).
 -define(HEADER_RPC_ROOT_ID     , << ?HEADER_PREFIX/binary, "trace-id">>).
 -define(HEADER_E_CLASS         , << ?HEADER_PREFIX/binary, "error-class">>).
 -define(HEADER_E_REASON        , << ?HEADER_PREFIX/binary, "error-reason">>).
--define(HEADER_META_PREFIX     , << ?HEADER_PREFIX/binary, "meta-">>).
+-define(HEADER_META_PREFIX     , << ?HEADER_PREFIX/binary, "meta.">>).
 -define(HEADER_DEADLINE        , << ?HEADER_PREFIX/binary, "deadline">>).
+
+-define(HEADER_PREFIX_OLD          , <<"x-rbk-">>).
+-define(HEADER_RPC_ID_OLD          , << ?HEADER_PREFIX_OLD/binary, "span-id">>).
+-define(HEADER_RPC_PARENT_ID_OLD   , << ?HEADER_PREFIX_OLD/binary, "parent-id">>).
+-define(HEADER_RPC_ROOT_ID_OLD     , << ?HEADER_PREFIX_OLD/binary, "trace-id">>).
+-define(HEADER_E_CLASS_OLD         , << ?HEADER_PREFIX_OLD/binary, "error-class">>).
+-define(HEADER_E_REASON_OLD        , << ?HEADER_PREFIX_OLD/binary, "error-reason">>).
+-define(HEADER_META_PREFIX_OLD     , << ?HEADER_PREFIX_OLD/binary, "meta-">>).
+-define(HEADER_DEADLINE_OLD        , << ?HEADER_PREFIX_OLD/binary, "deadline">>).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
