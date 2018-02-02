@@ -155,3 +155,18 @@ check_loan_limits(Limits, Context, N) ->
 
 ### Woody Event Handler
 Интерфейс для получения и логирования событий RPC библиотеки. Также содержит вспомогательные функции для удобного форматирования событий. Пример реализации _event handler_'а - [woody_event_handler_default.erl](src/woody_event_handler_default.erl).
+
+### Tracing
+Можно динамически включать и выключать трассировку http запросов и ответов.
+
+На сервере:
+```erlang
+application:set_env(woody, trace_http_server, true).
+application:unset_env(woody, trace_http_server).
+```
+
+На клиенте (пока только для ответов):
+```erlang
+application:set_env(woody, trace_http_client, true).
+application:unset_env(woody, trace_http_client).
+```
