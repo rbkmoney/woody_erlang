@@ -306,14 +306,19 @@ trace_http_reponse(ErrorResult, _WoodyState) ->
     ErrorResult.
 
 do_handle_result({ok, 200, Headers, Body}, WoodyState) ->
-    Meta = case check_error_headers(200, Headers, WoodyState) of
-        {business_error, <<>>} -> #{};
-        {_, Reason}            -> #{reason => Reason}
+    Meta = case check_error_headers(200, Headers) of
+        {no_error, <<>>} ->
+            #{};
+        {business_error, Details} ->
+            #{reason => Details};
+        {_, Details} ->
+            _ = log_event(?EV_TRACE, WoodyState, #{event => Details, code => 200}),
+            #{}
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
     handle_body(get, Body, WoodyState);
 do_handle_result({ok, Code, Headers, Body}, WoodyState) ->
-    {Class, Details} = check_error_headers(Code, Headers, WoodyState),
+    {Class, Details} = check_error_headers(Code, Headers),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status=>error, code=>Code, reason=>Details}),
     %% Free the connection
     _ = handle_body(skip, Body, WoodyState),
@@ -370,10 +375,10 @@ handle_body(skip, Ref, WoodyState) ->
           ok
   end.
 
--spec check_error_headers(woody:http_code(), woody:http_headers(), woody_state:st()) ->
-    {woody_error:class() | business_error, woody_error:details()}.
-check_error_headers(Code, Headers, WoodyState) ->
-    format_error(Code, get_error_headers(Headers), WoodyState).
+-spec check_error_headers(woody:http_code(), woody:http_headers()) ->
+    {woody_error:class() | business_error | no_error, woody_error:details()}.
+check_error_headers(Code, Headers) ->
+    format_error(Code, get_error_headers(Headers)).
 
 -spec get_error_headers(woody:http_headers()) ->
     e_headers_parse_res().
@@ -395,16 +400,16 @@ fallback_to_old_headers({none, none}, Headers) ->
 fallback_to_old_headers(Result, _) ->
     {new, Result}.
 
--spec format_error(woody:http_code(), e_headers_parse_res(), woody_state:st()) ->
-    {woody_error:class() | business_error, woody_error:details()}.
-format_error(Code, HeaderParseRes = {_, HeaderValues = {Class, _}}, WoodyState) ->
-    Details = get_error_details(HeaderParseRes, Code),
-    _ = maybe_trace_event(Code, HeaderValues, Details, WoodyState),
-    {get_error_class(Code, Class), Details}.
+-spec format_error(woody:http_code(), e_headers_parse_res()) ->
+    {woody_error:class() | business_error | no_error, woody_error:details()}.
+format_error(Code, HeaderParseRes = {_, {Class, _}}) ->
+    {get_error_class(Code, Class), get_error_details(HeaderParseRes, Code)}.
 
 -spec get_error_class(woody:http_code(), header_parse_value()) ->
-    woody_error:class() | business_error.
-get_error_class(200, _) ->
+    woody_error:class() | no_error | business_error.
+get_error_class(200, <<>>) ->
+    no_error;
+get_error_class(200, <<"business error">>) ->
     business_error;
 get_error_class(502, <<"resource unavailable">>) ->
     resource_unavailable;
@@ -418,16 +423,6 @@ get_error_class(504, _ErrorClass) ->
     result_unknown;
 get_error_class(_Code, _ErrorClass) ->
     result_unexpected.
-
-maybe_trace_event(Code, {Class, Reason}, Event, WoodyState) when
-    Class  =:= none     ;
-    Class  =:= multiple ;
-    Reason =:= none     ;
-    Reason =:= multiple
-->
-    log_event(?EV_TRACE, WoodyState, #{event => Event, code => Code});
-maybe_trace_event(_Code, _Headers, _Event, _WoodyState) ->
-    ok.
 
 -spec get_error_details(e_headers_parse_res(), woody:http_code()) ->
     woody_error:details().
