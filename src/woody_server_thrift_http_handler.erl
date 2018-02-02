@@ -546,6 +546,27 @@ handle_error({system, {external, result_unknown, Details}}, Req, WoodyState) ->
 
 -spec set_error_headers(woody:http_header_val(), woody:http_header_val(), cowboy_req:req()) ->
     cowboy_req:req().
+
+-ifdef(TEST).
+set_error_headers(Class, Reason, Req) ->
+    set_error_headers(genlib_app:env(woody, server_type, default), Class, Reason, Req).
+
+set_error_headers(new, Class, Reason, Req) ->
+    set_error_headers_for_test(Class, Reason, Req, {?HEADER_E_CLASS, ?HEADER_E_REASON});
+set_error_headers(old, Class, Reason, Req) ->
+    set_error_headers_for_test(Class, Reason, Req, {?HEADER_E_CLASS_OLD, ?HEADER_E_REASON_OLD});
+set_error_headers(default, Class, Reason, Req) ->
+    Req1 = set_error_headers(new, Class, Reason, Req),
+    set_error_headers(old, Class, Reason, Req1).
+
+set_error_headers_for_test(Class, Reason, Req, {HeaderClass, HeaderReason}) ->
+    lists:foldl(
+        fun({H, V}, R) -> cowboy_req:set_resp_header(H, V, R) end,
+        Req,
+        [{HeaderClass, Class}, {HeaderReason, Reason}]
+    ).
+
+-else.
 set_error_headers(Class, Reason, Req) ->
     lists:foldl(
         fun({H, V}, R) -> cowboy_req:set_resp_header(H, V, R) end,
@@ -555,6 +576,7 @@ set_error_headers(Class, Reason, Req) ->
             {?HEADER_E_CLASS_OLD, Class}, {?HEADER_E_REASON_OLD, Reason}
         ]
     ).
+-endif. %% TEST
 
 -spec reply(woody:http_code(), cowboy_req:req(), woody_state:st()) ->
     cowboy_req:req().

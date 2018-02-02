@@ -64,7 +64,12 @@
     call_deadline_timeout_test/1,
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
-    find_multiple_pools_test/1
+    find_multiple_pools_test/1,
+    upgrade_with_old_server_test/1,
+    upgrade_with_new_server_test/1,
+    upgrade_with_old_client_test/1,
+    upgrade_with_new_client_test/1
+
 ]).
 
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -186,7 +191,12 @@ all() ->
         call_deadline_timeout_test,
         server_http_req_validation_test,
         try_bad_handler_spec_test,
-        find_multiple_pools_test
+        find_multiple_pools_test,
+        upgrade_with_old_server_test,
+        upgrade_with_new_server_test,
+        upgrade_with_old_client_test,
+        upgrade_with_new_client_test
+
     ].
 
 %%
@@ -238,7 +248,30 @@ init_per_testcase(find_multiple_pools_test, C) ->
     Pool2 = {shields, undefined, 50},
     ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2]),
     [{sup, Sup} | C];
-init_per_testcase(_, C) ->
+init_per_testcase(TC, C) when
+      TC =:= upgrade_with_old_client_test
+->
+    ok = application:set_env(woody, client_type, old),
+    default_init_per_tc(TC, C);
+init_per_testcase(TC, C) when
+      TC =:= upgrade_with_old_server_test
+->
+    ok = application:set_env(woody, server_type, old),
+    default_init_per_tc(TC, C);
+init_per_testcase(TC, C) when
+      TC =:= upgrade_with_new_server_test
+->
+    ok = application:set_env(woody, server_type, new),
+    default_init_per_tc(TC, C);
+init_per_testcase(TC, C) when
+      TC =:= upgrade_with_new_client_test
+->
+    ok = application:set_env(woody, client_type, new),
+    default_init_per_tc(TC, C);
+init_per_testcase(TC, C) ->
+    default_init_per_tc(TC, C).
+
+default_init_per_tc(_, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C].
@@ -309,7 +342,19 @@ get_fail_code(call_no_headers_502_test) -> 502;
 get_fail_code(call_no_headers_503_test) -> 503;
 get_fail_code(call_no_headers_504_test) -> 504.
 
-end_per_test_case(_, C) ->
+end_per_test_case(TC, C) when
+      TC =:= upgrade_with_old_server_test ;
+      TC =:= upgrade_with_old_client_test ;
+      TC =:= upgrade_with_new_server_test ;
+      TC =:= upgrade_with_new_client_test
+->
+    ok = application:unset_env(woody, server_type),
+    ok = application:unset_env(woody, client_type),
+    default_end_per_tc(TC, C);
+end_per_test_case(TC, C) ->
+    default_end_per_tc(TC, C).
+
+default_end_per_tc(_, C) ->
     case proplists:get_value(sup, C, undefined) of
         undefined ->
             ok;
@@ -694,6 +739,21 @@ try_bad_handler_spec_test(_) ->
             ok
     end.
 
+upgrade_with_old_server_test(_) ->
+    Gun = <<"Enforcer">>,
+    gun_test_basic(<<"upgrade_with_old_server_test">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+
+upgrade_with_new_server_test(_) ->
+    Gun = <<"Enforcer">>,
+    gun_test_basic(<<"upgrade_with_new_server_test">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+
+upgrade_with_old_client_test(_) ->
+    Gun = <<"Enforcer">>,
+    gun_test_basic(<<"upgrade_with_old_client_test">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+
+upgrade_with_new_client_test(_) ->
+    Gun = <<"Enforcer">>,
+    gun_test_basic(<<"upgrade_with_new_client_test">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
 %%
 %% supervisor callbacks

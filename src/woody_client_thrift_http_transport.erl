@@ -150,6 +150,77 @@ is_deadline_reached(Context) ->
 
 -spec make_woody_headers(woody_context:ctx()) ->
     woody:http_headers().
+
+-ifdef(TEST).
+-type client_type() :: new | old | default.
+
+make_woody_headers(Context) ->
+    ClientType = genlib_app:env(woody, client_type, default),
+    RpcIdHeaders = case ClientType of
+        new ->
+            [add_rpc_id_header(H, Context) || H <- [
+                {trace_id  , ?HEADER_RPC_ROOT_ID},
+                {span_id   , ?HEADER_RPC_ID},
+                {parent_id , ?HEADER_RPC_PARENT_ID}
+            ]];
+        old ->
+            [add_rpc_id_header(H, Context) || H <- [
+                {trace_id  , ?HEADER_RPC_ROOT_ID_OLD},
+                {span_id   , ?HEADER_RPC_ID_OLD},
+                {parent_id , ?HEADER_RPC_PARENT_ID_OLD}
+            ]];
+        default ->
+            [add_rpc_id_header(H, Context) || H <- [
+                {trace_id  , ?HEADER_RPC_ROOT_ID},
+                {span_id   , ?HEADER_RPC_ID},
+                {parent_id , ?HEADER_RPC_PARENT_ID},
+                {trace_id  , ?HEADER_RPC_ROOT_ID_OLD},
+                {span_id   , ?HEADER_RPC_ID_OLD},
+                {parent_id , ?HEADER_RPC_PARENT_ID_OLD}
+            ]]
+    end,
+    add_optional_headers(ClientType, Context, [
+        {<<"content-type">> , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>       , ?CONTENT_TYPE_THRIFT}
+    ] ++ RpcIdHeaders).
+
+-spec add_optional_headers(client_type(), woody_context:ctx(), woody:http_headers()) ->
+    woody:http_headers().
+add_optional_headers(ClientType, Context, Headers) ->
+    add_deadline_header(ClientType, Context, add_metadata_headers(ClientType, Context, Headers)).
+
+-spec add_metadata_headers(client_type(), woody_context:ctx(), woody:http_headers()) ->
+    woody:http_headers().
+add_metadata_headers(ClientType, Context, Headers) ->
+    maps:fold(
+        fun(H, V, Acc) -> add_metadata_header(ClientType, H, V, Acc) end,
+        Headers, woody_context:get_meta(Context)
+    ).
+
+-spec add_metadata_header(client_type(), woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
+    woody:http_headers() | no_return().
+add_metadata_header(new, H, V, Headers) when is_binary(H) and is_binary(V) ->
+    [{<< ?HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
+add_metadata_header(old, H, V, Headers) when is_binary(H) and is_binary(V) ->
+    [{<< ?HEADER_META_PREFIX_OLD/binary, H/binary >>, V} | Headers];
+add_metadata_header(default, H, V, Headers) when is_binary(H) and is_binary(V) ->
+    add_metadata_header(new, H, V, Headers) ++ add_metadata_header(old, H, V, Headers);
+add_metadata_header(_, H, V, Headers) ->
+    error(badarg, [H, V, Headers]).
+
+add_deadline_header(ClientType, Context, Headers) ->
+    do_add_deadline_header(ClientType, woody_context:get_deadline(Context), Headers).
+
+do_add_deadline_header(_, undefined, Headers) ->
+    Headers;
+do_add_deadline_header(new, Deadline, Headers) ->
+    [{?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers];
+do_add_deadline_header(old, Deadline, Headers) ->
+    [{?HEADER_DEADLINE_OLD, woody_deadline:to_binary(Deadline)} | Headers];
+do_add_deadline_header(default, Deadline, Headers) ->
+    do_add_deadline_header(new, Deadline, Headers) ++ do_add_deadline_header(old, Deadline, Headers).
+
+-else.
 make_woody_headers(Context) ->
     add_optional_headers(Context, [
         {<<"content-type">> , ?CONTENT_TYPE_THRIFT},
@@ -163,9 +234,6 @@ make_woody_headers(Context) ->
         {span_id   , ?HEADER_RPC_ID_OLD},
         {parent_id , ?HEADER_RPC_PARENT_ID_OLD}
     ]]).
-
-add_rpc_id_header({Id, HeaderName}, Context) ->
-    {HeaderName, woody_context:get_rpc_id(Id, Context)}.
 
 -spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
@@ -197,6 +265,11 @@ do_add_deadline_header(Deadline, Headers) ->
         {?HEADER_DEADLINE, woody_deadline:to_binary(Deadline)},
         {?HEADER_DEADLINE_OLD, woody_deadline:to_binary(Deadline)}
     | Headers].
+
+-endif. %% TEST
+
+add_rpc_id_header({Id, HeaderName}, Context) ->
+    {HeaderName, woody_context:get_rpc_id(Id, Context)}.
 
 %% Response
 
