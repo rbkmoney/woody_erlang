@@ -25,9 +25,7 @@
     read_buffer  := binary()
 }.
 
--type error()               :: {error, {system, woody_error:system_error()}}.
--type header_parse_value()  :: none | multiple | woody:http_header_val().
--type e_headers_parse_res() :: {woody:header_type(), {header_parse_value(), header_parse_value()}}.
+-type error_result() :: {error, {system, woody_error:system_error()}}.
 
 %%
 %% API
@@ -70,7 +68,7 @@ read(Transport = #{read_buffer := RBuffer}, Len) when is_binary(RBuffer) ->
     {Transport1, Response}.
 
 -spec flush(woody_transport()) ->
-    {woody_transport(), ok | error()}.
+    {woody_transport(), ok | error_result()}.
 flush(Transport = #{
     url           := Url,
     woody_state   := WoodyState,
@@ -158,19 +156,19 @@ make_woody_headers(Context) ->
     ClientType = genlib_app:env(woody, client_type, default),
     RpcIdHeaders = case ClientType of
         new ->
-            [add_rpc_id_header(H, Context) || H <- [
+            [make_rpc_id_header(H, Context) || H <- [
                 {trace_id  , ?HEADER_RPC_ROOT_ID},
                 {span_id   , ?HEADER_RPC_ID},
                 {parent_id , ?HEADER_RPC_PARENT_ID}
             ]];
         old ->
-            [add_rpc_id_header(H, Context) || H <- [
+            [make_rpc_id_header(H, Context) || H <- [
                 {trace_id  , ?HEADER_RPC_ROOT_ID_OLD},
                 {span_id   , ?HEADER_RPC_ID_OLD},
                 {parent_id , ?HEADER_RPC_PARENT_ID_OLD}
             ]];
         default ->
-            [add_rpc_id_header(H, Context) || H <- [
+            [make_rpc_id_header(H, Context) || H <- [
                 {trace_id  , ?HEADER_RPC_ROOT_ID},
                 {span_id   , ?HEADER_RPC_ID},
                 {parent_id , ?HEADER_RPC_PARENT_ID},
@@ -225,7 +223,7 @@ make_woody_headers(Context) ->
     add_optional_headers(Context, [
         {<<"content-type">> , ?CONTENT_TYPE_THRIFT},
         {<<"accept">>       , ?CONTENT_TYPE_THRIFT}
-    ] ++ [add_rpc_id_header(H, Context) || H <- [
+    ] ++ [make_rpc_id_header(H, Context) || H <- [
         {trace_id  , ?HEADER_RPC_ROOT_ID},
         {span_id   , ?HEADER_RPC_ID},
         {parent_id , ?HEADER_RPC_PARENT_ID},
@@ -268,13 +266,18 @@ do_add_deadline_header(Deadline, Headers) ->
 
 -endif. %% TEST
 
-add_rpc_id_header({Id, HeaderName}, Context) ->
+make_rpc_id_header({Id, HeaderName}, Context) ->
     {HeaderName, woody_context:get_rpc_id(Id, Context)}.
 
 %% Response
+-type error_class()         :: woody_error:class() | business_error | no_error.
+-type header_parse_value()  :: none | multiple | woody:http_header_val().
+-type e_headers_parse_res() :: {woody:header_type(), {header_parse_value(), header_parse_value()}}.
+-type body_action()         :: skip | get.
+-type body_ref()            :: term().
 
 -spec handle_result(_, woody_state:st()) ->
-    {ok, woody:http_body()} | error().
+    {ok, woody:http_body()} | error_result().
 handle_result(Result, WoodyState) ->
     Result1 = case genlib_app:env(woody, trace_http_client) of
         true ->
@@ -306,7 +309,7 @@ trace_http_reponse(ErrorResult, _WoodyState) ->
     ErrorResult.
 
 do_handle_result({ok, 200, Headers, Body}, WoodyState) ->
-    Meta = case check_error_headers(200, Headers) of
+    Meta = case check_woody_error_headers(200, Headers) of
         {no_error, <<>>} ->
             #{};
         {business_error, Details} ->
@@ -318,7 +321,7 @@ do_handle_result({ok, 200, Headers, Body}, WoodyState) ->
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
     handle_body(get, Body, WoodyState);
 do_handle_result({ok, Code, Headers, Body}, WoodyState) ->
-    {Class, Details} = check_error_headers(Code, Headers),
+    {Class, Details} = check_woody_error_headers(Code, Headers),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status=>error, code=>Code, reason=>Details}),
     %% Free the connection
     _ = handle_body(skip, Body, WoodyState),
@@ -356,8 +359,8 @@ do_handle_result({error, Reason}, WoodyState) ->
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Details}),
     {error, {system, {internal, result_unexpected, Details}}}.
 
-%% -spec get_body({ok, woody:http_body()} | {error, atom()}, woody_state:st()) ->
-%%     {ok, woody:http_body()} | error().
+-spec handle_body(body_action(), {ok, woody:http_body()} | {error, atom()} | body_ref(), woody_state:st()) ->
+     {ok, woody:http_body()} | error_result().
 handle_body(_, Ok = {ok, _}, _) ->
     Ok;
 handle_body(_, {error, Reason}, WoodyState) ->
@@ -375,10 +378,10 @@ handle_body(skip, Ref, WoodyState) ->
           ok
   end.
 
--spec check_error_headers(woody:http_code(), woody:http_headers()) ->
-    {woody_error:class() | business_error | no_error, woody_error:details()}.
-check_error_headers(Code, Headers) ->
-    format_error(Code, get_error_headers(Headers)).
+-spec check_woody_error_headers(woody:http_code(), woody:http_headers()) ->
+    {error_class(), woody_error:details()}.
+check_woody_error_headers(Code, Headers) ->
+    get_resposnse_error(Code, get_error_headers(Headers)).
 
 -spec get_error_headers(woody:http_headers()) ->
     e_headers_parse_res().
@@ -400,13 +403,13 @@ fallback_to_old_headers({none, none}, Headers) ->
 fallback_to_old_headers(Result, _) ->
     {new, Result}.
 
--spec format_error(woody:http_code(), e_headers_parse_res()) ->
-    {woody_error:class() | business_error | no_error, woody_error:details()}.
-format_error(Code, HeaderParseRes = {_, {Class, _}}) ->
+-spec get_resposnse_error(woody:http_code(), e_headers_parse_res()) ->
+    {error_class(), woody_error:details()}.
+get_resposnse_error(Code, HeaderParseRes = {_, {Class, _}}) ->
     {get_error_class(Code, Class), get_error_details(HeaderParseRes, Code)}.
 
 -spec get_error_class(woody:http_code(), header_parse_value()) ->
-    woody_error:class() | no_error | business_error.
+    error_class().
 get_error_class(200, <<>>) ->
     no_error;
 get_error_class(200, <<"business error">>) ->
