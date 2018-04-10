@@ -28,10 +28,11 @@
     event_handler  := woody:ev_handler(),
     ip             := inet:ip_address(),
     port           := inet:port_number(),
-    protocol       => thrift,
-    transport      => http,
-    net_opts       => cowboy_protocol:opts(),
-    handler_limits => handler_limits()
+    protocol          => thrift,
+    transport         => http,
+    net_opts          => cowboy_protocol:opts(),
+    handler_limits    => handler_limits(),
+    additional_routes => [{woody:path(), module(), any()}]
 }.
 
 -export_type([options/0]).
@@ -103,16 +104,18 @@ validate_event_handler(Handler) ->
     cowboy_router:dispatch_rules().
 get_dispatch(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits = maps:get(handler_limits, Opts, #{}),
-    Paths  = get_paths(config(), Limits, EvHandler, Handlers, []),
+    AdditionalRoutes = maps:get(additional_routes, Opts, []),
+    Paths  = get_paths(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []),
     cowboy_router:compile([{'_', Paths}]).
 
--spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Paths) -> Paths when
-    Handlers :: list(woody:http_handler(woody:th_handler())),
-    Paths    :: list({woody:path(), module(), state()}).
-get_paths(_, _, _, [], Paths) ->
-    Paths;
-get_paths(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], Paths) ->
-    get_paths(ServerOpts, Limits, EvHandler, T, [
+-spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), AdditionalRoutes, Handlers, Paths) -> Paths when
+    AdditionalRoutes :: [{woody:path(), module(), any()}],
+    Handlers         :: list(woody:http_handler(woody:th_handler())),
+    Paths            :: list({woody:path(), module(), state()}).
+get_paths(_, _, _, AdditionalRoutes, [], Paths) ->
+    AdditionalRoutes ++ Paths;
+get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, [{PathMatch, {Service, Handler}} | T], Paths) ->
+    get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, T, [
         {PathMatch, ?MODULE, #{
             th_handler     => {Service, Handler},
             ev_handler     => EvHandler,
@@ -120,7 +123,7 @@ get_paths(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], 
             handler_limits => Limits
         }} | Paths
     ]);
-get_paths(_, _, _, [Handler | _], _) ->
+get_paths(_, _, _, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 -spec config() ->

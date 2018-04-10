@@ -7,4 +7,5 @@ erl_crash.dump
 *.sublime-workspace
 .edts
 .DS_Store
-
+.rebar3/
+ebin/
