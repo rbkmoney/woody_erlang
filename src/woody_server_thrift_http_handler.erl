@@ -10,6 +10,9 @@
 %% woody_server callback
 -export([child_spec/2]).
 
+%% API
+-export([get_routes/1]).
+
 %% cowboy_http_handler callbacks
 -export([init/3]).
 -export([handle/2]).
@@ -23,19 +26,32 @@
 }.
 -export_type([handler_limits/0]).
 
--type options() :: #{
-    handlers       := list(woody:http_handler(woody:th_handler())),
-    event_handler  := woody:ev_handler(),
-    ip             := inet:ip_address(),
-    port           := inet:port_number(),
-    protocol          => thrift,
-    transport         => http,
-    net_opts          => cowboy_protocol:opts(),
-    handler_limits    => handler_limits(),
-    additional_routes => [{woody:path(), module(), any()}]
-}.
+-type route(T) :: {woody:path(), module(), T}.
+-export_type([route/1]).
 
+%% ToDo: restructure options() to split server options and route options and
+%%       get rid of separate route_opts() when backward compatibility isn't an issue.
+-type options() :: #{
+    handlers              := list(woody:http_handler(woody:th_handler())),
+    event_handler         := woody:ev_handler(),
+    ip                    := inet:ip_address(),
+    port                  := inet:port_number(),
+    protocol              => thrift,
+    transport             => http,
+    net_opts              => cowboy_protocol:opts(),
+    handler_limits        => handler_limits(),
+    additional_routes     => [route(_)]
+}.
 -export_type([options/0]).
+
+-type route_opts() :: #{
+    handlers              := list(woody:http_handler(woody:th_handler())),
+    event_handler         := woody:ev_handler(),
+    protocol              => thrift,
+    transport             => http,
+    handler_limits        => handler_limits()
+}.
+-export_type([route_opts/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
 -type server_opts() :: #{
@@ -102,28 +118,36 @@ validate_event_handler(Handler) ->
 
 -spec get_dispatch(options())->
     cowboy_router:dispatch_rules().
-get_dispatch(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
-    Limits = maps:get(handler_limits, Opts, #{}),
-    AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    Paths  = get_paths(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []),
-    cowboy_router:compile([{'_', Paths}]).
+get_dispatch(Opts) ->
+    cowboy_router:compile([{'_', get_all_routes(Opts)}]).
 
--spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), AdditionalRoutes, Handlers, Paths) -> Paths when
-    AdditionalRoutes :: [{woody:path(), module(), any()}],
-    Handlers         :: list(woody:http_handler(woody:th_handler())),
-    Paths            :: list({woody:path(), module(), state()}).
-get_paths(_, _, _, AdditionalRoutes, [], Paths) ->
-    AdditionalRoutes ++ Paths;
-get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, [{PathMatch, {Service, Handler}} | T], Paths) ->
-    get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, T, [
+-spec get_all_routes(options())->
+    [route(_)].
+get_all_routes(Opts) ->
+    AdditionalRoutes = maps:get(additional_routes, Opts, []),
+    AdditionalRoutes ++ get_routes(maps:with([handlers, event_handler, handler_limits, protocol, transport], Opts)).
+
+-spec get_routes(route_opts())->
+    [route(state())].
+get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+    Limits = maps:get(handler_limits, Opts, #{}),
+    get_routes(config(), Limits, EvHandler, Handlers, []).
+
+-spec get_routes(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Routes) -> Routes when
+    Handlers   :: list(woody:http_handler(woody:th_handler())),
+    Routes     :: [route(state())].
+get_routes(_, _, _, [], Routes) ->
+    Routes;
+get_routes(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], Routes) ->
+    get_routes(ServerOpts, Limits, EvHandler, T, [
         {PathMatch, ?MODULE, #{
             th_handler     => {Service, Handler},
             ev_handler     => EvHandler,
             server_opts    => ServerOpts,
             handler_limits => Limits
-        }} | Paths
+        }} | Routes
     ]);
-get_paths(_, _, _, _, [Handler | _], _) ->
+get_routes(_, _, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 -spec config() ->
