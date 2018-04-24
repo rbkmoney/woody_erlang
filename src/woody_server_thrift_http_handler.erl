@@ -10,6 +10,8 @@
 %% woody_server callback
 -export([child_spec/2]).
 
+-export([get_paths/1]).
+
 %% cowboy_http_handler callbacks
 -export([init/3]).
 -export([handle/2]).
@@ -23,18 +25,20 @@
 }.
 -export_type([handler_limits/0]).
 
--type options() :: #{
-    handlers       := list(woody:http_handler(woody:th_handler())),
-    event_handler  := woody:ev_handler(),
-    ip             := inet:ip_address(),
-    port           := inet:port_number(),
-    protocol          => thrift,
-    transport         => http,
-    net_opts          => cowboy_protocol:opts(),
-    handler_limits    => handler_limits(),
-    additional_routes => [{woody:path(), module(), any()}]
-}.
+-type route_path(T) :: {woody:path(), module(), T}.
+-export_type([route_path/1]).
 
+-type options() :: #{
+    handlers              := list(woody:http_handler(woody:th_handler())),
+    event_handler         := woody:ev_handler(),
+    ip                    := inet:ip_address(),
+    port                  := inet:port_number(),
+    protocol              => thrift,
+    transport             => http,
+    net_opts              => cowboy_protocol:opts(),
+    handler_limits        => handler_limits(),
+    additional_routes     => [route_path(_)]
+}.
 -export_type([options/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
@@ -102,16 +106,20 @@ validate_event_handler(Handler) ->
 
 -spec get_dispatch(options())->
     cowboy_router:dispatch_rules().
-get_dispatch(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
-    Limits = maps:get(handler_limits, Opts, #{}),
+get_dispatch(Opts) ->
+    cowboy_router:compile([{'_', get_paths(Opts)}]).
+
+-spec get_paths(options())->
+    [route_path(_)].
+get_paths(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+    Limits           = maps:get(handler_limits, Opts, #{}),
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    Paths  = get_paths(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []),
-    cowboy_router:compile([{'_', Paths}]).
+    get_paths(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []).
 
 -spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), AdditionalRoutes, Handlers, Paths) -> Paths when
-    AdditionalRoutes :: [{woody:path(), module(), any()}],
+    AdditionalRoutes :: [route_path(_)],
     Handlers         :: list(woody:http_handler(woody:th_handler())),
-    Paths            :: list({woody:path(), module(), state()}).
+    Paths            :: [route_path(state() | any())].
 get_paths(_, _, _, AdditionalRoutes, [], Paths) ->
     AdditionalRoutes ++ Paths;
 get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, [{PathMatch, {Service, Handler}} | T], Paths) ->
