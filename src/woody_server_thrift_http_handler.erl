@@ -10,7 +10,7 @@
 %% woody_server callback
 -export([child_spec/2]).
 
--export([get_paths/1]).
+-export([get_routes/1]).
 
 %% cowboy_http_handler callbacks
 -export([init/3]).
@@ -25,8 +25,8 @@
 }.
 -export_type([handler_limits/0]).
 
--type route_path(T) :: {woody:path(), module(), T}.
--export_type([route_path/1]).
+-type route(T) :: {woody:path(), module(), T}.
+-export_type([route/1]).
 
 -type options() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
@@ -37,7 +37,7 @@
     transport             => http,
     net_opts              => cowboy_protocol:opts(),
     handler_limits        => handler_limits(),
-    additional_routes     => [route_path(_)]
+    additional_routes     => [route(_)]
 }.
 -export_type([options/0]).
 
@@ -107,31 +107,31 @@ validate_event_handler(Handler) ->
 -spec get_dispatch(options())->
     cowboy_router:dispatch_rules().
 get_dispatch(Opts) ->
-    cowboy_router:compile([{'_', get_paths(Opts)}]).
+    cowboy_router:compile([{'_', get_routes(Opts)}]).
 
--spec get_paths(options())->
-    [route_path(_)].
-get_paths(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
+-spec get_routes(options())->
+    [route(_)].
+get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits           = maps:get(handler_limits, Opts, #{}),
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    get_paths(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []).
+    get_routes(config(), Limits, EvHandler, AdditionalRoutes, Handlers, []).
 
--spec get_paths(server_opts(), handler_limits(), woody:ev_handler(), AdditionalRoutes, Handlers, Paths) -> Paths when
-    AdditionalRoutes :: [route_path(_)],
+-spec get_routes(server_opts(), handler_limits(), woody:ev_handler(), AdditionalRoutes, Handlers, Routes) -> Routes when
+    AdditionalRoutes :: [route(_)],
     Handlers         :: list(woody:http_handler(woody:th_handler())),
-    Paths            :: [route_path(state() | any())].
-get_paths(_, _, _, AdditionalRoutes, [], Paths) ->
-    AdditionalRoutes ++ Paths;
-get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, [{PathMatch, {Service, Handler}} | T], Paths) ->
-    get_paths(ServerOpts, Limits, EvHandler, AdditionalRoutes, T, [
+    Routes           :: [route(state() | any())].
+get_routes(_, _, _, AdditionalRoutes, [], Routes) ->
+    AdditionalRoutes ++ Routes;
+get_routes(ServerOpts, Limits, EvHandler, AdditionalRoutes, [{PathMatch, {Service, Handler}} | T], Routes) ->
+    get_routes(ServerOpts, Limits, EvHandler, AdditionalRoutes, T, [
         {PathMatch, ?MODULE, #{
             th_handler     => {Service, Handler},
             ev_handler     => EvHandler,
             server_opts    => ServerOpts,
             handler_limits => Limits
-        }} | Paths
+        }} | Routes
     ]);
-get_paths(_, _, _, _, [Handler | _], _) ->
+get_routes(_, _, _, _, [Handler | _], _) ->
     error({bad_handler_spec, Handler}).
 
 -spec config() ->
