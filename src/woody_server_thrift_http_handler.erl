@@ -10,6 +10,7 @@
 %% woody_server callback
 -export([child_spec/2]).
 
+%% API
 -export([get_routes/1]).
 
 %% cowboy_http_handler callbacks
