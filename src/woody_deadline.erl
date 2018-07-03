@@ -9,6 +9,8 @@
 -export([from_timeout/1]).
 -export([to_binary/1]).
 -export([from_binary/1]).
+-export([to_unixtime_ms/1]).
+-export([from_unixtime_ms/1]).
 
 %% Types
 -type millisec() :: 0..1000.
@@ -24,14 +26,14 @@
 is_reached(undefined) ->
     false;
 is_reached(Deadline) ->
-    unow() >= to_unixtime(Deadline).
+    unow() >= to_unixtime_ms(Deadline).
 
 -spec to_timeout(deadline()) ->
     timeout().
 to_timeout(undefined) ->
     infinity;
 to_timeout(Deadline) ->
-    case to_unixtime(Deadline) - unow() of
+    case to_unixtime_ms(Deadline) - unow() of
         Timeout when Timeout > 0 ->
             Timeout;
         _ ->
@@ -43,8 +45,8 @@ to_timeout(Deadline) ->
 from_timeout(infinity) ->
     undefined;
 from_timeout(TimeoutMillisec) ->
-    DeadlineSec = unow() + TimeoutMillisec,
-    {genlib_time:unixtime_to_daytime(DeadlineSec div 1000), DeadlineSec rem 1000}.
+    DeadlineMillisec = unow() + TimeoutMillisec,
+    from_unixtime_ms(DeadlineMillisec).
 
 -spec to_binary(deadline()) ->
     binary().
@@ -75,11 +77,17 @@ from_binary(Bin) ->
             erlang:error({bad_deadline, Error}, [Bin])
     end.
 
+-spec to_unixtime_ms(deadline()) -> non_neg_integer().
+to_unixtime_ms({DateTime, Millisec}) ->
+    genlib_time:daytime_to_unixtime(DateTime) * 1000 + Millisec.
+
+-spec from_unixtime_ms(non_neg_integer()) -> deadline().
+from_unixtime_ms(DeadlineMillisec) ->
+    {genlib_time:unixtime_to_daytime(DeadlineMillisec div 1000), DeadlineMillisec rem 1000}.
+
 %%
 %% Internal functions
 %%
-to_unixtime({DateTime, Millisec}) ->
-    genlib_time:daytime_to_unixtime(DateTime)*1000 + Millisec.
 
 -spec unow() ->
     millisec().
