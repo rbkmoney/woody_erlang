@@ -81,7 +81,7 @@ from_binary(Bin) ->
 to_unixtime_ms({DateTime, Millisec}) ->
     genlib_time:daytime_to_unixtime(DateTime) * 1000 + Millisec.
 
--spec from_unixtime_ms(deadline()) -> non_neg_integer().
+-spec from_unixtime_ms(non_neg_integer()) -> deadline().
 from_unixtime_ms(DeadlineMillisec) ->
     {genlib_time:unixtime_to_daytime(DeadlineMillisec div 1000), DeadlineMillisec rem 1000}.
 
