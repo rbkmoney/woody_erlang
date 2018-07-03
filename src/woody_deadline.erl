@@ -65,19 +65,14 @@ to_binary(Deadline = {{Date, Time}, Millisec}) ->
             erlang:error({bad_deadline, {Error, erlang:get_stacktrace()}}, [Deadline])
     end.
 
-%% Suppress dialyzer warning until rfc3339 spec will be fixed.
-%% see https://github.com/talentdeficit/rfc3339/pull/5
--dialyzer([{nowarn_function, [from_binary/1]}, no_match]).
 -spec from_binary(binary()) ->
     deadline().
 from_binary(Bin) ->
     case rfc3339:parse(Bin) of
-        {ok, {_Date, _Time, _Usec, TZ}} when TZ =/= 0 andalso TZ =/= undefined ->
-            erlang:error({bad_deadline, not_utc}, [Bin]);
-        {ok, {Date, Time, undefined, _TZ}} ->
-            {to_calendar_datetime(Date, Time), 0};
-        {ok, {Date, Time, Usec, _TZ}} ->
+        {ok, {Date, Time, Usec, TZ}} when TZ =:= 0 orelse TZ =:= undefined ->
             {to_calendar_datetime(Date, Time), Usec div 1000};
+        {ok, _} ->
+            erlang:error({bad_deadline, not_utc}, [Bin]);
         {error, Error} ->
             erlang:error({bad_deadline, Error}, [Bin])
     end.
