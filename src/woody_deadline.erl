@@ -69,6 +69,8 @@ to_binary(Deadline = {{Date, Time}, Millisec}) ->
     deadline().
 from_binary(Bin) ->
     case rfc3339:parse(Bin) of
+        {ok, {Date, Time, undefined, TZ}} when TZ =:= 0 orelse TZ =:= undefined ->
+            {to_calendar_datetime(Date, Time), 0};
         {ok, {Date, Time, Usec, TZ}} when TZ =:= 0 orelse TZ =:= undefined ->
             {to_calendar_datetime(Date, Time), Usec div 1000};
         {ok, _} ->
