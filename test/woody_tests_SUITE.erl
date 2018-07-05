@@ -23,7 +23,16 @@
 -export([init/3, handle/2, terminate/3]).
 
 %% common test API
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_test_case/2]).
+-export([
+    all/0,
+    groups/0,
+    init_per_suite/1,
+    end_per_suite/1,
+    init_per_group/2,
+    end_per_group/2,
+    init_per_testcase/2,
+    end_per_test_case/2
+]).
 -export([
     context_add_put_get_meta_ok_test/1,
     context_get_meta_by_key_ok_test/1,
@@ -147,6 +156,15 @@
 %%
 all() ->
     [
+        {group, legacy_client_auto_server},
+        {group, auto_client_legacy_server},
+        {group, auto_both},
+        {group, normal_both},
+        {group, legacy_both}
+    ].
+
+groups() ->
+    SpecTests = [
         context_add_put_get_meta_ok_test,
         context_get_meta_by_key_ok_test,
         context_get_empty_meta_ok_test,
@@ -187,6 +205,13 @@ all() ->
         server_http_req_validation_test,
         try_bad_handler_spec_test,
         find_multiple_pools_test
+    ],
+    [
+        {legacy_client_auto_server, [], SpecTests},
+        {auto_client_legacy_server, [], SpecTests},
+        {auto_both, [], SpecTests},
+        {normal_both, [], SpecTests},
+        {legacy_both, [], SpecTests}
     ].
 
 %%
@@ -242,6 +267,42 @@ init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C].
+
+init_per_group(legacy_client_auto_server, Config) ->
+    config_headers_mode(legacy, auto, Config);
+init_per_group(auto_client_legacy_server, Config) ->
+    config_headers_mode(auto, legacy, Config);
+init_per_group(auto_both, Config) ->
+    config_headers_mode(auto, auto, Config);
+init_per_group(normal_both, Config) ->
+    config_headers_mode(normal, normal, Config);
+init_per_group(legacy_both, Config) ->
+    config_headers_mode(legacy, legacy, Config);
+init_per_group(_Name, Config) ->
+    Config.
+
+end_per_group(Name, _Config) when
+    Name =:= legacy_client_auto_server orelse
+    Name =:= auto_client_legacy_server orelse
+    Name =:= auto_both orelse
+    Name =:= normal_both orelse
+    Name =:= legacy_both
+->
+    ok = application:set_env(woody, client_headers_mode, auto),
+    ok = application:set_env(woody, server_headers_mode, auto),
+    ok;
+end_per_group(_Name, _Config) ->
+    ok.
+
+config_headers_mode(Client, Server, Config) ->
+    ok = application:set_env(woody, client_headers_mode, Client),
+    ok = application:set_env(woody, server_headers_mode, Server),
+    [{server_headers_mode, not_auto(Server)}, {client_headers_mode, not_auto(Client)} | Config].
+
+not_auto(auto) ->
+    normal;
+not_auto(Mode) ->
+    Mode.
 
 start_tc_sup() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -656,21 +717,24 @@ call_deadline_timeout_test(_) ->
         error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
     end.
 
-server_http_req_validation_test(_) ->
+server_http_req_validation_test(Config) ->
+    HeadersMode = proplists:get_value(client_headers_mode, Config),
     Id  = <<"server_http_req_validation">>,
     {Url, _Service} = get_service_endpoint('Weapons'),
     Headers = [
-        {?HEADER_RPC_ROOT_ID   , genlib:to_binary(Id)},
-        {?HEADER_RPC_ID        , genlib:to_binary(Id)},
-        {?HEADER_RPC_PARENT_ID , genlib:to_binary(?ROOT_REQ_PARENT_ID)},
-        {<<"content-type">>    , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>          , ?CONTENT_TYPE_THRIFT}
+        {?HEADER_RPC_ROOT_ID(HeadersMode)    , genlib:to_binary(Id)},
+        {?HEADER_RPC_ID(HeadersMode)         , genlib:to_binary(Id)},
+        {?HEADER_RPC_PARENT_ID(HeadersMode)  , genlib:to_binary(?ROOT_REQ_PARENT_ID)},
+        {<<"content-type">>                  , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>                        , ?CONTENT_TYPE_THRIFT}
     ],
 
+    {ok, _Ref} = timer:kill_after(5000),
+    Opts = [{url, Url}, {recv_timeout, 100}, {connect_timeout, 100}, {send_timeout, 100}],
     %% Check missing Id headers, content-type and an empty body on the last step,
     %% as missing Accept is allowed
     lists:foreach(fun({C, H}) ->
-        {ok, C, _, _} = hackney:request(post, Url, Headers -- [H], <<>>, [{url, Url}])
+        {ok, C, _, _} = hackney:request(post, Url, Headers -- [H], <<>>, Opts)
         end, lists:zip([400, 400, 400, 415, 400], Headers)),
 
     %% Check wrong Accept
@@ -680,10 +744,10 @@ server_http_req_validation_test(_) ->
 
     %% Check wrong methods
     lists:foreach(fun(M) ->
-        {ok, 405, _, _} = hackney:request(M, Url, Headers, <<>>, [{url, Url}]) end,
+        {ok, 405, _, _} = hackney:request(M, Url, Headers, <<>>, Opts) end,
         [get, put, delete, trace, options, patch]),
-    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, [{url, Url}]),
-    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, [{url, Url}]).
+    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, Opts),
+    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, Opts).
 
 try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},

@@ -1,15 +1,16 @@
 {"1.1.0",
-[{<<"certifi">>,{pkg,<<"certifi">>,<<"0.7.0">>},1},
- {<<"cowboy">>,{pkg,<<"cowboy">>,<<"1.0.4">>},0},
+[{<<"certifi">>,{pkg,<<"certifi">>,<<"2.3.1">>},1},
+ {<<"cowboy">>,{pkg,<<"cowboy">>,<<"1.1.2">>},0},
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"1.0.2">>},1},
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib.git",
        {ref,"82ff16f4314fc406dd90752467a08fe401b009ef"}},
   0},
- {<<"hackney">>,{pkg,<<"hackney">>,<<"1.6.2">>},0},
- {<<"idna">>,{pkg,<<"idna">>,<<"1.2.0">>},1},
+ {<<"hackney">>,{pkg,<<"hackney">>,<<"1.13.0">>},0},
+ {<<"idna">>,{pkg,<<"idna">>,<<"5.1.2">>},1},
  {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.0.2">>},1},
+ {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.2.0">>},2},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.3.2">>},1},
  {<<"rfc3339">>,
   {git,"https://github.com/rbkmoney/rfc3339.git",
@@ -23,16 +24,19 @@
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
        {ref,"240bbc842f6e9b90d01bd07838778cf48752b510"}},
-  0}]}.
+  0},
+ {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.3.1">>},2}]}.
 [
 {pkg_hash,[
- {<<"certifi">>, <<"861A57F3808F7EB0C2D1802AFEAAE0FA5DE813B0DF0979153CBAFCD853ABABAF">>},
- {<<"cowboy">>, <<"A324A8DF9F2316C833A470D918AAF73AE894278B8AA6226CE7A9BF699388F878">>},
+ {<<"certifi">>, <<"D0F424232390BF47D82DA8478022301C561CF6445B5B5FB6A84D49A9E76D2639">>},
+ {<<"cowboy">>, <<"61AC29EA970389A88ECA5A65601460162D370A70018AFE6F949A29DCA91F3BB0">>},
  {<<"cowlib">>, <<"9D769A1D062C9C3AC753096F868CA121E2730B9A377DE23DEC0F7E08B1DF84EE">>},
- {<<"hackney">>, <<"96A0A5E7E65B7ACAD8031D231965718CC70A9B4131A8B033B7543BBD673B8210">>},
- {<<"idna">>, <<"AC62EE99DA068F43C50DC69ACF700E03A62A348360126260E87F2B54ECED86B2">>},
+ {<<"hackney">>, <<"24EDC8CD2B28E1C652593833862435C80661834F6C9344E84B6A2255E7AEEF03">>},
+ {<<"idna">>, <<"E21CB58A09F0228A9E0B95EAA1217F1BCFC31A1AAA6E1FDF2F53A33F7DBD9494">>},
  {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},
  {<<"mimerl">>, <<"993F9B0E084083405ED8252B99460C4F0563E41729AB42D9074FD5E52439BE88">>},
+ {<<"parse_trans">>, <<"2ADFA4DAF80C14DC36F522CF190EB5C4EE3E28008FC6394397C16F62A26258C2">>},
  {<<"ranch">>, <<"E4965A144DC9FBE70E5C077C65E73C57165416A901BD02EA899CFD95AA890986">>},
- {<<"ssl_verify_fun">>, <<"28A4D65B7F59893BC2C7DE786DEC1E1555BD742D336043FE644AE956C3497FBE">>}]}
+ {<<"ssl_verify_fun">>, <<"28A4D65B7F59893BC2C7DE786DEC1E1555BD742D336043FE644AE956C3497FBE">>},
+ {<<"unicode_util_compat">>, <<"A1F612A7B512638634A603C8F401892AFBF99B8CE93A45041F8AACA99CADB85E">>}]}
 ].
