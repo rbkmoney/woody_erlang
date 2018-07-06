@@ -392,7 +392,8 @@ check_deadline_header({DeadlineBin, Req}, Mode, State) ->
         Deadline -> check_deadline(Deadline, Req, Mode, State)
     catch
         error:{bad_deadline, Error} ->
-            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_DEADLINE(Mode), " header: ", Error]), Req, State)
+            ErrorDescription = woody_util:to_binary(["bad ", ?HEADER_DEADLINE(Mode), " header: ", Error]),
+            reply_bad_header(400, ErrorDescription, Req, State)
     end.
 
 -spec check_deadline(woody:deadline(), cowboy_req:req(), woody_util:headers_mode(), state()) ->

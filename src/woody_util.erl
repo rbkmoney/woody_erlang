@@ -61,7 +61,7 @@ get_rpc_reply_type(_) -> call.
 get_req_headers_mode(Req) ->
     get_req_headers_mode(application:get_env(woody, server_headers_mode, auto), Req).
 
--spec get_error_headers_mode(woody:http_headers()) -> 
+-spec get_error_headers_mode(woody:http_headers()) ->
     headers_mode().
 get_error_headers_mode(Headers) ->
     get_error_headers_mode(application:get_env(woody, client_headers_mode, auto), Headers).
