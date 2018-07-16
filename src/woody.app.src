@@ -10,7 +10,8 @@
         cowboy,
         hackney,
         thrift,
-        rfc3339
+        rfc3339,
+        gproc
     ]},
     {env, [
         {acceptors_pool_size, 100},
