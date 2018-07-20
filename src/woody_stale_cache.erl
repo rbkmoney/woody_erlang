@@ -7,7 +7,7 @@
 -export_type([value  /0]).
 -export([child_spec/2]).
 -export([start_link/1]).
--export([get       /2]).
+-export([get       /3]).
 -export([store     /3]).
 
 %% gen_server callbacks
@@ -18,7 +18,6 @@
 %% API
 %%
 -type options() :: #{
-    validtime        => non_neg_integer(),
     lifetime         => non_neg_integer(),
     cleanup_interval => non_neg_integer(),
     local_name       => atom()
@@ -42,14 +41,14 @@ child_spec(ChildID, Options) ->
 start_link(Options) ->
     gen_server:start_link(server_reg_name(Options), ?MODULE, Options, []).
 
--spec get(options(), key()) ->
+-spec get(options(), key(), non_neg_integer()) ->
       {valid, value()}
     | {stale, value()}
     | not_found
 .
-get(Options, Key) ->
+get(Options, Key, ValidTime) ->
     case ets:lookup(ets_name(Options), Key) of
-        [V] -> extract_value(V);
+        [V] -> extract_value(Options, V, ValidTime);
         [ ] -> not_found
     end.
 
@@ -118,10 +117,12 @@ terminate(_, _) ->
 %%
 %% local
 %%
--spec extract_value({key(), value(), non_neg_integer(), non_neg_integer()}) ->
+-spec extract_value(options(), {key(), value(), non_neg_integer()}, non_neg_integer()) ->
     value().
-extract_value({_Key, Value, ValidTill, AliveTill}) ->
+extract_value(#{lifetime := Lifetime}, {_Key, Value, StoreTs}, ValidTime) ->
     CurrentTime = timestamp_ms(),
+    AliveTill = StoreTs + Lifetime,
+    ValidTill = StoreTs + ValidTime,
     if
         AliveTill < CurrentTime -> not_found;
         ValidTill < CurrentTime -> {stale, Value};
@@ -130,9 +131,8 @@ extract_value({_Key, Value, ValidTill, AliveTill}) ->
 
 -spec do_store(key(), value(), state()) ->
     ok.
-do_store(Key, Value, #{options := Options = #{validtime := ValidTime, lifetime := Lifetime}}) ->
-    CurrentTime = timestamp_ms(),
-    true = ets:insert(ets_name(Options), {Key, Value, CurrentTime + ValidTime, CurrentTime + Lifetime}),
+do_store(Key, Value, #{options := Options}) ->
+    true = ets:insert(ets_name(Options), {Key, Value, timestamp_ms()}),
     ok.
 
 -spec schedule_clean(state()) ->
@@ -146,9 +146,10 @@ schedule_clean(S = #{tref := TRef}) ->
 
 -spec cleanup(options()) ->
     ok.
-cleanup(Options) ->
+cleanup(Options = #{lifetime := Lifetime}) ->
     % Delete too old (ExpireTime older=less than bound) entries
-    _ = ets:select_delete(ets_name(Options), [{{'_', '_', '_', '$1'}, [], [{'<', '$1', timestamp_ms()}]}]),
+    AliveTill = timestamp_ms() + Lifetime,
+    _ = ets:select_delete(ets_name(Options), [{{'_', '_', '$1'}, [], [{'<', '$1', AliveTill}]}]),
     ok.
 
 -spec timestamp_ms() ->

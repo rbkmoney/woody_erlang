@@ -11,7 +11,8 @@
         hackney,
         thrift,
         rfc3339,
-        gproc
+        gproc,
+        cache
     ]},
     {env, [
         {acceptors_pool_size, 100},
