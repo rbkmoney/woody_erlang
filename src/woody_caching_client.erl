@@ -1,7 +1,9 @@
 -module(woody_caching_client).
 
 %% API
--export_type([cache_control/0]).
+-export_type([cache_control    /0]).
+-export_type([lru_cache_options/0]).
+-export_type([options          /0]).
 -export([child_spec/2]).
 -export([start_link/1]).
 -export([call      /3]).
@@ -14,6 +16,26 @@
 %% API
 %%
 -type cache_control() :: lru | {stale, timeout()} | no_cache.
+
+-type lru_cache_options() :: #{
+    local_name => atom(),
+    type       => set | ordered_set,
+    policy     => lru | mru,
+    memory     => integer(),
+    size       => integer(),
+    n          => integer(),
+    ttl        => integer(),
+    check      => integer(),
+    stats      => function() | {module(), atom()},
+    heir       => atom() | pid()
+}.
+
+-type options() :: #{
+    workers_name := atom(),
+    stale_cache  := woody_stale_cache:options(),
+    lru_cache    := lru_cache_options(),
+    woody_client := woody_client:options()
+}.
 
 -spec child_spec(atom(), options()) ->
     supervisor:child_spec().
@@ -86,8 +108,8 @@ get_from_cache(_, no_cache, _) ->
     not_found;
 get_from_cache(Key, lru, Options) ->
     case cache:get(lru_cache_name(Options), Key) of
-        OK={ok, _} -> OK;
-        undefined  -> not_found
+        undefined  -> not_found;
+        V          -> {ok, V}
     end;
 get_from_cache(Key, {stale, Timeout}, Options) ->
     case woody_stale_cache:get(stale_cache_options(Options), Key, Timeout) of
@@ -101,30 +123,11 @@ get_from_cache(Key, {stale, Timeout}, Options) ->
 update_cache(_, _, no_cache, _) ->
     ok;
 update_cache(Key, Value, lru, Options) ->
-    ok = cache:get(lru_cache_name(Options), Key, Value);
+    ok = cache:put(lru_cache_name(Options), Key, Value);
 update_cache(Key, Value, {stale, _}, Options) ->
     ok = woody_stale_cache:store(stale_cache_options(Options), Key, Value).
 
 %%
-
--type lru_cache_options() :: #{
-    local_name => atom(),
-    type       => set | ordered_set,
-    policy     => lru | mru,
-    memory     => integer(),
-    size       => integer(),
-    n          => integer(),
-    ttl        => integer(),
-    check      => integer(),
-    stats      => function() | {module(), atom()},
-    heir       => atom() | pid()
-}.
--type options() :: #{
-    workers_name := atom(),
-    stale_cache  := woody_stale_cache:options(),
-    lru_cache    := lru_cache_options(),
-    woody_client := woody_client:options()
-}.
 
 -spec workers_reg_name(options()) ->
     genlib_gen:reg_name().

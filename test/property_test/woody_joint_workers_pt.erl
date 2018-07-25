@@ -10,8 +10,8 @@ prop_test() ->
         begin
             Pid = start_workers(),
 
-            {History, State, Result} = run_parallel_commands(?MODULE, Commands),
             % {History, State, Result} = run_commands(?MODULE, Commands),
+            {History, State, Result} = run_parallel_commands(?MODULE, Commands),
 
             ok = stop_workers(Pid),
 
@@ -44,7 +44,7 @@ do(ID, Successfulness) ->
     catch woody_joint_workers:do(workers, {ID, Successfulness}, Task, woody_deadline:from_timeout(WorkerTimeout)).
 
 % если уменьшать, то будут ложные срабатывания
--define(timeout_k, 5).
+-define(timeout_k, 10).
 task_timeouts(success) ->
     {?timeout_k * 1, ?timeout_k * 3};
 task_timeouts(fail) ->

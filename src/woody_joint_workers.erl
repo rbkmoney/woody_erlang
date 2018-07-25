@@ -7,7 +7,7 @@
 
 %% Internal API
 -export([worker_start_link/3]).
--export([worker/4]).
+-export([worker_init/4]).
 
 -type deadline() :: woody_deadline:deadline().
 -type task(Result) :: fun((deadline()) -> Result).
@@ -56,17 +56,29 @@ worker_child_spec(ChildID) ->
 -spec worker_start_link(id(), task(_), deadline()) ->
     genlib_gen:start_ret().
 worker_start_link(ID, Task, Deadline) ->
-    proc_lib:start_link(?MODULE, worker, [ID, self(), Task, Deadline], deadline_to_timeout(Deadline)).
+    proc_lib:start_link(?MODULE, worker_init, [ID, self(), Task, Deadline], deadline_to_timeout(Deadline)).
 
--spec worker(id(), pid(), task(_), deadline()) ->
+-spec worker_init(id(), pid(), task(_), deadline()) ->
     ok.
-worker(ID, Parent, Task, Deadline) ->
+worker_init(ID, Parent, Task, Deadline) ->
     Self = self(),
     case gproc:reg_or_locate({n, l, ID}) of
         {Self, undefined} ->
             ok = proc_lib:init_ack(Parent, {ok, Self}),
-            _ = genlib:unwrap(timer:exit_after(deadline_to_timeout(Deadline), self(), deadline_reached)),
-            Result = Task(Deadline),
+            Timeout = deadline_to_timeout(Deadline),
+            ok = wait_for_waiter(Timeout),
+            _ = case Timeout of
+                    infinity ->
+                        ok;
+                    Timeout ->
+                        _ = genlib:unwrap(timer:exit_after(Timeout, self(), deadline_reached))
+                end,
+            Result =
+                try
+                    {ok, Task(Deadline)}
+                catch Class:Error ->
+                    {exception, {Class, Error, erlang:get_stacktrace()}}
+                end,
             ok = broadcast_result(Result);
         {Pid, undefined} ->
             ok = proc_lib:init_ack(Parent, {ok, Pid})
@@ -78,7 +90,7 @@ worker(ID, Parent, Task, Deadline) ->
 -spec do(genlib_gen:ref(), id(), task(Result), deadline(), non_neg_integer()) ->
     Result.
 do(Ref, ID, Task, Deadline, 0) ->
-    erlang:error(retrying_error, [Ref, ID, Task, Deadline]);
+    erlang:error(fatal_retrying_error, [Ref, ID, Task, Deadline]);
 do(Ref, ID, Task, Deadline, Attmpts) ->
     Pid = genlib:unwrap(supervisor:start_child(Ref, [ID, Task, Deadline])),
     case wait_for_result(Pid, Deadline) of
@@ -94,20 +106,26 @@ do(Ref, ID, Task, Deadline, Attmpts) ->
                 false -> do(Ref, ID, Task, Deadline);
                 true  -> erlang:error(deadline_reached, [Ref, ID, Task, Deadline])
             end;
+        {error, {exception, {Class, Error, Stacktrace}}} ->
+            erlang:Class({Error, Stacktrace});
         {error, Error} ->
             erlang:error(Error, [Ref, ID, Task, Deadline])
     end.
 
 -spec wait_for_result(pid(), deadline()) ->
-    {ok, _Result} | {error, deadline_reached | race_detected | {worker_error, _Reason}}.
+      {ok, _Result}
+    | {error, deadline_reached | race_detected | {worker_error, _Reason} | {exception, {atom(), term(), list()}}}.
 wait_for_result(Pid, Deadline) ->
     Timeout = deadline_to_timeout(Deadline),
     MRef = erlang:monitor(process, Pid),
     Pid ! {?MODULE, wait_for_result, MRef, self()},
     receive
-        {?MODULE, broadcast_result, MRef, Result} ->
+        {?MODULE, broadcast_result, MRef, {ok, Result}} ->
             erlang:demonitor(MRef, [flush]),
             {ok, Result};
+        {?MODULE, broadcast_result, MRef, {exception, Exception}} ->
+            erlang:demonitor(MRef, [flush]),
+            {error, {exception, Exception}};
         %% произошла гонка
         {'DOWN', MRef, process, Pid, Reason}
             when Reason =:= normal; Reason =:= noproc ->
@@ -132,6 +150,17 @@ broadcast_result(Result) ->
             broadcast_result(Result)
     after 0 ->
         ok
+    end.
+
+-spec wait_for_waiter(timeout()) ->
+    pid().
+wait_for_waiter(Timeout) ->
+    receive
+        {?MODULE, wait_for_result, MRef, Pid} ->
+            self() ! {?MODULE, wait_for_result, MRef, Pid},
+            ok
+    after Timeout ->
+        exit(deadline_reached)
     end.
 
 -spec deadline_to_timeout(deadline()) ->

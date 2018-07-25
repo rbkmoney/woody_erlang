@@ -16,6 +16,7 @@ all() ->
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({woody_joint_workers, do, 4}, x),
+
     {ok, Apps} = application:ensure_all_started(woody),
     [{apps, Apps}|C].
 
