@@ -293,19 +293,11 @@ start_caching_client() ->
 woody_caching_client_options() ->
     #{
         workers_name => test_caching_client_workers,
-        stale_cache  => woody_caching_client_stale_cache_options(test_caching_client_stale_cache),
-        lru_cache    => woody_caching_client_lru_cache_options(test_caching_client_lru_cache),
+        cache        => woody_caching_client_cache_options(test_caching_client_cache),
         woody_client => pool_opts({test_caching_client_pool, 1000, 10})
     }.
 
-woody_caching_client_stale_cache_options(Name) ->
-    #{
-        lifetime         => 60 * 1000,
-        cleanup_interval => 1000,
-        local_name       => Name
-    }.
-
-woody_caching_client_lru_cache_options(Name) ->
+woody_caching_client_cache_options(Name) ->
     #{
         local_name => Name,
         n          => 10,
@@ -743,10 +735,10 @@ calls_with_cache(_) ->
     Context = woody_context:new(Id),
 
     {ok, Result} = woody_caching_client:call(Request, no_cache, Opts, Context),
-    {ok, Result} = woody_caching_client:call(Request, lru, Opts, Context),
-    {ok, Result} = woody_caching_client:call(Request, lru, Opts, Context),
-    {ok, Result} = woody_caching_client:call(Request, {stale, 10000}, Opts, Context),
-    {ok, Result} = woody_caching_client:call(Request, {stale, 10000}, Opts, Context).
+    {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, {stale_cache, 1000}, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, {stale_cache, 1000}, Opts, Context).
 
 %%
 %% supervisor callbacks

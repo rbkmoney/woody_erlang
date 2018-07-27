@@ -1,9 +1,9 @@
 -module(woody_caching_client).
 
 %% API
--export_type([cache_control    /0]).
--export_type([lru_cache_options/0]).
--export_type([options          /0]).
+-export_type([cache_control/0]).
+-export_type([cache_options/0]).
+-export_type([options      /0]).
 -export([child_spec/2]).
 -export([start_link/1]).
 -export([call      /3]).
@@ -15,16 +15,16 @@
 %%
 %% API
 %%
--type cache_control() :: lru | {stale, timeout()} | no_cache.
+-type cache_control() :: cache | {stale_cache, TimeoutMs::non_neg_integer()} | no_cache.
 
--type lru_cache_options() :: #{
+-type cache_options() :: #{
     local_name => atom(),
     type       => set | ordered_set,
     policy     => lru | mru,
     memory     => integer(),
     size       => integer(),
     n          => integer(),
-    ttl        => integer(),
+    ttl        => integer(), %% seconds
     check      => integer(),
     stats      => function() | {module(), atom()},
     heir       => atom() | pid()
@@ -32,8 +32,7 @@
 
 -type options() :: #{
     workers_name := atom(),
-    stale_cache  := woody_stale_cache:options(),
-    lru_cache    := lru_cache_options(),
+    cache        := cache_options(),
     woody_client := woody_client:options()
 }.
 
@@ -54,8 +53,7 @@ start_link(Options) ->
         #{strategy => one_for_one},
         [
             woody_joint_workers:child_spec(joint_workers, workers_reg_name(Options)),
-            woody_stale_cache:child_spec(stale_cache, stale_cache_options(Options)),
-            lru_cache_child_spec(lru_cache, Options),
+            cache_child_spec(cache, Options),
             woody_client:child_spec(woody_client_options(Options))
         ]
     ).
@@ -84,7 +82,6 @@ call(Request, CacheControl, Options, Context) ->
 -spec do_call(woody:request(), cache_control(), options(), woody_context:ctx()) ->
       {ok, woody:result()}
     | {exception, woody_error:business_error()}.
-    %% TODO handle woody exceptions errors
 do_call(Request, CacheControl, Options, Context) ->
     case get_from_cache(Request, CacheControl, Options) of
         OK={ok, _} ->
@@ -106,26 +103,23 @@ do_call(Request, CacheControl, Options, Context) ->
     not_found | {ok, _Value}.
 get_from_cache(_, no_cache, _) ->
     not_found;
-get_from_cache(Key, lru, Options) ->
-    case cache:get(lru_cache_name(Options), Key) of
-        undefined  -> not_found;
-        V          -> {ok, V}
-    end;
-get_from_cache(Key, {stale, Timeout}, Options) ->
-    case woody_stale_cache:get(stale_cache_options(Options), Key, Timeout) of
-        {valid, Value} -> {ok, Value};
-        {stale, _}     -> not_found;
-        not_found      -> not_found
+get_from_cache(Key, CacheControl, Options) ->
+    Now = now_ms(),
+    case {CacheControl, cache:get(cache_name(Options), Key)} of
+        {_, undefined} ->
+            not_found;
+        {{stale_cache, Lifetime}, {Ts, _}} when Ts + Lifetime < Now ->
+            not_found;
+        {_, {_, Value}} ->
+            {ok, Value}
     end.
 
 -spec update_cache(_Key, _Value, cache_control(), options()) ->
     ok.
 update_cache(_, _, no_cache, _) ->
     ok;
-update_cache(Key, Value, lru, Options) ->
-    ok = cache:put(lru_cache_name(Options), Key, Value);
-update_cache(Key, Value, {stale, _}, Options) ->
-    ok = woody_stale_cache:store(stale_cache_options(Options), Key, Value).
+update_cache(Key, Value, _, Options) ->
+    ok = cache:put(cache_name(Options), Key, {now_ms(), Value}).
 
 %%
 
@@ -139,32 +133,32 @@ workers_reg_name(#{workers_name := Name}) ->
 workers_ref(#{workers_name := Name}) ->
     Name.
 
--spec lru_cache_child_spec(atom(), options()) ->
+-spec cache_child_spec(atom(), options()) ->
     supervisor:child_spec().
-lru_cache_child_spec(ChildID, Options) ->
+cache_child_spec(ChildID, Options) ->
     #{
         id       => ChildID,
-        start    => {cache, start_link, [lru_cache_name(Options), lru_cache_options(Options)]},
+        start    => {cache, start_link, [cache_name(Options), cache_options(Options)]},
         restart  => permanent,
         type     => supervisor
     }.
 
--spec stale_cache_options(options()) ->
-    woody_stale_cache:options().
-stale_cache_options(#{stale_cache := Options}) ->
-    Options.
-
--spec lru_cache_name(options()) ->
+-spec cache_name(options()) ->
     atom().
-lru_cache_name(#{lru_cache := #{local_name := Name}}) ->
+cache_name(#{cache := #{local_name := Name}}) ->
     Name.
 
--spec lru_cache_options(options()) ->
+-spec cache_options(options()) ->
     list().
-lru_cache_options(#{lru_cache := Options}) ->
+cache_options(#{cache := Options}) ->
     maps:to_list(Options).
 
 -spec woody_client_options(options()) ->
     woody_client:options().
 woody_client_options(#{woody_client := Options}) ->
     Options.
+
+-spec now_ms() ->
+    non_neg_integer().
+now_ms() ->
+    erlang:system_time(millisecond).

@@ -1,3 +1,18 @@
+%%%
+%%% Модуль реализующий модель работы воркеров
+%%% когда при наличии одного работающего другие ожидают от него результата,
+%%% а не выполняют работу сами.
+%%%
+%%% Логика работы такая:
+%%%  - запускается воркер под супервизором
+%%%   - пробует зарегистироваться в gproc под идентификатором воркера
+%%%    - если такой воркер уже есть, то просто возвращает его пид
+%%%    - если такого воркера нет, то выполняется таск
+%%%    - по всем сообщениям с ожиданием результата выполняется рассылка результата
+%%%  - от супервизора в виде результата запуска получается пид воркера
+%%%  - послылается сообщение с ожиданием результата от воркера
+%%%  - ожидается результат
+%%%
 -module(woody_joint_workers).
 
 %% API
@@ -9,9 +24,10 @@
 -export([worker_start_link/3]).
 -export([worker_init/4]).
 
--type deadline() :: woody_deadline:deadline().
+-type deadline()   :: woody_deadline:deadline().
 -type task(Result) :: fun((deadline()) -> Result).
--type id() :: _.
+-type id()         :: _.
+-type exception()  :: {atom(), term(), list()}.
 
 %%
 %% API
@@ -65,20 +81,9 @@ worker_init(ID, Parent, Task, Deadline) ->
     case gproc:reg_or_locate({n, l, ID}) of
         {Self, undefined} ->
             ok = proc_lib:init_ack(Parent, {ok, Self}),
-            Timeout = deadline_to_timeout(Deadline),
-            ok = wait_for_waiter(Timeout),
-            _ = case Timeout of
-                    infinity ->
-                        ok;
-                    Timeout ->
-                        _ = genlib:unwrap(timer:exit_after(Timeout, self(), deadline_reached))
-                end,
-            Result =
-                try
-                    {ok, Task(Deadline)}
-                catch Class:Error ->
-                    {exception, {Class, Error, erlang:get_stacktrace()}}
-                end,
+            ok = sync_with_employer(deadline_to_timeout(Deadline)),
+            ok = set_worker_deadline_timer(Deadline),
+            Result = do_task_safe(Task, Deadline),
             ok = broadcast_result(Result);
         {Pid, undefined} ->
             ok = proc_lib:init_ack(Parent, {ok, Pid})
@@ -91,14 +96,13 @@ worker_init(ID, Parent, Task, Deadline) ->
     Result.
 do(Ref, ID, Task, Deadline, 0) ->
     erlang:error(fatal_retrying_error, [Ref, ID, Task, Deadline]);
-do(Ref, ID, Task, Deadline, Attmpts) ->
+do(Ref, ID, Task, Deadline, Attempts) ->
     Pid = genlib:unwrap(supervisor:start_child(Ref, [ID, Task, Deadline])),
     case wait_for_result(Pid, Deadline) of
         {ok, R} ->
             R;
         {error, race_detected} ->
-            timer:sleep(1),
-            do(Ref, ID, Task, Deadline, Attmpts - 1);
+            do(Ref, ID, Task, Deadline, Attempts - 1);
         {error, deadline_reached} ->
             % тут довольно спорный момент, как себя правильно вести в случае,
             % когда соединяются запросы с разными дедлайнами
@@ -114,7 +118,7 @@ do(Ref, ID, Task, Deadline, Attmpts) ->
 
 -spec wait_for_result(pid(), deadline()) ->
       {ok, _Result}
-    | {error, deadline_reached | race_detected | {worker_error, _Reason} | {exception, {atom(), term(), list()}}}.
+    | {error, deadline_reached | race_detected | {worker_error, _Reason} | {exception, exception()}}.
 wait_for_result(Pid, Deadline) ->
     Timeout = deadline_to_timeout(Deadline),
     MRef = erlang:monitor(process, Pid),
@@ -152,9 +156,9 @@ broadcast_result(Result) ->
         ok
     end.
 
--spec wait_for_waiter(timeout()) ->
-    pid().
-wait_for_waiter(Timeout) ->
+-spec sync_with_employer(timeout()) ->
+    ok.
+sync_with_employer(Timeout) ->
     receive
         {?MODULE, wait_for_result, MRef, Pid} ->
             self() ! {?MODULE, wait_for_result, MRef, Pid},
@@ -171,4 +175,21 @@ deadline_to_timeout(Deadline) ->
     catch
         error:deadline_reached ->
             0
+    end.
+
+-spec set_worker_deadline_timer(deadline()) ->
+    ok.
+set_worker_deadline_timer(Deadline) ->
+    case deadline_to_timeout(Deadline) of
+        infinity -> ok;
+        Timeout  -> _ = genlib:unwrap(timer:exit_after(Timeout, self(), deadline_reached)), ok
+    end.
+
+-spec do_task_safe(task(Result), deadline()) ->
+    {ok, Result} | {exception, exception()}.
+do_task_safe(Task, Deadline) ->
+    try
+        {ok, Task(Deadline)}
+    catch Class:Error ->
+        {exception, {Class, Error, erlang:get_stacktrace()}}
     end.
