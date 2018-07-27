@@ -15,7 +15,7 @@
 %%
 %% API
 %%
--type cache_control() :: cache | {stale_cache, TimeoutMs::non_neg_integer()} | no_cache.
+-type cache_control() :: cache | {cache_for, TimeoutMs::non_neg_integer()} | no_cache.
 
 -type cache_options() :: #{
     local_name => atom(),
@@ -108,7 +108,7 @@ get_from_cache(Key, CacheControl, Options) ->
     case {CacheControl, cache:get(cache_name(Options), Key)} of
         {_, undefined} ->
             not_found;
-        {{stale_cache, Lifetime}, {Ts, _}} when Ts + Lifetime < Now ->
+        {{cache_for, Lifetime}, {Ts, _}} when Ts + Lifetime < Now ->
             not_found;
         {_, {_, Value}} ->
             {ok, Value}
@@ -118,8 +118,10 @@ get_from_cache(Key, CacheControl, Options) ->
     ok.
 update_cache(_, _, no_cache, _) ->
     ok;
-update_cache(Key, Value, _, Options) ->
-    ok = cache:put(cache_name(Options), Key, {now_ms(), Value}).
+update_cache(Key, Value, cache, Options) ->
+    ok = cache:put(cache_name(Options), Key, {now_ms(), Value});
+update_cache(Key, Value, {cache_for, LifetimeMs}, Options) ->
+    ok = cache:put(cache_name(Options), Key, {now_ms(), Value}, LifetimeMs div 1000).
 
 %%
 

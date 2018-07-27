@@ -2,6 +2,8 @@
 -include_lib("proper/include/proper.hrl").
 -compile(export_all).
 
+%% проверяет работоспособность в условиях параллельных запросов,
+%% но по факту не может проверить, что запросы действительно соединяются
 prop_test() ->
     ?FORALL(
         Commands,
@@ -40,7 +42,7 @@ do(ID, Successfulness) ->
         end,
     catch woody_joint_workers:do(workers, {ID, Successfulness}, Task, woody_deadline:from_timeout(WorkerTimeout)).
 
-% если уменьшать, то будут ложные срабатывания
+% если уменьшать, то могут быть ложные срабатывания
 -define(timeout_k, 10).
 task_timeouts(success) ->
     {?timeout_k * 1, ?timeout_k * 3};
