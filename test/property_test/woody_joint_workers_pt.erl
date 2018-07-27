@@ -5,14 +5,10 @@
 prop_test() ->
     ?FORALL(
         Commands,
-        % commands(?MODULE, initial_state()),
         parallel_commands(?MODULE, initial_state()),
         begin
             Pid = start_workers(),
-
-            % {History, State, Result} = run_commands(?MODULE, Commands),
             {History, State, Result} = run_parallel_commands(?MODULE, Commands),
-
             ok = stop_workers(Pid),
 
             ?WHENFAIL(
@@ -39,7 +35,8 @@ do(ID, Successfulness) ->
     {TaskSleepTimeout, WorkerTimeout} = task_timeouts(Successfulness),
     Task =
         fun(_) ->
-            timer:sleep(TaskSleepTimeout)
+            ok = timer:sleep(TaskSleepTimeout),
+            {ok, ID}
         end,
     catch woody_joint_workers:do(workers, {ID, Successfulness}, Task, woody_deadline:from_timeout(WorkerTimeout)).
 
@@ -65,7 +62,7 @@ initial_state() ->
 precondition(_, _) ->
     true.
 
-postcondition(_, {call, ?MODULE, do, [_, success]}, ok) ->
+postcondition(_, {call, ?MODULE, do, [ID, success]}, {ok, ID}) ->
     true;
 postcondition(_, {call, ?MODULE, do, [_, fail]}, {'EXIT', {deadline_reached, _}}) ->
     true;
