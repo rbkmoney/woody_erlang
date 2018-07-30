@@ -161,7 +161,7 @@ config() ->
 -spec compile_filter_meta() ->
     re_mp().
 compile_filter_meta() ->
-    {ok, Re} = re:compile([?NORMAL_HEADER_META_PREFIX], [unicode, caseless]),
+    {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
     Re.
 
 -spec get_cowboy_opts(cowboy_protocol:opts() | undefined) ->

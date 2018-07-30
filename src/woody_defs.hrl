@@ -12,8 +12,8 @@
 -define(NORMAL_HEADER_E_CLASS         , << ?NORMAL_HEADER_PREFIX/binary, "error-class">>).
 -define(NORMAL_HEADER_E_REASON        , << ?NORMAL_HEADER_PREFIX/binary, "error-reason">>).
 -define(NORMAL_HEADER_DEADLINE        , << ?NORMAL_HEADER_PREFIX/binary, "deadline">>).
--define(NORMAL_HEADER_META_PREFIX     , << ?NORMAL_HEADER_PREFIX/binary, "meta-">>).
--define(NORMAL_HEADER_META_RE         , <<"woody\\.meta-">>).
+-define(NORMAL_HEADER_META_PREFIX     , << ?NORMAL_HEADER_PREFIX/binary, "meta.">>).
+-define(NORMAL_HEADER_META_RE         , <<"woody\\.meta\\.">>).
 
 %% Legacy woody headers
 -define(LEGACY_HEADER_PREFIX          , <<"x-rbk-">>).
@@ -36,7 +36,6 @@
 -define(HEADER_E_REASON(MODE), ?HEADER(MODE, ?NORMAL_HEADER_E_REASON, ?LEGACY_HEADER_E_REASON)).
 -define(HEADER_DEADLINE(MODE), ?HEADER(MODE, ?NORMAL_HEADER_DEADLINE, ?LEGACY_HEADER_DEADLINE)).
 -define(HEADER_META_PREFIX(MODE), ?HEADER(MODE, ?NORMAL_HEADER_META_PREFIX, ?LEGACY_HEADER_META_PREFIX)).
--define(HEADER_META_RE(MODE), ?HEADER(MODE, ?NORMAL_HEADER_META_RE, ?LEGACY_HEADER_META_RE)).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
