@@ -19,6 +19,10 @@
 -define(EV_CLIENT_SEND            , 'client send').
 -define(EV_CLIENT_RECEIVE         , 'client receive').
 
+-define(EV_CLIENT_CACHE_HIT       , 'client cache hit').
+-define(EV_CLIENT_CACHE_MISS      , 'client cache miss').
+-define(EV_CLIENT_CACHE_UPDATE    , 'client cache update').
+
 -define(EV_SERVER_RECEIVE         , 'server receive').
 -define(EV_SERVER_SEND            , 'server send').
 

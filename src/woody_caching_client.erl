@@ -1,4 +1,5 @@
 -module(woody_caching_client).
+-include("woody_defs.hrl").
 
 %% API
 -export_type([cache_control/0]).
@@ -84,11 +85,17 @@ call(Request, CacheControl, Options, Context) ->
     | {exception, woody_error:business_error()}.
 do_call(Request, CacheControl, Options, Context) ->
     case get_from_cache(Request, CacheControl, Options) of
-        OK={ok, _} ->
+        OK={ok, Result} ->
+            % cache hit
+            ok = emit_event(?EV_CLIENT_CACHE_HIT, #{result => Result}, Context, Options),
             OK;
         not_found ->
+            % cache miss
+            ok = emit_event(?EV_CLIENT_CACHE_MISS, #{}, Context, Options),
             case woody_client:call(Request, woody_client_options(Options), Context) of
                 {ok, Result} ->
+                    % cache update
+                    ok = emit_event(?EV_CLIENT_CACHE_UPDATE, #{result => Result}, Context, Options),
                     ok = update_cache(Request, Result, CacheControl, Options),
                     {ok, Result};
                 Exception = {exception, _} ->
@@ -164,3 +171,19 @@ woody_client_options(#{woody_client := Options}) ->
     non_neg_integer().
 now_ms() ->
     erlang:system_time(millisecond).
+
+-spec emit_event(woody_event_handler:event(), map(), woody_context:ctx(), options()) ->
+    ok.
+emit_event(Event, Meta, #{rpc_id := RPCID}, Options) ->
+    _ = woody_event_handler:handle_event(woody_event_handler(Options), Event, RPCID, Meta#{url => url(Options)}),
+    ok.
+
+-spec woody_event_handler(options()) ->
+    woody:ev_handler().
+woody_event_handler(#{woody_client := #{event_handler := EventHandler}}) ->
+    EventHandler.
+
+-spec url(options()) ->
+    woody:url().
+url(#{woody_client := #{url := URL}}) ->
+    URL.
