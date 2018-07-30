@@ -9,6 +9,8 @@
 -export([call      /3]).
 -export([child_spec/1]).
 
+-export([get_rpc_type/2]).
+
 %% Types
 -type thrift_client() :: term().
 
@@ -39,9 +41,6 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     _ = log_event(?EV_CALL_SERVICE, WoodyState1, #{}),
     do_call(make_thrift_client(Service, Opts, WoodyState1), Function, Args, WoodyState1).
 
-%%
-%% Internal functions
-%%
 -spec get_rpc_type(woody:service(), woody:func()) ->
     woody:rpc_type().
 get_rpc_type(ThriftService = {Module, Service}, Function) ->
@@ -51,6 +50,9 @@ get_rpc_type(ThriftService = {Module, Service}, Function) ->
             error(badarg, [ThriftService, Function])
     end.
 
+%%
+%% Internal functions
+%%
 -spec make_thrift_client(woody:service(), woody_client:options(), woody_state:st()) ->
     thrift_client().
 make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->

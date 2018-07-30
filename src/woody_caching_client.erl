@@ -84,18 +84,19 @@ call(Request, CacheControl, Options, Context) ->
       {ok, woody:result()}
     | {exception, woody_error:business_error()}.
 do_call(Request, CacheControl, Options, Context) ->
+    Meta = add_thrift_meta(Request, new_meta(Options, Context)),
     case get_from_cache(Request, CacheControl, Options) of
         OK={ok, Result} ->
             % cache hit
-            ok = emit_event(?EV_CLIENT_CACHE_HIT, #{result => Result}, Context, Options),
+            ok = emit_event(?EV_CLIENT_CACHE_HIT, Meta#{result => Result}, Context, Options),
             OK;
         not_found ->
             % cache miss
-            ok = emit_event(?EV_CLIENT_CACHE_MISS, #{}, Context, Options),
+            ok = emit_event(?EV_CLIENT_CACHE_MISS, Meta, Context, Options),
             case woody_client:call(Request, woody_client_options(Options), Context) of
                 {ok, Result} ->
                     % cache update
-                    ok = emit_event(?EV_CLIENT_CACHE_UPDATE, #{result => Result}, Context, Options),
+                    ok = emit_event(?EV_CLIENT_CACHE_UPDATE, Meta#{result => Result}, Context, Options),
                     ok = update_cache(Request, Result, CacheControl, Options),
                     {ok, Result};
                 Exception = {exception, _} ->
@@ -175,7 +176,7 @@ now_ms() ->
 -spec emit_event(woody_event_handler:event(), map(), woody_context:ctx(), options()) ->
     ok.
 emit_event(Event, Meta, #{rpc_id := RPCID}, Options) ->
-    _ = woody_event_handler:handle_event(woody_event_handler(Options), Event, RPCID, Meta#{url => url(Options)}),
+    _ = woody_event_handler:handle_event(woody_event_handler(Options), Event, RPCID, Meta),
     ok.
 
 -spec woody_event_handler(options()) ->
@@ -187,3 +188,24 @@ woody_event_handler(#{woody_client := #{event_handler := EventHandler}}) ->
     woody:url().
 url(#{woody_client := #{url := URL}}) ->
     URL.
+
+-spec new_meta(options(), woody_context:ctx()) ->
+    map().
+new_meta(Options, Context) ->
+    #{
+        role     => client,
+        metadata => woody_context:get_meta(Context),
+        url      => url(Options)
+    }.
+
+%% FIXME протекающая абстракция
+-spec add_thrift_meta(woody:request(), map()) ->
+    map().
+add_thrift_meta({Service = {_, ServiceName}, Function, Args}, Meta) ->
+    Meta#{
+        service        => ServiceName,
+        service_schema => Service,
+        function       => Function,
+        type           => woody_client_thrift:get_rpc_type(Service, Function),
+        args           => Args
+    }.

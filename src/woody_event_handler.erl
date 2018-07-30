@@ -111,6 +111,14 @@
 }.
 -export_type([meta_internal_error/0, meta_trace/0]).
 -type meta_client_cache() :: #{
+    role           := client,
+    service        := woody:service_name(),
+    service_schema := woody:service(),
+    function       := woody:func(),
+    type           := woody:rpc_type(),
+    args           := woody:args(),
+    metadata       := woody_context:meta(),
+
     url      := woody:url(),
     result   => woody:result() %% EV_CLIENT_CACHE_HIT | EV_CLIENT_CACHE_UPDATE
 }.

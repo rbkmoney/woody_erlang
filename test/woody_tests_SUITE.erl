@@ -729,8 +729,8 @@ calls_with_cache(_) ->
     application:ensure_all_started(sasl),
     Id = <<"call_with_cache">>,
     {_, Service} = get_service_endpoint('Weapons'),
-    Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, [<<"Enforcer">>, self_to_bin()]},
+    InvalidRequest = {Service, get_weapon, [<<"Bio Rifle">>, self_to_bin()]},
     Opts    = woody_caching_client_options(),
     Context = woody_context:new(Id),
 
@@ -738,7 +738,13 @@ calls_with_cache(_) ->
     {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
     {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
     {ok, Result} = woody_caching_client:call(Request, {stale_cache, 1000}, Opts, Context),
-    {ok, Result} = woody_caching_client:call(Request, {stale_cache, 1000}, Opts, Context).
+    {ok, Result} = woody_caching_client:call(Request, {stale_cache, 1000}, Opts, Context),
+
+    {exception, _} = woody_caching_client:call(InvalidRequest, no_cache, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, {stale_cache, 1000}, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, {stale_cache, 1000}, Opts, Context).
 
 %%
 %% supervisor callbacks
