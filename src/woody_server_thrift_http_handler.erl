@@ -428,7 +428,7 @@ find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
             H =/= RootId andalso
             H =/= ParentId
         ->
-            case re:replace(H, ?HEADER_META_PREFIX(Mode), "", [{return, binary}, anchored]) of
+            case re:replace(H, ?HEADER_META_RE(Mode), "", [{return, binary}, anchored]) of
                 H -> Acc;
                 MetaHeader -> Acc#{MetaHeader => V}
             end;
