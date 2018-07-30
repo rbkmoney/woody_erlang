@@ -24,7 +24,7 @@
     ?EV_SERVER_RECEIVE         |
     ?EV_SERVER_SEND.
 
--type evet_cache() ::
+-type event_cache() ::
     ?EV_CLIENT_CACHE_HIT  |
     ?EV_CLIENT_CACHE_MISS |
     ?EV_CLIENT_CACHE_UPDATE.
@@ -35,7 +35,7 @@
 %% Transport req     EV_CLIENT_SEND       EV_SERVER_RECEIVE
 %% Transport resp    EV_CLIENT_RECEIVE    EV_SERVER_SEND
 
--type event() :: event_client() | event_server() | evet_cache() | ?EV_INTERNAL_ERROR | ?EV_TRACE.
+-type event() :: event_client() | event_server() | event_cache() | ?EV_INTERNAL_ERROR | ?EV_TRACE.
 -export_type([event/0]).
 
 -type meta_client() :: #{
