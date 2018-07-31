@@ -24,13 +24,18 @@
     ?EV_SERVER_RECEIVE         |
     ?EV_SERVER_SEND.
 
+-type event_cache() ::
+    ?EV_CLIENT_CACHE_HIT  |
+    ?EV_CLIENT_CACHE_MISS |
+    ?EV_CLIENT_CACHE_UPDATE.
+
 %% Layer             Client               Server
 %% App invocation    EV_CALL_SERVICE      EV_INVOKE_SERVICE_HANDLER
 %% App result        EV_SERVICE_RESULT    EV_SERVICE_HANDLER_RESULT
 %% Transport req     EV_CLIENT_SEND       EV_SERVER_RECEIVE
 %% Transport resp    EV_CLIENT_RECEIVE    EV_SERVER_SEND
 
--type event() :: event_client() | event_server() | ?EV_INTERNAL_ERROR | ?EV_TRACE.
+-type event() :: event_client() | event_server() | event_cache() | ?EV_INTERNAL_ERROR | ?EV_TRACE.
 -export_type([event/0]).
 
 -type meta_client() :: #{
@@ -105,8 +110,21 @@
     body_status => atom()
 }.
 -export_type([meta_internal_error/0, meta_trace/0]).
+-type meta_client_cache() :: #{
+    role           := client,
+    service        := woody:service_name(),
+    service_schema := woody:service(),
+    function       := woody:func(),
+    type           := woody:rpc_type(),
+    args           := woody:args(),
+    metadata       := woody_context:meta(),
 
--type event_meta() :: meta_client() | meta_server() | meta_internal_error() | meta_trace().
+    url      := woody:url(),
+    result   => woody:result() %% EV_CLIENT_CACHE_HIT | EV_CLIENT_CACHE_UPDATE
+}.
+-export_type([meta_client_cache/0]).
+
+-type event_meta() :: meta_client() | meta_server() | meta_internal_error() | meta_trace() | meta_client_cache().
 -export_type([event_meta/0]).
 
 -callback handle_event
@@ -231,6 +249,12 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
+format_event(?EV_CLIENT_CACHE_HIT, #{url := URL, result := Result}) ->
+    {info, {"[client] request to '~s' cache hit: '~p'", [URL, Result]}};
+format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
+    {debug, {"[client] request to '~s' cache miss", [URL]}};
+format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result}) ->
+    {debug, {"[client] request to '~s' cache update: '~p'", [URL, Result]}};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->

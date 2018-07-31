@@ -1,11 +1,13 @@
 {"1.1.0",
-[{<<"certifi">>,{pkg,<<"certifi">>,<<"2.3.1">>},1},
+[{<<"cache">>,{pkg,<<"cache">>,<<"2.2.0">>},0},
+ {<<"certifi">>,{pkg,<<"certifi">>,<<"2.3.1">>},1},
  {<<"cowboy">>,{pkg,<<"cowboy">>,<<"1.1.2">>},0},
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"1.0.2">>},1},
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib.git",
-       {ref,"82ff16f4314fc406dd90752467a08fe401b009ef"}},
+       {ref,"8501050c19e5a36063cf0ae0d181245662bdfa32"}},
   0},
+ {<<"gproc">>,{pkg,<<"gproc">>,<<"0.8.0">>},0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.13.0">>},0},
  {<<"idna">>,{pkg,<<"idna">>,<<"5.1.2">>},1},
  {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
@@ -25,9 +27,11 @@
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.3.1">>},2}]}.
 [
 {pkg_hash,[
+ {<<"cache">>, <<"3C11DBF4CD8FCD5787C95A5FB2A04038E3729CFCA0386016EEA8C953AB48A5AB">>},
  {<<"certifi">>, <<"D0F424232390BF47D82DA8478022301C561CF6445B5B5FB6A84D49A9E76D2639">>},
  {<<"cowboy">>, <<"61AC29EA970389A88ECA5A65601460162D370A70018AFE6F949A29DCA91F3BB0">>},
  {<<"cowlib">>, <<"9D769A1D062C9C3AC753096F868CA121E2730B9A377DE23DEC0F7E08B1DF84EE">>},
+ {<<"gproc">>, <<"CEA02C578589C61E5341FCE149EA36CCEF236CC2ECAC8691FBA408E7EA77EC2F">>},
  {<<"hackney">>, <<"24EDC8CD2B28E1C652593833862435C80661834F6C9344E84B6A2255E7AEEF03">>},
  {<<"idna">>, <<"E21CB58A09F0228A9E0B95EAA1217F1BCFC31A1AAA6E1FDF2F53A33F7DBD9494">>},
  {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},

@@ -73,7 +73,8 @@
     call_deadline_timeout_test/1,
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
-    find_multiple_pools_test/1
+    find_multiple_pools_test/1,
+    calls_with_cache/1
 ]).
 
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -204,7 +205,8 @@ groups() ->
         call_deadline_timeout_test,
         server_http_req_validation_test,
         try_bad_handler_spec_test,
-        find_multiple_pools_test
+        find_multiple_pools_test,
+        calls_with_cache
     ],
     [
         {legacy_client_auto_server, [], SpecTests},
@@ -218,6 +220,8 @@ groups() ->
 %% starting/stopping
 %%
 init_per_suite(C) ->
+    % dbg:tracer(), dbg:p(all, c),
+    % dbg:tpl({woody_joint_workers, '_', '_'}, x),
     %%Apps = genlib_app:start_application_with(woody, [{trace_http_server, true}]),
     {ok, Apps} = application:ensure_all_started(woody),
     [{apps, Apps}|C].
@@ -262,6 +266,11 @@ init_per_testcase(find_multiple_pools_test, C) ->
     Pool1 = {swords, 15000, 100},
     Pool2 = {shields, undefined, 50},
     ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2]),
+    [{sup, Sup} | C];
+init_per_testcase(calls_with_cache, C) ->
+    {ok, Sup} = start_tc_sup(),
+    {ok, _}   = start_caching_client(),
+    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C];
 init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
@@ -338,6 +347,23 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
 
     _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
+
+start_caching_client() ->
+    woody_caching_client:start_link(woody_caching_client_options()).
+
+woody_caching_client_options() ->
+    #{
+        workers_name => test_caching_client_workers,
+        cache        => woody_caching_client_cache_options(test_caching_client_cache),
+        woody_client => pool_opts({test_caching_client_pool, 1000, 10})
+    }.
+
+woody_caching_client_cache_options(Name) ->
+    #{
+        local_name => Name,
+        n          => 10,
+        ttl        => 60
+    }.
 
 pool_opts(Pool) ->
     {Url, _} = get_service_endpoint('Weapons'),
@@ -763,6 +789,27 @@ try_bad_handler_spec_test(_) ->
             ok
     end.
 
+calls_with_cache(_) ->
+    Id = <<"call_with_cache">>,
+    {_, Service} = get_service_endpoint('Weapons'),
+    Request = {Service, get_weapon, [<<"Enforcer">>, self_to_bin()]},
+    InvalidRequest = {Service, get_weapon, [<<"Bio Rifle">>, self_to_bin()]},
+    Opts    = woody_caching_client_options(),
+    Context = woody_context:new(Id),
+
+    {ok, Result} = woody_caching_client:call(Request, no_cache, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, {cache_for, 1000}, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, {cache_for, 1000}, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
+    {ok, Result} = woody_caching_client:call(Request, cache, Opts, Context),
+
+
+    {exception, _} = woody_caching_client:call(InvalidRequest, no_cache, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, {cache_for, 1000}, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, {cache_for, 1000}, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
+    {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
+    ok.
 
 %%
 %% supervisor callbacks
