@@ -1,16 +1,42 @@
 -ifndef(_woody_defs_included).
 -define(_woody_defs_included, yeah).
 
-%% Http headers
+%% HTTP headers
 -define(CONTENT_TYPE_THRIFT    , <<"application/x-thrift">>).
--define(HEADER_PREFIX          , <<"x-rbk-">>).
--define(HEADER_RPC_ID          , << ?HEADER_PREFIX/binary, "span-id">>).
--define(HEADER_RPC_PARENT_ID   , << ?HEADER_PREFIX/binary, "parent-id">>).
--define(HEADER_RPC_ROOT_ID     , << ?HEADER_PREFIX/binary, "trace-id">>).
--define(HEADER_E_CLASS         , << ?HEADER_PREFIX/binary, "error-class">>).
--define(HEADER_E_REASON        , << ?HEADER_PREFIX/binary, "error-reason">>).
--define(HEADER_META_PREFIX     , << ?HEADER_PREFIX/binary, "meta-">>).
--define(HEADER_DEADLINE        , << ?HEADER_PREFIX/binary, "deadline">>).
+
+%% Woody-specific HTTP headers
+-define(NORMAL_HEADER_PREFIX          , <<"woody.">>).
+-define(NORMAL_HEADER_RPC_ID          , << ?NORMAL_HEADER_PREFIX/binary, "span-id">>).
+-define(NORMAL_HEADER_RPC_PARENT_ID   , << ?NORMAL_HEADER_PREFIX/binary, "parent-id">>).
+-define(NORMAL_HEADER_RPC_ROOT_ID     , << ?NORMAL_HEADER_PREFIX/binary, "trace-id">>).
+-define(NORMAL_HEADER_E_CLASS         , << ?NORMAL_HEADER_PREFIX/binary, "error-class">>).
+-define(NORMAL_HEADER_E_REASON        , << ?NORMAL_HEADER_PREFIX/binary, "error-reason">>).
+-define(NORMAL_HEADER_DEADLINE        , << ?NORMAL_HEADER_PREFIX/binary, "deadline">>).
+-define(NORMAL_HEADER_META_PREFIX     , << ?NORMAL_HEADER_PREFIX/binary, "meta.">>).
+-define(NORMAL_HEADER_META_RE         , <<"woody\\.meta\\.">>).
+
+%% Legacy woody headers
+-define(LEGACY_HEADER_PREFIX          , <<"x-rbk-">>).
+-define(LEGACY_HEADER_RPC_ID          , << ?LEGACY_HEADER_PREFIX/binary, "span-id">>).
+-define(LEGACY_HEADER_RPC_PARENT_ID   , << ?LEGACY_HEADER_PREFIX/binary, "parent-id">>).
+-define(LEGACY_HEADER_RPC_ROOT_ID     , << ?LEGACY_HEADER_PREFIX/binary, "trace-id">>).
+-define(LEGACY_HEADER_E_CLASS         , << ?LEGACY_HEADER_PREFIX/binary, "error-class">>).
+-define(LEGACY_HEADER_E_REASON        , << ?LEGACY_HEADER_PREFIX/binary, "error-reason">>).
+-define(LEGACY_HEADER_DEADLINE        , << ?LEGACY_HEADER_PREFIX/binary, "deadline">>).
+-define(LEGACY_HEADER_META_PREFIX     , << ?LEGACY_HEADER_PREFIX/binary, "meta-">>).
+-define(LEGACY_HEADER_META_RE         , <<"x-rbk-meta-">>).
+
+%% transition period helpers
+-define(HEADER(MODE, NORMAL, LEGACY), case MODE of normal -> NORMAL; legacy -> LEGACY end).
+-define(HEADER_PREFIX(MODE), ?HEADER(MODE, ?NORMAL_HEADER_PREFIX, ?LEGACY_HEADER_PREFIX)).
+-define(HEADER_RPC_ID(MODE), ?HEADER(MODE, ?NORMAL_HEADER_RPC_ID, ?LEGACY_HEADER_RPC_ID)).
+-define(HEADER_RPC_PARENT_ID(MODE), ?HEADER(MODE, ?NORMAL_HEADER_RPC_PARENT_ID, ?LEGACY_HEADER_RPC_PARENT_ID)).
+-define(HEADER_RPC_ROOT_ID(MODE), ?HEADER(MODE, ?NORMAL_HEADER_RPC_ROOT_ID, ?LEGACY_HEADER_RPC_ROOT_ID)).
+-define(HEADER_E_CLASS(MODE), ?HEADER(MODE, ?NORMAL_HEADER_E_CLASS, ?LEGACY_HEADER_E_CLASS)).
+-define(HEADER_E_REASON(MODE), ?HEADER(MODE, ?NORMAL_HEADER_E_REASON, ?LEGACY_HEADER_E_REASON)).
+-define(HEADER_DEADLINE(MODE), ?HEADER(MODE, ?NORMAL_HEADER_DEADLINE, ?LEGACY_HEADER_DEADLINE)).
+-define(HEADER_META_PREFIX(MODE), ?HEADER(MODE, ?NORMAL_HEADER_META_PREFIX, ?LEGACY_HEADER_META_PREFIX)).
+-define(HEADER_META_RE(MODE), ?HEADER(MODE, ?NORMAL_HEADER_META_RE, ?LEGACY_HEADER_META_RE)).
 
 %% Events
 -define(EV_CALL_SERVICE           , 'call service').
