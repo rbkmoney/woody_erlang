@@ -32,9 +32,10 @@
 }.
 
 -type options() :: #{
-    workers_name := atom(),
-    cache        := cache_options(),
-    woody_client := woody_client:options()
+    workers_name   := atom(),
+    cache          := cache_options(),
+    woody_client   := woody_client:options(),
+    joint_control  => joint | no_joint
 }.
 
 -spec child_spec(atom(), options()) ->
@@ -70,12 +71,14 @@ call(Request, CacheControl, Options) ->
     {ok, woody:result()}                      |
     {exception, woody_error:business_error()} |
     no_return().
-call(Request, CacheControl, Options, Context) ->
+call(Request, CacheControl, #{joint_mode := joint} = Options, Context) ->
     Task =
         fun(_) ->
             do_call(Request, CacheControl, Options, Context)
         end,
-    woody_joint_workers:do(workers_ref(Options), Request, Task, woody_context:get_deadline(Context)).
+    woody_joint_workers:do(workers_ref(Options), Request, Task, woody_context:get_deadline(Context));
+call(Request, CacheControl, Options, Context) ->
+    do_call(Request, CacheControl, Options, Context).
 
 %%
 %% Internal API
