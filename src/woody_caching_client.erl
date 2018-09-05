@@ -88,24 +88,26 @@ call(Request, CacheControl, Options, Context) ->
     | {exception, woody_error:business_error()}.
 do_call(Request, CacheControl, Options, Context) ->
     Meta = add_thrift_meta(Request, new_meta(Options, Context)),
-    case get_from_cache(Request, CacheControl, Options) of
-        OK={ok, Result} ->
+    Result = case get_from_cache(Request, CacheControl, Options) of
+        OK={ok, _CacheResult} ->
             % cache hit
-            ok = emit_event(?EV_CLIENT_CACHE_HIT, Meta#{result => Result}, Context, Options),
+            ok = emit_event(?EV_CLIENT_CACHE_HIT, Meta, Context, Options),
             OK;
         not_found ->
             % cache miss
             ok = emit_event(?EV_CLIENT_CACHE_MISS, Meta, Context, Options),
             case woody_client:call(Request, woody_client_options(Options), Context) of
-                {ok, Result} ->
+                {ok, CallResult} ->
                     % cache update
-                    ok = emit_event(?EV_CLIENT_CACHE_UPDATE, Meta#{result => Result}, Context, Options),
-                    ok = update_cache(Request, Result, CacheControl, Options),
-                    {ok, Result};
+                    ok = emit_event(?EV_CLIENT_CACHE_UPDATE, Meta#{result => CallResult}, Context, Options),
+                    ok = update_cache(Request, CallResult, CacheControl, Options),
+                    {ok, CallResult};
                 Exception = {exception, _} ->
                     Exception
             end
-    end.
+    end,
+    ok = emit_event(?EV_CLIENT_CACHE_RESULT, Meta#{result => Result}, Context, Options),
+    Result.
 
 %%
 %% local

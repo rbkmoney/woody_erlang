@@ -249,12 +249,14 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
-format_event(?EV_CLIENT_CACHE_HIT, #{url := URL, result := Result}) ->
-    {info, {"[client] request to '~s' cache hit: '~p'", [URL, Result]}};
+format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
+    {info, {"[client] request to '~s' cache hit: '~p'", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
 format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result}) ->
     {debug, {"[client] request to '~s' cache update: '~p'", [URL, Result]}};
+format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := Result}) ->
+    {debug, {"[client] request to '~s' cache result: '~p'", [URL, Result]}};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
