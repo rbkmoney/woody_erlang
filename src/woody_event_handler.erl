@@ -27,7 +27,8 @@
 -type event_cache() ::
     ?EV_CLIENT_CACHE_HIT  |
     ?EV_CLIENT_CACHE_MISS |
-    ?EV_CLIENT_CACHE_UPDATE.
+    ?EV_CLIENT_CACHE_UPDATE |
+    ?EV_CLIENT_CACHE_RESULT.
 
 %% Layer             Client               Server
 %% App invocation    EV_CALL_SERVICE      EV_INVOKE_SERVICE_HANDLER
@@ -250,7 +251,7 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
 format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
-    {info, {"[client] request to '~s' cache hit: '~p'", [URL]}};
+    {info, {"[client] request to '~s' cache hit", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
 format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result}) ->

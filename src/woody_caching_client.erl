@@ -71,7 +71,7 @@ call(Request, CacheControl, Options) ->
     {ok, woody:result()}                      |
     {exception, woody_error:business_error()} |
     no_return().
-call(Request, CacheControl, #{joint_mode := joint} = Options, Context) ->
+call(Request, CacheControl, #{joint_control := joint} = Options, Context) ->
     Task =
         fun(_) ->
             do_call(Request, CacheControl, Options, Context)
