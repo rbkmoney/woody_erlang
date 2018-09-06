@@ -27,6 +27,7 @@ child_spec(Options) ->
 -spec call(woody:request(), woody_client:options(), woody_state:st()) ->
     woody_client:result().
 call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
+    WoodyContext = woody_state:get_context(WoodyState),
     WoodyState1 = woody_state:add_ev_meta(
         #{
             service        => ServiceName,
@@ -34,7 +35,8 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
             function       => Function,
             type           => get_rpc_type(Service, Function),
             args           => Args,
-            metadata       => woody_context:get_meta(woody_state:get_context(WoodyState))
+            deadline       => woody_context:get_deadline(WoodyContext),
+            metadata       => woody_context:get_meta(WoodyContext)
         },
         WoodyState
     ),
