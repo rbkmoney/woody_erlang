@@ -142,7 +142,8 @@ add_ev_meta(WoodyState, Service = {_, ServiceName}, Function, ReplyType) ->
         service        => ServiceName,
         service_schema => Service,
         function       => Function,
-        type           => woody_util:get_rpc_reply_type(ReplyType)
+        type           => woody_util:get_rpc_reply_type(ReplyType),
+        deadline       => woody_context:get_deadline(woody_state:get_context(WoodyState))
     }, WoodyState).
 
 -spec decode_request(state()) ->
