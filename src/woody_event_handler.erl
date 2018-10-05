@@ -13,10 +13,12 @@
 %%
 
 -type event_client() ::
+    ?EV_CLIENT_BEGIN   |
     ?EV_CALL_SERVICE   |
     ?EV_SERVICE_RESULT |
     ?EV_CLIENT_SEND    |
-    ?EV_CLIENT_RECEIVE.
+    ?EV_CLIENT_RECEIVE |
+    ?EV_CLIENT_END.
 
 -type event_server() ::
     ?EV_INVOKE_SERVICE_HANDLER |
@@ -25,10 +27,12 @@
     ?EV_SERVER_SEND.
 
 -type event_cache() ::
-    ?EV_CLIENT_CACHE_HIT  |
-    ?EV_CLIENT_CACHE_MISS |
+    ?EV_CLIENT_CACHE_BEGIN  |
+    ?EV_CLIENT_CACHE_HIT    |
+    ?EV_CLIENT_CACHE_MISS   |
     ?EV_CLIENT_CACHE_UPDATE |
-    ?EV_CLIENT_CACHE_RESULT.
+    ?EV_CLIENT_CACHE_RESULT |
+    ?EV_CLIENT_CACHE_END.
 
 %% Layer             Client               Server
 %% App invocation    EV_CALL_SERVICE      EV_INVOKE_SERVICE_HANDLER
@@ -89,10 +93,10 @@
     reason := any(),
     class  := atom(),
     stack  => woody_error:stack() | undefined,
-    final  => true,  %% Server handler failed and woody_server_thrift_http_handler:terminate/3
-                     %% is called abnormally.
-                     %% Cleanup proc dict if necessary: this is the last event in request flow
-                     %% on woody server and the proces is about to be returned to cowboy pool.
+    final  => boolean(),  %% Server handler failed and woody_server_thrift_http_handler:terminate/3
+                          %% is called abnormally.
+                          %% Cleanup proc dict if necessary: this is the last event in request flow
+                          %% on woody server and the proces is about to be returned to cowboy pool.
 
     service        => woody:service_name(),
     service_schema => woody:service(),
@@ -131,6 +135,7 @@
 -callback handle_event
     (event_client(), woody:rpc_id(), meta_client(), woody:options()) -> _;
     (event_server(), woody:rpc_id(), meta_server(), woody:options()) -> _;
+    (event_cache(), woody:rpc_id(), meta_client_cache(), woody:options()) -> _;
 
     (?EV_INTERNAL_ERROR, woody:rpc_id(), meta_internal_error(), woody:options()) -> _;
     (?EV_TRACE, woody:rpc_id() | undefined, meta_trace(), woody:options()) -> _.
@@ -212,6 +217,10 @@ format_deadline(Meta) ->
 
 -spec format_event(event(), event_meta()) ->
     log_msg().
+format_event(?EV_CLIENT_BEGIN, #{url:=URL}) ->
+    {debug, {"[client] request to '~p' begin", [URL]}};
+format_event(?EV_CLIENT_END, #{url:=URL}) ->
+    {debug, {"[client] request to '~p' end", [URL]}};
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
@@ -250,6 +259,10 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
+format_event(?EV_CLIENT_CACHE_BEGIN, #{url:=URL}) ->
+    {debug, {"[client] request to '~p' begin", [URL]}};
+format_event(?EV_CLIENT_CACHE_END, #{url:=URL}) ->
+    {debug, {"[client] request to '~p' end", [URL]}};
 format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->

@@ -42,13 +42,17 @@
 -define(EV_CALL_SERVICE           , 'call service').
 -define(EV_SERVICE_RESULT         , 'service result').
 
+-define(EV_CLIENT_BEGIN           , 'client begin').
 -define(EV_CLIENT_SEND            , 'client send').
 -define(EV_CLIENT_RECEIVE         , 'client receive').
+-define(EV_CLIENT_END             , 'client end').
 
+-define(EV_CLIENT_CACHE_BEGIN     , 'client cache begin').
 -define(EV_CLIENT_CACHE_HIT       , 'client cache hit').
 -define(EV_CLIENT_CACHE_MISS      , 'client cache miss').
 -define(EV_CLIENT_CACHE_UPDATE    , 'client cache update').
 -define(EV_CLIENT_CACHE_RESULT    , 'client cache result').
+-define(EV_CLIENT_CACHE_END       , 'client cache end').
 
 -define(EV_SERVER_RECEIVE         , 'server receive').
 -define(EV_SERVER_SEND            , 'server send').

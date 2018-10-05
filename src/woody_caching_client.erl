@@ -11,7 +11,7 @@
 -export([call      /4]).
 
 %% Internal API
--export([do_call/4]).
+-export([call_safe/4]).
 
 %%
 %% API
@@ -74,20 +74,32 @@ call(Request, CacheControl, Options) ->
 call(Request, CacheControl, #{joint_control := joint} = Options, Context) ->
     Task =
         fun(_) ->
-            do_call(Request, CacheControl, Options, Context)
+            call_safe(Request, CacheControl, Options, Context)
         end,
     woody_joint_workers:do(workers_ref(Options), Request, Task, woody_context:get_deadline(Context));
 call(Request, CacheControl, Options, Context) ->
-    do_call(Request, CacheControl, Options, Context).
+    call_safe(Request, CacheControl, Options, Context).
 
 %%
 %% Internal API
 %%
--spec do_call(woody:request(), cache_control(), options(), woody_context:ctx()) ->
+
+-spec call_safe(woody:request(), cache_control(), options(), woody_context:ctx()) ->
       {ok, woody:result()}
     | {exception, woody_error:business_error()}.
-do_call(Request, CacheControl, Options, Context) ->
+call_safe(Request, CacheControl, Options, Context) ->
     Meta = add_thrift_meta(Request, new_meta(Options, Context)),
+    _ = emit_event(?EV_CLIENT_CACHE_BEGIN, Meta, Context, Options),
+    try
+        do_call(Request, CacheControl, Options, Context, Meta)
+    after
+        _ = emit_event(?EV_CLIENT_CACHE_END, Meta, Context, Options)
+    end.
+
+-spec do_call(woody:request(), cache_control(), options(), woody_context:ctx(), map()) ->
+      {ok, woody:result()}
+    | {exception, woody_error:business_error()}.
+do_call(Request, CacheControl, Options, Context, Meta) ->
     Result = case get_from_cache(Request, CacheControl, Options) of
         OK={ok, _CacheResult} ->
             % cache hit
