@@ -188,7 +188,8 @@ woody_client_options(#{woody_client := Options}) ->
 -spec now_ms() ->
     non_neg_integer().
 now_ms() ->
-    erlang:system_time(millisecond).
+    % The cache library uses os:timestamp/0 to get the current time, so just do the same
+    os:system_time(millisecond).
 
 -spec emit_event(woody_event_handler:event(), map(), woody_context:ctx(), options()) ->
     ok.
