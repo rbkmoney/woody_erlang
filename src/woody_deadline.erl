@@ -97,7 +97,10 @@ from_unixtime_ms(DeadlineMillisec) ->
 -spec unow() ->
     millisec().
 unow() ->
-    erlang:system_time(millisecond).
+    % We must use OS time for communications with external systems
+    % erlang:system_time/1 may have a various difference with global time to prevent time warp.
+    % see http://erlang.org/doc/apps/erts/time_correction.html#time-warp-modes for details
+    os:system_time(millisecond).
 
 to_calendar_datetime(Date, Time = {H, _, S}) when H =:= 24 orelse S =:= 60 ->
     %% Type specifications for hours and seconds differ in calendar and rfc3339,
