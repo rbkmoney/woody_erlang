@@ -26,6 +26,14 @@
 }.
 -export_type([handler_limits/0]).
 
+-type transport_opts() :: [
+    ranch_tcp:opt()                       |
+    {socket          , inet:socket()}     |
+    {max_connections , ranch:max_conns()} |
+    {shutdown        , timeout()}
+].
+-export_type([transport_opts/0]).
+
 -type route(T) :: {woody:path(), module(), T}.
 -export_type([route/1]).
 
@@ -38,7 +46,8 @@
     port                  := inet:port_number(),
     protocol              => thrift,
     transport             => http,
-    net_opts              => cowboy_protocol:opts(),
+    transport_opts        => transport_opts(),
+    protocol_opts         => cowboy_protocol:opts(),
     handler_limits        => handler_limits(),
     additional_routes     => [route(_)]
 }.
@@ -88,22 +97,27 @@ child_spec(Id, Opts = #{
     ip            := Ip,
     port          := Port
 }) ->
-    AcceptorsPool = genlib_app:env(woody, acceptors_pool_size,
-        ?DEFAULT_ACCEPTORS_POOLSIZE
-    ),
-    {Transport, TransportOpts} = get_socket_transport(Ip, Port),
+    % TODO
+    % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
+    % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
+    AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
+
+    {Transport, TransportOpts} = get_socket_transport(Ip, Port, maps:get(transport_opts, Opts, [])),
     CowboyOpts = get_cowboy_config(Opts),
     ranch:child_spec({?MODULE, Id}, AcceptorsPool, Transport, TransportOpts, cowboy_protocol, CowboyOpts).
 
-get_socket_transport(Ip, Port) ->
-    {ranch_tcp, [{ip, Ip}, {port, Port}]}.
+get_socket_transport(Ip, Port, TransportOpts) ->
+    {ranch_tcp, set_ranch_option(ip, Ip, set_ranch_option(port, Port, TransportOpts))}.
+
+set_ranch_option(Key, Value, Opts) ->
+    lists:keystore(Key, 1, Opts, {Key, Value}).
 
 -spec get_cowboy_config(options()) ->
     cowboy_protocol:opts().
 get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
-    CowboyOpts = get_cowboy_opts(maps:get(net_opts, Opts, undefined)),
+    CowboyOpts = get_cowboy_opts(maps:get(protocol_opts, Opts, [])),
     HttpTrace  = get_http_trace(EvHandler, config()),
     [
         {env, [{dispatch, Dispatch}]},
@@ -164,10 +178,8 @@ compile_filter_meta() ->
     {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
     Re.
 
--spec get_cowboy_opts(cowboy_protocol:opts() | undefined) ->
+-spec get_cowboy_opts(cowboy_protocol:opts()) ->
     cowboy_protocol:opts() | no_return().
-get_cowboy_opts(undefined) ->
-    [];
 get_cowboy_opts(Opts) ->
     case lists:keyfind(env, 1, Opts) of
         false ->
