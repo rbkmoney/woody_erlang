@@ -81,7 +81,7 @@ respects_max_connections(C) ->
         fun ({ok, #'Weapon'{slot_pos = Slot}}) -> Slot end,
         Results
     ),
-    ?assertEqual(MaxConns, lists:max(Slots)),
+    ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
 %%

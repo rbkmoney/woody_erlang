@@ -185,7 +185,7 @@ get_cowboy_opts(Opts) ->
         false ->
             Opts;
         _ ->
-            erlang:error(env_not_allowed_in_net_opts)
+            erlang:error(env_not_allowed_in_protocol_opts)
     end.
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
