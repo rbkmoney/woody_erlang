@@ -1,7 +1,7 @@
 -module(woody_server_thrift_http_handler).
 
 -behaviour(woody_server).
--behaviour(cowboy_http_handler).
+%-behaviour(cowboy_http_handler).
 
 -dialyzer(no_undefined_callbacks).
 
@@ -14,8 +14,8 @@
 -export([get_routes/1]).
 
 %% cowboy_http_handler callbacks
--export([init/3]).
--export([handle/2]).
+-export([init/2]).
+%-export([handle/2]).
 -export([terminate/3]).
 
 
@@ -101,10 +101,11 @@ child_spec(Id, Opts = #{
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
     % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
     AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-
     {Transport, TransportOpts} = get_socket_transport(Ip, Port, maps:get(transport_opts, Opts, [])),
     CowboyOpts = get_cowboy_config(Opts),
-    ranch:child_spec({?MODULE, Id}, AcceptorsPool, Transport, TransportOpts, cowboy_protocol, CowboyOpts).
+    TransportOpts1 = lists:merge(TransportOpts, [{num_acceptors, AcceptorsPool}]),
+    ct:log("Options: ~p", [Opts]),
+    ranch:child_spec({?MODULE, Id}, Transport, TransportOpts1, cowboy_clear, CowboyOpts).
 
 get_socket_transport(Ip, Port, TransportOpts) ->
     {ranch_tcp, set_ranch_option(ip, Ip, set_ranch_option(port, Port, TransportOpts))}.
@@ -119,12 +120,10 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     Dispatch   = get_dispatch(Opts),
     CowboyOpts = get_cowboy_opts(maps:get(protocol_opts, Opts, [])),
     HttpTrace  = get_http_trace(EvHandler, config()),
-    [
-        {env, [{dispatch, Dispatch}]},
-        %% Limit woody_context:meta() key length to 53 bytes
-        %% according to woody requirements.
-        {max_header_name_length, 64}
-    ] ++ CowboyOpts ++ HttpTrace.
+    #{
+        env => maps:merge(maps:merge(CowboyOpts, HttpTrace), #{dispatch => Dispatch}),
+        max_header_name_length => 64
+    }.
 
 validate_event_handler(Handler) ->
     {_, _} = woody_util:get_mod_opts(Handler),
@@ -183,7 +182,7 @@ compile_filter_meta() ->
 get_cowboy_opts(Opts) ->
     case lists:keyfind(env, 1, Opts) of
         false ->
-            Opts;
+            #{env => Opts};
         _ ->
             erlang:error(env_not_allowed_in_net_opts)
     end.
@@ -191,12 +190,12 @@ get_cowboy_opts(Opts) ->
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
 get_http_trace(EvHandler, ServerOpts) ->
-    [
-        {onrequest, fun(Req) ->
-            trace_req(genlib_app:env(woody, trace_http_server), Req, EvHandler, ServerOpts) end},
-        {onresponse, fun(Code, Headers, Body, Req) ->
-            trace_resp(genlib_app:env(woody, trace_http_server), Req, Code, Headers, Body, EvHandler) end}
-    ].
+    #{
+        onrequest => fun(Req) ->
+            trace_req(genlib_app:env(woody, trace_http_server), Req, EvHandler, ServerOpts) end,
+        onresponse => fun(Code, Headers, Body, Req) ->
+            trace_resp(genlib_app:env(woody, trace_http_server), Req, Code, Headers, Body, EvHandler) end
+    }.
 
 trace_req(true, Req, EvHandler, ServerOpts) ->
     {Url, Req1} = cowboy_req:url(Req),
@@ -233,11 +232,11 @@ trace_resp(_, Req, _, _, _, _) ->
 %%
 %% cowboy_http_handler callbacks
 %%
--spec init({_, http}, cowboy_req:req(), state()) ->
+-spec init(cowboy_req:req(), state()) ->
     cowboy_init_result().
-init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
+init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
-    {Url, Req1} = cowboy_req:url(Req),
+    Url = cowboy_req:uri(Req),
     DummyRpcID = #{
         span_id   => ?DUMMY_REQ_ID,
         trace_id  => ?DUMMY_REQ_ID,
@@ -246,13 +245,18 @@ init({_Transport, http}, Req, Opts = #{ev_handler := EvHandler, handler_limits :
     WoodyState = woody_state:new(server, woody_context:new(DummyRpcID), EvHandler),
     case have_resources_to_continue(Limits) of
         true ->
-            check_request(Req1, Opts#{url => Url, woody_state => WoodyState});
+            Opts1 = Opts#{url => Url, woody_state => WoodyState},
+            ct:log("~p [~p] Req: ~p\nState: ~p", [self(), ?FUNCTION_NAME, Req, Opts1]),
+            {ok, Req2, State} = check_request(Req, Opts1),
+            ct:log("~p Request passed all checks, state: ~p", [self(), State]),
+            handle(Req2, State);
         false ->
+            ct:log("Erlang exceeded memory"),
             Details = <<"erlang vm exceeded total memory threshold">>,
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => Details}),
-            Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req1, WoodyState),
-            {shutdown, Req2, undefined}
+            Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
+            {stop, Req2, undefined}
     end.
 
 -spec set_handler_limits(handler_limits()) ->
@@ -288,22 +292,27 @@ handle(Req, State = #{
     server_opts := ServerOpts,
     th_handler  := ThriftHandler
 }) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
+            ct:log("~p ~p[~p] case {ok, _, _}", [self(), ?MODULE, ?FUNCTION_NAME]),
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, WoodyState, Req1);
         {ok, <<>>, Req1} ->
+            ct:log("~p ~p[~p] case {ok, <<>>, _}", [self(), ?MODULE, ?FUNCTION_NAME]),
             reply_client_error(400, <<"body empty">>, Req1, State);
         {{error, body_too_large}, _, Req1} ->
+            ct:log("~p ~p[~p] case {error, body_too_large, _}", [self(), ?MODULE, ?FUNCTION_NAME]),
             reply_client_error(413, <<"body too large">>, Req1, State);
         {{error, Reason}, _, Req1} ->
+            ct:log("~p ~p[~p] case {error, ~p, _}", [self(), ?MODULE, ?FUNCTION_NAME, Reason]),
             reply_client_error(400, woody_util:to_binary(["body read error: ", Reason]), Req1, State)
     end,
     {ok, Req2, undefined}.
 
 -spec terminate(_Reason, _Req, state() | _) ->
     ok.
-terminate({normal, _}, _Req, _Status) ->
+terminate(normal, _Req, _Status) ->
     ok;
 terminate(Reason, _Req, #{woody_state := WoodyState}) ->
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
@@ -324,22 +333,32 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
 -spec check_request(cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_request(Req, State) ->
-    check_method(cowboy_req:method(Req), State).
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
+    Method = cowboy_req:method(Req),
+    check_method({Method, Req}, State).
 
 -spec check_method({woody:http_header_val(), cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_method({<<"POST">>, Req}, State) ->
-    check_content_type(cowboy_req:header(<<"content-type">>, Req), State);
+    ct:log("~p [~p] POST", [self(), ?FUNCTION_NAME]),
+    Header = cowboy_req:header(<<"content-type">>, Req),
+    check_content_type({Header, Req}, State);
+
 check_method({Method, Req}, State) ->
-    reply_bad_header(405, woody_util:to_binary(["wrong method: ", Method]),
-        cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req), State
-    ).
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
+    Req1 = cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req),
+    Reason = woody_util:to_binary(["wrong method: ", Method]),
+    ct:log("~p ~p[~p] Reason: ~p, Req: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Reason, Req1]),
+    reply_bad_header(405, Reason, Req1, State).
 
 -spec check_content_type({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
     cowboy_init_result().
 check_content_type({?CONTENT_TYPE_THRIFT, Req}, State) ->
-    check_accept(cowboy_req:header(<<"accept">>, Req), State);
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
+    Header = cowboy_req:header(<<"accept">>, Req),
+    check_accept({Header, Req}, State);
 check_content_type({BadCType, Req}, State) ->
+    ct:log("~p [~p] BadType", [self(), ?FUNCTION_NAME]),
     reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BadCType]), Req, State).
 
 -spec check_accept({woody:http_header_val() | undefined, cowboy_req:req()}, state()) ->
@@ -348,22 +367,27 @@ check_accept({Accept, Req}, State) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
 ->
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
     check_woody_headers(Req, State);
 check_accept({BadAccept, Req1}, State) ->
+    ct:log("~p [~p] BadAccept", [self(), ?FUNCTION_NAME]),
     reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]), Req1, State).
 
 -spec check_woody_headers(cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
+    ct:log("~p [~p] Req: ~p\nState: ~p", [self(), ?FUNCTION_NAME, Req, State]),
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
         {ok, RpcId, Req1} ->
+            ct:log("~p ~p[~p] case {ok, ~p, ~p}", [self(), ?MODULE, ?FUNCTION_NAME, RpcId, Req1]),
             check_deadline_header(
-                cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
+                {cowboy_req:header(?HEADER_DEADLINE(Mode), Req1), Req1},
                 Mode,
                 State#{woody_state => set_rpc_id(RpcId, WoodyState)}
             );
         {error, BadRpcId, Req1} ->
+            ct:log("~p [~p] case {error, _, _}", [self(), ?FUNCTION_NAME]),
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
                 Req1, State#{woody_state => set_rpc_id(BadRpcId, WoodyState)}
             )
@@ -372,6 +396,7 @@ check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
 -spec get_rpc_id(cowboy_req:req(), woody_util:headers_mode()) ->
     {ok | error, woody:rpc_id(), cowboy_req:req()}.
 get_rpc_id(Req, Mode) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     check_ids(maps:fold(
         fun get_rpc_id/3,
         #{req => Req},
@@ -384,10 +409,10 @@ get_rpc_id(Req, Mode) ->
 
 get_rpc_id(Id, Header, Acc = #{req := Req}) ->
     case cowboy_req:header(Header, Req) of
-        {undefined, Req1} ->
-            Acc#{Id => ?DUMMY_REQ_ID, req => Req1, status => error};
-        {IdVal, Req1} ->
-            Acc#{Id => IdVal, req => Req1}
+        undefined ->
+            Acc#{Id => ?DUMMY_REQ_ID, req => Req, status => error};
+        IdVal ->
+            Acc#{Id => IdVal, req => Req}
     end.
 
 check_ids(Map = #{status := error, req := Req}) ->
@@ -398,8 +423,11 @@ check_ids(Map = #{req := Req}) ->
 -spec check_deadline_header(Deadline, woody_util:headers_mode(), state()) -> cowboy_init_result() when
     Deadline :: {woody:http_header_val() | undefined, cowboy_req:req()}.
 check_deadline_header({undefined, Req}, Mode, State) ->
-    check_metadata_headers(cowboy_req:headers(Req), Mode, State);
+    ct:log("~p [~p] undefined", [self(), ?FUNCTION_NAME]),
+    Headers = cowboy_req:headers(Req),
+    check_metadata_headers({Headers, Req}, Mode, State);
 check_deadline_header({DeadlineBin, Req}, Mode, State) ->
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
     try woody_deadline:from_binary(DeadlineBin) of
         Deadline -> check_deadline(Deadline, Req, Mode, State)
     catch
@@ -411,26 +439,30 @@ check_deadline_header({DeadlineBin, Req}, Mode, State) ->
 -spec check_deadline(woody:deadline(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
     cowboy_init_result().
 check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
     case woody_deadline:is_reached(Deadline) of
         true ->
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
-            {shutdown, Req1, undefined};
+            {stop, Req1, undefined};
         false ->
             NewState = State#{woody_state => set_deadline(Deadline, WoodyState)},
-            check_metadata_headers(cowboy_req:headers(Req), Mode, NewState)
+            Headers = cowboy_req:headers(Req),
+            check_metadata_headers({Headers, Req}, Mode, NewState)
     end.
 
 -spec check_metadata_headers({woody:http_headers(), cowboy_req:req()}, woody_util:headers_mode(), state()) ->
     cowboy_init_result().
 check_metadata_headers({Headers, Req}, Mode, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
-    {ok, Req, State#{woody_state => set_metadata(find_metadata(Headers, Mode, ServerOpts), WoodyState)}}.
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
+    {ok, Req, State#{woody_state => set_metadata(find_metadata(maps:to_list(Headers), Mode, ServerOpts), WoodyState)}}.
 
 -spec find_metadata(woody:http_headers(), woody_util:headers_mode(), server_opts()) ->
     woody_context:meta().
 find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
     %% TODO: Use compiled Re after headers transition ends
+    ct:log("~p ~p[~p] Headers: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Headers]),
     RpcId = ?HEADER_RPC_ID(Mode),
     RootId = ?HEADER_RPC_ROOT_ID(Mode),
     ParentId = ?HEADER_RPC_PARENT_ID(Mode),
@@ -451,7 +483,10 @@ find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
 -spec set_rpc_id(woody:rpc_id(), woody_state:st()) ->
     woody_state:st().
 set_rpc_id(RpcId, WoodyState) ->
-    woody_state:update_context(woody_context:new(RpcId), WoodyState).
+    ct:log("~p ~p[~p] RpcId: ~p", [self(), ?MODULE, ?FUNCTION_NAME, RpcId]),
+    Res = woody_state:update_context(woody_context:new(RpcId), WoodyState),
+    ct:log("~p ~p[~p] Res: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Res]),
+    Res.
 
 -spec set_deadline(woody:deadline(), woody_state:st()) ->
     woody_state:st().
@@ -461,33 +496,39 @@ set_deadline(Deadline, WoodyState) ->
 -spec set_metadata(woody_context:meta(), woody_state:st()) ->
     woody_state:st().
 set_metadata(Meta, WoodyState) ->
+    ct:log("~p [~p]", [self(), ?FUNCTION_NAME]),
     woody_state:add_context_meta(Meta, WoodyState).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
-    {shutdown, cowboy_req:req(), undefined}.
+    {stop, cowboy_req:req(), undefined}.
 reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     Req1 = reply_client_error(Code, Reason, Req, State),
-    {shutdown, Req1, undefined}.
+    {stop, Req1, undefined}.
 
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
 reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) ->
+    ct:log("~p ~p[~p] code: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Code]),
     _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
             #{url => Url, status => error, reason => Reason}),
+    ct:log("~p ~p[~p] back to ~p: ~p", [self(), ?MODULE, ?FUNCTION_NAME, ?FUNCTION_NAME]),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).
 
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
     {ok | {error, atom()}, woody:http_body(), cowboy_req:req()}.
 get_body(Req, #{max_chunk_length := MaxChunk}) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     do_get_body(<<>>, Req, [{length, MaxChunk}]).
 
 do_get_body(Body, Req, Opts) ->
-    case cowboy_req:body(Req, Opts) of
+    ct:log("~p ~p[~p] opts: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Opts]),
+    case cowboy_req:read_body(Req, maps:from_list(Opts)) of
         {ok, Body1, Req1} ->
             {ok, <<Body/binary, Body1/binary>>, Req1};
         {more, Body1, Req1} ->
-            do_get_body(<<Body/binary, Body1/binary>>, Req1, Opts);
+            do_get_body(<<Body/binary, Body1/binary>>, Req1, maps:from_list(Opts));
         {error, Reason} ->
             {{error, Reason}, <<>>, Req}
     end.
@@ -530,6 +571,7 @@ handle_error({system, {external, result_unexpected, Details}}, Req, WoodyState) 
 handle_error({system, {external, resource_unavailable, Details}}, Req, WoodyState) ->
     reply(502, set_error_headers(<<"Resource Unavailable">>, Details, Req), WoodyState);
 handle_error({system, {external, result_unknown, Details}}, Req, WoodyState) ->
+    ct:log("~p ~p[~p] external, result_unknown error with detatils: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Details]),
     reply(502, set_error_headers(<<"Result Unknown">>, Details, Req), WoodyState).
 
 -spec set_error_headers(woody:http_header_val(), woody:http_header_val(), cowboy_req:req()) ->
@@ -547,11 +589,14 @@ set_error_headers(Class, Reason, Req) ->
 reply(200, Req, WoodyState) ->
     do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), WoodyState);
 reply(Code, Req, WoodyState) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     do_reply(Code, Req, WoodyState).
 
 do_reply(Code, Req, WoodyState) ->
+    ct:log("~p ~p[~p] code: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Code]),
     _ = log_event(?EV_SERVER_SEND, WoodyState, #{code => Code, status => reply_status(Code)}),
-    {ok, Req2} = cowboy_req:reply(Code, Req),
+    Req2 = cowboy_req:reply(Code, Req),
+    ct:log("~p ~p[~p] cowboy replied: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Req2]),
     Req2.
 
 reply_status(200) -> ok;

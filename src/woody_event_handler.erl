@@ -162,6 +162,7 @@
 -spec handle_event(event(), woody_state:st(), meta()) ->
     ok.
 handle_event(Event, WoodyState, ExtraMeta) ->
+    ct:log("~p ~p[~p/3]", [self(), ?MODULE, ?FUNCTION_NAME]),
     handle_event(
         woody_state:get_ev_handler(WoodyState),
         Event,
@@ -173,6 +174,7 @@ handle_event(Event, WoodyState, ExtraMeta) ->
     ok.
 handle_event(Handler, Event, RpcId, Meta) ->
     {Module, Opts} = woody_util:get_mod_opts(Handler),
+    ct:log("~p ~p[~p/4] event handling module: ~p, meta: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Module, Meta]),
     _ = Module:handle_event(Event, RpcId, Meta, Opts),
     ok.
 
@@ -201,6 +203,7 @@ format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
     {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
+    ct:log("~p ~p[~p] Meta: ~p, Keys: ~p, Event: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Meta, Keys, Event]),
     Meta1 = maps:with(Keys, Meta),
     Meta2 = case lists:member(event, Keys) of
         true ->
@@ -218,9 +221,9 @@ format_deadline(Meta) ->
 -spec format_event(event(), event_meta()) ->
     log_msg().
 format_event(?EV_CLIENT_BEGIN, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' begin", [URL]}};
+    {debug, {"[client] request to ~p begin", [URL]}};
 format_event(?EV_CLIENT_END, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' end", [URL]}};
+    {debug, {"[client] request to ~p end", [URL]}};
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->

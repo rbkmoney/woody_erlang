@@ -39,19 +39,25 @@ child_spec(Options) ->
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options) ->
-    call(Request, Options, woody_context:new()).
+    Context = woody_context:new(),
+    ct:log("~p ~p[~p] Call context: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Context]),
+    call(Request, Options, Context).
 
 -spec call(woody:request(), options(), woody_context:ctx()) ->
     {ok, woody:result()}                      |
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    case call_safe(Request, Options, woody_state:new(client, woody_context:new_child(Context), EvHandler)) of
+    Child = woody_context:new_child(Context),
+    WoodyState = woody_state:new(client, Child, EvHandler),
+    case call_safe(Request, Options, WoodyState) of
         Result = {ok, _} ->
+            ct:log("~p ~p[~p] result ok", [self(), ?MODULE, ?FUNCTION_NAME]),
             Result;
         {error, {business, Error}} ->
             {exception, Error};
         {error, {system, Error}} ->
+            ct:log("~p ~p[~p] result error", [self(), ?MODULE, ?FUNCTION_NAME]),
             woody_error:raise(system, Error)
     end.
 
@@ -61,6 +67,7 @@ call(Request, Options = #{event_handler := EvHandler}, Context) ->
 -spec call_safe(woody:request(), options(), woody_state:st()) ->
     result().
 call_safe(Request, Options, WoodyState) ->
+    ct:log("~p ~p[~p] Request: ~p, Options: ~p, WoodyState: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Request, Options, WoodyState]),
     _ = woody_event_handler:handle_event(?EV_CLIENT_BEGIN, WoodyState, #{}),
     try woody_client_behaviour:call(Request, Options, WoodyState) of
         Resp = {ok, _} ->

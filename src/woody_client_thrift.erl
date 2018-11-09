@@ -63,6 +63,7 @@ make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),
+    ct:log("~p ~p[~p] Protocol: ~p, Client ~p", [self(), ?MODULE, ?FUNCTION_NAME, Protocol, Client]),
     Client.
 
 -spec get_transport_opts(woody_client:options()) ->
@@ -80,6 +81,7 @@ do_call(Client, Function, Args, WoodyState) ->
             throw:{Client1, {exception, ThriftExcept}} ->
                 {Client1, {error, {business, ThriftExcept}}}
         end,
+    ct:log("~p [~p] result: ~p", [self(), ?FUNCTION_NAME, Result]),
     _ = thrift_client:close(ClientNext),
     log_result(Result, WoodyState),
     map_result(Result).

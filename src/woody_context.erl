@@ -47,6 +47,7 @@
 -spec new() ->
     ctx().
 new() ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     new(new_req_id()).
 
 -spec new(woody:req_id() | woody:rpc_id()) ->
@@ -95,6 +96,7 @@ get_meta(MetaKey, Context) ->
 get_rpc_id(#{rpc_id := RpcId}) ->
     RpcId;
 get_rpc_id( _) ->
+    ct:log("~p ~p[~p/1] error", [self(), ?MODULE, ?FUNCTION_NAME]),
     error(badarg).
 
 -spec get_rpc_id(woody:dapper_id(), ctx()) ->

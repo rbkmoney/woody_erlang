@@ -8,7 +8,7 @@
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
--behaviour(cowboy_http_handler).
+%-behaviour(cowboy_http_handler).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -20,7 +20,7 @@
 -export([handle_event/4]).
 
 %% cowboy_http_handler callbacks
--export([init/3, handle/2, terminate/3]).
+-export([init/2, terminate/3]).
 
 %% common test API
 -export([
@@ -319,9 +319,9 @@ start_tc_sup() ->
 start_error_server(TC, Sup) ->
     Code      = get_fail_code(TC),
     Dispatch  = cowboy_router:compile([{'_', [{?PATH_WEAPONS, ?MODULE, Code}]}]),
-    Server    = ranch:child_spec(woody_ct, 10, ranch_tcp,
+    Server    = ranch:child_spec(woody_ct, ranch_tcp,
                  [{ip, ?SERVER_IP}, {port, ?SERVER_PORT}],
-                 cowboy_protocol, [{env, [{dispatch, Dispatch}]}]
+                 cowboy_clear, #{env => #{dispatch => Dispatch}}
              ),
     supervisor:start_child(Sup, Server).
 
@@ -769,11 +769,13 @@ server_http_req_validation_test(Config) ->
         <<>>, [{url, Url}]),
 
     %% Check wrong methods
+    %% Cowboy 2.5.0 no longer supports trace and connect methods, so they were removed from tests
+    Methods = [get, put, delete, options, patch],
     lists:foreach(fun(M) ->
         {ok, 405, _, _} = hackney:request(M, Url, Headers, <<>>, Opts) end,
-        [get, put, delete, trace, options, patch]),
-    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, Opts),
-    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, Opts).
+        Methods),
+    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, Opts).
+
 
 try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
@@ -876,9 +878,12 @@ when
     ) andalso
     (Event =:= ?EV_CLIENT_RECEIVE orelse Event =:= ?EV_SERVER_SEND)
  ->
+    ct:log("~p ~p[~p] event: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Event]),
     _ = handle_proxy_event(Event, Code, TraceId, ParentId),
     log_event(Event, RpcId, Meta);
-handle_event(Event, RpcId, Meta, _) ->
+handle_event(Event, RpcId = #{
+    trace_id := TraceId}, Meta, _) ->
+    ct:log("~p ~p[~p] event: ~p, traceId: ~p, meta: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Event, TraceId, Meta]),
     log_event(Event, RpcId, Meta).
 
 handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId, ParentId) when TraceId =/= ParentId ->
@@ -908,23 +913,22 @@ handle_proxy_event(Event, Code, Descr) ->
     erlang:error(badarg, [Event, Code, Descr]).
 
 log_event(Event, RpcId, Meta) ->
+    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     %% _ woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
     {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
         Event, Meta, RpcId,
         [event, role, service, service_schema, function, type, args, metadata, deadline, status, url, code, result]
     ),
+    ct:log("~p ~p[~p] back to ~p", [self(), ?MODULE, ?FUNCTION_NAME, ?FUNCTION_NAME]),
     ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
 
 %%
 %% cowboy_http_handler callbacks
 %%
-init({_, http}, Req, Code) ->
+init(Req, Code) ->
     ct:pal("Cowboy fail server received request. Replying: ~p", [Code]),
-    {ok, Req1} = cowboy_req:reply(Code, Req),
-    {shutdown, Req1, Code}.
-
-handle(Req, _) ->
-    {ok, Req, neverhappen}.
+    Req1 = cowboy_req:reply(Code, Req),
+    {stop, Req1, Code}.
 
 terminate(_, _, _) ->
     ok.
@@ -1050,4 +1054,3 @@ handle_sleep(Context) ->
         BinTimer ->
             timer:sleep(binary_to_integer(BinTimer))
     end.
-

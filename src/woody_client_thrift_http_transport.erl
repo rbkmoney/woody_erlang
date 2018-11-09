@@ -103,7 +103,11 @@ send(Url, Body, Options, WoodyState) ->
         false ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-            hackney:request(post, Url, Headers, Body, set_timeouts(Options, Context))
+            Timeouts = set_timeouts(Options, Context),
+            ct:log("~p ~p[~p] hackney request params: ~p, ~p, ~p, ~p", [self(), ?MODULE, ?FUNCTION_NAME, Url, Headers, Body, Timeouts]),
+            Response = hackney:request(post, Url, Headers, Body, Timeouts),
+            ct:log("~p ~p[~p] hackney responded: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Response]),
+            Response
     end.
 
 set_timeouts(Options, Context) ->
@@ -184,6 +188,7 @@ handle_result({error, Reason}, WoodyState) when
     Reason =:= closed
 ->
     BinReason = woody_util:to_binary(Reason),
+    ct:log("~p ~p[~p] external, result_unknown error with reason: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Reason]),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
 handle_result({error, Reason}, WoodyState) when
