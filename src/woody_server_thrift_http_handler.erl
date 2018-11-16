@@ -100,30 +100,31 @@ child_spec(Id, Opts = #{
     % TODO
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
     % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
-    AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-    {Transport, TransportOpts} = get_socket_transport(Ip, Port, maps:get(transport_opts, Opts, [])),
+    SocketOpts = [{ip, Ip}, {port, Port}],
+    TransportOpts0 = maps:get(transport_opts, Opts, #{}),
+    {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
     CowboyOpts = get_cowboy_config(Opts),
-    TransportOpts1 = lists:merge(TransportOpts, [{num_acceptors, AcceptorsPool}]),
-    ct:log("Options: ~p", [Opts]),
-    ranch:child_spec({?MODULE, Id}, Transport, TransportOpts1, cowboy_clear, CowboyOpts).
+    ct:log("Child_spec call Transport: ~p, TransportOpts: ~p, CowboyOpts: ~p", [Transport, TransportOpts, CowboyOpts]),
+    ranch:child_spec({?MODULE, Id}, Transport, TransportOpts, cowboy_clear, CowboyOpts).
 
-get_socket_transport(Ip, Port, TransportOpts) ->
-    {ranch_tcp, set_ranch_option(ip, Ip, set_ranch_option(port, Port, TransportOpts))}.
+get_socket_transport(SocketOpts, TransportOpts) ->
+    AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
+    {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts))}.
 
 set_ranch_option(Key, Value, Opts) ->
-    lists:keystore(Key, 1, Opts, {Key, Value}).
+    Opts#{Key => Value}.
 
 -spec get_cowboy_config(options()) ->
     cowboy_protocol:opts().
 get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
-    CowboyOpts = get_cowboy_opts(maps:get(protocol_opts, Opts, [])),
+    CowboyOpts = maps:get(protocol_opts, Opts, #{}),
     HttpTrace  = get_http_trace(EvHandler, config()),
-    #{
-        env => maps:merge(maps:merge(CowboyOpts, HttpTrace), #{dispatch => Dispatch}),
+    maps:merge(#{
+        env => maps:merge(HttpTrace, #{dispatch => Dispatch}),
         max_header_name_length => 64
-    }.
+    }, CowboyOpts).
 
 validate_event_handler(Handler) ->
     {_, _} = woody_util:get_mod_opts(Handler),
@@ -176,16 +177,6 @@ config() ->
 compile_filter_meta() ->
     {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
     Re.
-
--spec get_cowboy_opts(cowboy_protocol:opts()) ->
-    cowboy_protocol:opts() | no_return().
-get_cowboy_opts(Opts) ->
-    case lists:keyfind(env, 1, Opts) of
-        false ->
-            #{env => Opts};
-        _ ->
-            erlang:error(env_not_allowed_in_net_opts)
-    end.
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
     [{onrequest | onresponse, fun((cowboy_req:req()) -> cowboy_req:req())}].
