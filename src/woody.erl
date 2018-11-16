@@ -54,7 +54,7 @@
 -type http_code()        :: pos_integer().
 -type http_header_name() :: binary().
 -type http_header_val()  :: binary().
--type http_headers()     :: list({http_header_name(), http_header_val()}).
+-type http_headers()     :: #{http_header_name() => http_header_val()}.
 -type http_body()        :: binary().
 -export_type([http_code/0, http_header_name/0, http_header_val/0, http_headers/0, http_body/0]).
 

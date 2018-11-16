@@ -73,7 +73,6 @@ update_context(NewContext, State) ->
 -spec add_context_meta(woody_context:meta(), st()) ->
     st().
 add_context_meta(ContextMeta, State) ->
-    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     add_metadata_to_ev_meta(ContextMeta, add_metadata_to_context(ContextMeta, State)).
 
 -spec add_context_deadline(woody:deadline(), st()) ->
@@ -103,7 +102,6 @@ add_deadline_to_context(Deadline, State) ->
 -spec add_metadata_to_ev_meta(woody_context:meta(), st()) ->
     st().
 add_metadata_to_ev_meta(ContextMeta, State) ->
-    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     add_ev_meta(#{metadata => ContextMeta}, State).
 
 -spec add_deadline_to_ev_meta(woody:deadline(), st()) ->
