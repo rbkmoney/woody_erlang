@@ -472,7 +472,7 @@ reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) 
 
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
-    {ok | {error, atom()}, woody:http_body(), cowboy_req:req()}.
+    {ok, woody:http_body(), cowboy_req:req()}.
 get_body(Req, #{max_chunk_length := MaxChunk}) ->
     do_get_body(<<>>, Req, #{length => MaxChunk}).
 
@@ -548,7 +548,7 @@ do_reply(Code, Req, WoodyState) ->
     cowboy_req:reply(Code, Req).
 
 reply_status(200) -> ok;
-reply_status(Code) when is_integer(Code), Code > 0 -> error.
+reply_status(_) -> error.
 
 log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
