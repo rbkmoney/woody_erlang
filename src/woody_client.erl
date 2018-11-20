@@ -71,14 +71,13 @@ call_safe(Request, Options, WoodyState) ->
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error
     catch
-        Class:Reason ->
-            StackTrace = erlang:get_stacktrace(),
+        Class:Reason:StackTrace ->
             handle_client_error(Class, Reason, StackTrace, WoodyState)
     after
         _ = woody_event_handler:handle_event(?EV_CLIENT_END, WoodyState, #{})
     end.
 
--spec handle_client_error(woody_error:erlang_except(), _Error, _StackTrace, woody_state:st()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, _Stacktrace, woody_state:st()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
 handle_client_error(Class, Error, StackTrace, WoodyState) ->
     Details = woody_error:format_details(Error),

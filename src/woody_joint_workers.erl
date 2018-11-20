@@ -110,8 +110,8 @@ do(Ref, ID, Task, Deadline, Attempts) ->
                 false -> do(Ref, ID, Task, Deadline);
                 true  -> erlang:error(deadline_reached, [Ref, ID, Task, Deadline])
             end;
-        {error, {exception, {Class, Error, Stacktrace}}} ->
-            erlang:Class({Error, Stacktrace});
+        {error, {exception, {Class, Error, StackTrace}}} ->
+            erlang:Class({Error, StackTrace});
         {error, Error} ->
             erlang:error(Error, [Ref, ID, Task, Deadline])
     end.
@@ -190,6 +190,6 @@ set_worker_deadline_timer(Deadline) ->
 do_task_safe(Task, Deadline) ->
     try
         {ok, Task(Deadline)}
-    catch Class:Error ->
-        {exception, {Class, Error, erlang:get_stacktrace()}}
+    catch Class:Error:StackTrace ->
+        {exception, {Class, Error, StackTrace}}
     end.

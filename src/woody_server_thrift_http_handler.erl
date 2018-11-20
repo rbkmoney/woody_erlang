@@ -296,7 +296,7 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
             error  => <<"http handler terminated abnormally">>,
             reason => woody_error:format_details(Reason),
             class  => undefined,
-            stack  => erlang:get_stacktrace(),
+            % stack  => erlang:get_stacktrace(), %% to be removed
             final  => true
         }),
     ok.
