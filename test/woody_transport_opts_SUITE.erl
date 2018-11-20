@@ -56,8 +56,7 @@ init_per_testcase(Name, C) ->
 %%
 
 respects_max_connections(C) ->
-    %MaxConns = 10 + rand:uniform(10), % (10; 20]
-    MaxConns = 10,
+    MaxConns = 10 + rand:uniform(10), % (10; 20]
     Table = ets:new(?MODULE, [public, {read_concurrency, true}, {write_concurrency, true}]),
     true = ets:insert_new(Table, [{slot, 0}]),
     Service = {woody_test_thrift, 'Weapons'},
@@ -109,7 +108,7 @@ stop_woody_server(Pid) ->
 handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
-    ets:update_counter(Table, slot, -1),
+    _ = ets:update_counter(Table, slot, -1),
     {ok, #'Weapon'{name = Name, slot_pos = Slot}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->

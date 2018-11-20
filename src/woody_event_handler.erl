@@ -218,9 +218,9 @@ format_deadline(Meta) ->
 -spec format_event(event(), event_meta()) ->
     log_msg().
 format_event(?EV_CLIENT_BEGIN, #{url:=URL}) ->
-    {debug, {"[client] request to ~p begin", [URL]}};
+    {debug, {"[client] request to '~p' begin", [URL]}};
 format_event(?EV_CLIENT_END, #{url:=URL}) ->
-    {debug, {"[client] request to ~p end", [URL]}};
+    {debug, {"[client] request to '~p' end", [URL]}};
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->

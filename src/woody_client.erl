@@ -64,7 +64,7 @@ call(Request, Options = #{event_handler := EvHandler}, Context) ->
 -spec call_safe(woody:request(), options(), woody_state:st()) ->
     result().
 call_safe(Request, Options, WoodyState) ->
-        _ = woody_event_handler:handle_event(?EV_CLIENT_BEGIN, WoodyState, #{}),
+    _ = woody_event_handler:handle_event(?EV_CLIENT_BEGIN, WoodyState, #{}),
     try woody_client_behaviour:call(Request, Options, WoodyState) of
         Resp = {ok, _} ->
             Resp;
@@ -77,7 +77,7 @@ call_safe(Request, Options, WoodyState) ->
         _ = woody_event_handler:handle_event(?EV_CLIENT_END, WoodyState, #{})
     end.
 
--spec handle_client_error(woody_error:erlang_except(), _Error, _Stacktrace, woody_state:st()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, _StackTrace, woody_state:st()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
 handle_client_error(Class, Error, StackTrace, WoodyState) ->
     Details = woody_error:format_details(Error),

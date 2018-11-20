@@ -8,7 +8,6 @@
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
-%-behaviour(cowboy_http_handler).
 
 %% supervisor callbacks
 -export([init/1]).

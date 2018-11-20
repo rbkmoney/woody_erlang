@@ -194,7 +194,7 @@ handle_result({error, Reason}, WoodyState) when
     Reason =:= closed
 ->
     BinReason = woody_util:to_binary(Reason),
-        _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
 handle_result({error, Reason}, WoodyState) when
     Reason =:= econnrefused    ;
@@ -306,8 +306,7 @@ make_woody_headers(Context) ->
         ?LEGACY_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
         ?LEGACY_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
         ?LEGACY_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context)
-    }
-    ).
+    }).
 
 -spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().

@@ -1,6 +1,13 @@
 -module(woody_joint_workers_SUITE).
 -include_lib("common_test/include/ct.hrl").
--compile(export_all).
+
+-export([
+    all/0,
+    init_per_suite/1,
+    end_per_suite/1
+]).
+
+-export([prop_test/1]).
 
 %%
 %% tests descriptions

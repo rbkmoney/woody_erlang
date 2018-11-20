@@ -44,3 +44,4 @@ raise(system, {Source, Class, Details}) ->
     details().
 format_details(Error) ->
     genlib:to_binary(io_lib:format("~9999p", [Error])).
+
