@@ -291,7 +291,7 @@ get_header_value(Name, Headers) ->
     case [V || {K, V} <- HeaderList, Name =:= genlib_string:to_lower(K)] of
         [Value] -> Value;
         []      -> none
-        % _       -> multiple %% Not actually possible as maps can't hold multiple Values for one Key, to be removed 
+        % _       -> multiple %% Not actually possible as maps can't hold multiple Values for one Key, to be removed
     end.
 
 -spec make_woody_headers(woody_context:ctx()) ->

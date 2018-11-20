@@ -71,8 +71,8 @@ call_safe(Request, Options, WoodyState) ->
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error
     catch
-        Class:Reason:StackTrace ->
-            handle_client_error(Class, Reason, StackTrace, WoodyState)
+        Class:Reason ->
+            handle_client_error(Class, Reason, erlang:get_stacktrace(), WoodyState)
     after
         _ = woody_event_handler:handle_event(?EV_CLIENT_END, WoodyState, #{})
     end.

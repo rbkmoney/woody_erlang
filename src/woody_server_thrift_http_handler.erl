@@ -105,9 +105,10 @@ child_spec(Id, Opts = #{
     CowboyOpts = get_cowboy_config(Opts),
     ranch:child_spec({?MODULE, Id}, Transport, TransportOpts, cowboy_clear, CowboyOpts).
 
-get_socket_transport(SocketOpts, TransportOpts) ->
+get_socket_transport(SocketOpts, TransportOpts0) ->
     AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-    {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts))}.
+    TransportOpts = set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts0),
+    {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
 
 set_ranch_option(Key, Value, Opts) ->
     Opts#{Key => Value}.
@@ -177,7 +178,7 @@ compile_filter_meta() ->
     Re.
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
-    #{'onrequest':=fun((_) -> any()), 'onresponse':=fun((_,_,_,_) -> any())}.
+    #{'onrequest':=fun((_) -> any()), 'onresponse':=fun((_, _, _, _) -> any())}.
 get_http_trace(EvHandler, ServerOpts) ->
     #{
         onrequest => fun(Req) ->
@@ -350,7 +351,7 @@ check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
         {ok, RpcId, Req1} ->
             Header = cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
             check_deadline_header(
-                Header, 
+                Header,
                 Req1,
                 Mode,
                 State#{woody_state => set_rpc_id(RpcId, WoodyState)}
@@ -438,7 +439,7 @@ find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
                 H -> Acc;
                 MetaHeader -> Acc#{MetaHeader => V}
             end;
-           (_ ,_, Acc) -> Acc
+           (_, _, Acc) -> Acc
         end,
       #{}, Headers).
 
