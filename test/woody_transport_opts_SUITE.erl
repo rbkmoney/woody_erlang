@@ -58,12 +58,10 @@ init_per_testcase(Name, C) ->
 respects_max_connections(C) ->
     %MaxConns = 10 + rand:uniform(10), % (10; 20]
     MaxConns = 10,
-    ct:log("MaxConns: ~p", [MaxConns]),
     Table = ets:new(?MODULE, [public, {read_concurrency, true}, {write_concurrency, true}]),
     true = ets:insert_new(Table, [{slot, 0}]),
     Service = {woody_test_thrift, 'Weapons'},
     Client = ?config(client, C),
-    ct:log("Client: ~p", [Client]),
     Handler = {"/", {Service, {?MODULE, {?config(testcase, C), Table}}}},
     % NOTE
     % > https://github.com/ninenines/ranch/blob/1.3.2/src/ranch_conns_sup.erl#L184
@@ -78,18 +76,14 @@ respects_max_connections(C) ->
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, C),
     Results = genlib_pmap:map(
         fun (_) ->
-            Res = woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client),
-            ct:log("Call finished"),
-            Res
+            woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client)
         end,
         lists:seq(1, MaxConns * 10)
     ),
-    ct:log("~p Results are: ~p", [self(), Results]),
     Slots = lists:map(
         fun ({ok, #'Weapon'{slot_pos = Slot}}) -> Slot end,
         Results
     ),
-    ct:log("~p Slots are: ~p", [self(), Slots]),
     ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
@@ -105,7 +99,6 @@ start_woody_server(Handler, TransportOpts, ProtocolOpts, C) ->
                 protocol_opts  => ProtocolOpts
             }
     ),
-    ct:log("Supervisor opts: ~p", [SupervisorOpts]),
     woody_gen_supervisor:start_link([SupervisorOpts]).
 
 stop_woody_server(Pid) ->
@@ -116,12 +109,10 @@ stop_woody_server(Pid) ->
 handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
-    Slot2 = ets:update_counter(Table, slot, -1),
-    ct:log("~p ~p[~p] Slot: ~p, Slot2: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Slot, Slot2]),
+    ets:update_counter(Table, slot, -1),
     {ok, #'Weapon'{name = Name, slot_pos = Slot}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
-    ct:log("~p ~p[~p] Meta: ~p, Opts: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Meta, Opts]),
     {_Severity, {Format, Msg}, _} = woody_event_handler:format_event_and_meta(Event, Meta, RpcId),
     ct:pal("~p ~p " ++ Format, [self(), Opts] ++ Msg).
 

@@ -104,8 +104,17 @@ send(Url, Body, Options, WoodyState) ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             Timeouts = set_timeouts(Options, Context),
-            hackney:request(post, Url, Headers, Body, Timeouts)
+            HeaderList = maps:to_list(Headers),
+            Result = hackney:request(post, Url, HeaderList, Body, Timeouts),
+            transform_request_results(Result)
     end.
+
+transform_request_results({ok, Code, Headers, Ref}) ->
+    {ok, Code, maps:from_list(Headers), Ref};
+transform_request_results({ok, Code, Headers}) ->
+    {ok, Code, maps:from_list(Headers)};
+transform_request_results(Any) ->
+    Any.
 
 set_timeouts(Options, Context) ->
     case woody_context:get_deadline(Context) of
@@ -258,9 +267,9 @@ do_check_error_reason(none, 200, _Mode, _WoodyState) ->
 do_check_error_reason(none, Code, Mode, WoodyState) ->
     _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON(Mode), " header missing"])}),
     woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON(Mode), " header"]);
-do_check_error_reason(multiple, _, Mode, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON(Mode)], WoodyState),
-    ?BAD_RESP_HEADER(Mode);
+% do_check_error_reason(multiple, _, Mode, WoodyState) ->
+%     _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON(Mode)], WoodyState),
+%     ?BAD_RESP_HEADER(Mode); % Check get_header_value
 do_check_error_reason(Reason, _, _, _) ->
     Reason.
 
@@ -277,25 +286,28 @@ get_error_class_header_value(Headers, Mode) ->
 -spec get_header_value(woody:http_header_name(), woody:http_headers()) ->
     header_parse_value().
 get_header_value(Name, Headers) ->
-    case [V || {K, V} <- Headers, Name =:= genlib_string:to_lower(K)] of
+    % Couldn't find a way to easily do same with maps
+    HeaderList = maps:to_list(Headers),
+    case [V || {K, V} <- HeaderList, Name =:= genlib_string:to_lower(K)] of
         [Value] -> Value;
-        []      -> none;
-        _       -> multiple
+        []      -> none
+        % _       -> multiple %% Not actually possible as maps can't hold multiple Values for one Key, to be removed 
     end.
 
 -spec make_woody_headers(woody_context:ctx()) ->
     woody:http_headers().
 make_woody_headers(Context) ->
-    add_optional_headers(Context, [
-        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?NORMAL_HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?NORMAL_HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?NORMAL_HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)},
-        {?LEGACY_HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?LEGACY_HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?LEGACY_HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
-    ]).
+    add_optional_headers(Context, #{
+        <<"content-type">>         => ?CONTENT_TYPE_THRIFT,
+        <<"accept">>               => ?CONTENT_TYPE_THRIFT,
+        ?NORMAL_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
+        ?NORMAL_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
+        ?NORMAL_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context),
+        ?LEGACY_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
+        ?LEGACY_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
+        ?LEGACY_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context)
+    }
+    ).
 
 -spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
@@ -305,13 +317,16 @@ add_optional_headers(Context, Headers) ->
 -spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
 add_metadata_headers(Context, Headers) ->
-    maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
+    Meta = woody_context:get_meta(Context),
+    maps:fold(fun add_metadata_header/3, Headers, Meta).
 
 -spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
 add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
-    [{<< ?NORMAL_HEADER_META_PREFIX/binary, H/binary >>, V},
-     {<< ?LEGACY_HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
+    maps:merge(#{
+        << ?NORMAL_HEADER_META_PREFIX/binary, H/binary >> => V,
+        << ?LEGACY_HEADER_META_PREFIX/binary, H/binary >> => V
+    }, Headers);
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
@@ -321,8 +336,10 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    [{?NORMAL_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)},
-     {?LEGACY_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
+    maps:merge(#{
+        ?NORMAL_HEADER_DEADLINE => woody_deadline:to_binary(Deadline),
+        ?LEGACY_HEADER_DEADLINE => woody_deadline:to_binary(Deadline)
+    }, Headers).
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

@@ -38,7 +38,6 @@
 raise(business, Except) ->
     erlang:throw(Except);
 raise(system, {Source, Class, Details}) ->
-    ct:log("~p Error raised", [self()]),
     erlang:error({woody_error, {Source, Class, Details}}).
 
 -spec format_details(term()) ->

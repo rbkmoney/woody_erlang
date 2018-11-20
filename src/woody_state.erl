@@ -45,7 +45,6 @@ new(Role, Context, EvHandler) ->
 -spec get_context(st()) ->
     woody_context:ctx().
 get_context(#{context := Context}) ->
-    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     Context.
 
 -spec get_ev_handler(st()) ->
@@ -61,13 +60,11 @@ get_ev_meta(#{ev_meta := Meta}) ->
 -spec add_ev_meta(woody_event_handler:meta(), st()) ->
     st().
 add_ev_meta(ExtraMeta, State = #{ev_meta := Meta}) ->
-    ct:log("~p ~p[~p] Meta: ~p, ExtraMeta: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Meta, ExtraMeta]),
     State#{ev_meta => maps:merge(Meta, ExtraMeta)}.
 
 -spec update_context(woody_context:ctx(), st()) ->
     st().
 update_context(NewContext, State) ->
-    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     State#{context => NewContext}.
 
 -spec add_context_meta(woody_context:meta(), st()) ->

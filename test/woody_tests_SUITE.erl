@@ -878,12 +878,9 @@ when
     ) andalso
     (Event =:= ?EV_CLIENT_RECEIVE orelse Event =:= ?EV_SERVER_SEND)
  ->
-    ct:log("~p ~p[~p] event: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Event]),
     _ = handle_proxy_event(Event, Code, TraceId, ParentId),
     log_event(Event, RpcId, Meta);
-handle_event(Event, RpcId = #{
-    trace_id := TraceId}, Meta, _) ->
-    ct:log("~p ~p[~p] event: ~p, traceId: ~p, meta: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Event, TraceId, Meta]),
+handle_event(Event, RpcId, Meta, _) ->
     log_event(Event, RpcId, Meta).
 
 handle_proxy_event(?EV_CLIENT_RECEIVE, Code, TraceId, ParentId) when TraceId =/= ParentId ->
@@ -913,13 +910,11 @@ handle_proxy_event(Event, Code, Descr) ->
     erlang:error(badarg, [Event, Code, Descr]).
 
 log_event(Event, RpcId, Meta) ->
-    ct:log("~p ~p[~p]", [self(), ?MODULE, ?FUNCTION_NAME]),
     %% _ woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
     {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
         Event, Meta, RpcId,
         [event, role, service, service_schema, function, type, args, metadata, deadline, status, url, code, result]
     ),
-    ct:log("~p ~p[~p] back to ~p", [self(), ?MODULE, ?FUNCTION_NAME, ?FUNCTION_NAME]),
     ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
 
 %%

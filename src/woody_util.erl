@@ -60,7 +60,6 @@ get_rpc_reply_type(_) -> call.
     {headers_mode(), cowboy_req:req()}.
 get_req_headers_mode(Req) ->
     Mode = application:get_env(woody, server_headers_mode, auto),
-    ct:log("~p ~p[~p] Mode: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Mode]),
     get_req_headers_mode(Mode, Req).
 
 -spec get_error_headers_mode(woody:http_headers()) ->
@@ -75,10 +74,10 @@ get_error_headers_mode(Headers) ->
 
 apply_mode_rules([], _Rules, Default) ->
     Default;
-apply_mode_rules([{Name, _Value} | HeadersTail] = _Headers, Rules, Default) ->
+apply_mode_rules([Name | HeadersNamesTail] = _Headers, Rules, Default) ->
     case maps:get(Name, Rules, undefined) of
         undefined ->
-            apply_mode_rules(HeadersTail, Rules, Default);
+            apply_mode_rules(HeadersNamesTail, Rules, Default);
         Mode ->
             Mode
     end.
@@ -92,8 +91,7 @@ get_req_headers_mode(auto, Req) ->
         ?NORMAL_HEADER_RPC_ROOT_ID => normal
     },
     Headers = cowboy_req:headers(Req),
-    ct:log("~p ~p[~p] Headers: ~p", [self(), ?MODULE, ?FUNCTION_NAME, Headers]),
-    {apply_mode_rules(maps:to_list(Headers), Rules, legacy), Req};
+    {apply_mode_rules(maps:keys(Headers), Rules, legacy), Req};
 get_req_headers_mode(legacy = Mode, Req) ->
     {Mode, Req};
 get_req_headers_mode(normal = Mode, Req) ->
@@ -108,7 +106,7 @@ get_error_headers_mode(auto, Headers) ->
         ?NORMAL_HEADER_E_CLASS => normal,
         ?NORMAL_HEADER_E_REASON => normal
     },
-    apply_mode_rules(Headers, Rules, legacy);
+    apply_mode_rules(maps:keys(Headers), Rules, legacy);
 get_error_headers_mode(legacy = Mode, _Headers) ->
     Mode;
 get_error_headers_mode(normal = Mode, _Headers) ->
