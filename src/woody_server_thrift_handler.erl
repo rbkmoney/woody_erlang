@@ -200,8 +200,8 @@ throw_decode_error(Error) ->
 call_handler_safe(State) ->
     try handle_success(call_handler(State), State)
     catch
-        Class:Reason ->
-            handle_function_catch(Class, Reason, erlang:get_stacktrace(), State)
+        Class:Reason:StackTrace ->
+            handle_function_catch(Class, Reason, StackTrace, State)
     end.
 
 -spec call_handler(state()) ->
@@ -337,8 +337,8 @@ encode_reply(Status, Reply, State = #{
         {Protocol4, ok} = thrift_protocol:flush_transport(Protocol3),
         {Status, State#{th_proto => Protocol4}}
     catch
-       error:{badmatch, {_, {error, Error}}} ->
-            Stack = erlang:get_stacktrace(),
+        error:{badmatch, {_, {error, Error}}}:StackTrace ->
+            Stack = StackTrace,
             Reason = woody_error:format_details(Error),
             _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
                     error  => <<"thrift protocol write failed">>,
