@@ -26,7 +26,7 @@
 }.
 
 -type error()              :: {error, {system, woody_error:system_error()}}.
--type header_parse_value() :: none | multiple | woody:http_header_val().
+-type header_parse_value() :: none | woody:http_header_val().
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
@@ -242,9 +242,6 @@ get_error_class(_) ->
 check_502_error_class(none, Headers, Mode, WoodyState) ->
     _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS(Mode), " header missing"])}),
     {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(multiple, _, Mode, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_CLASS(Mode)], WoodyState),
-    {result_unexpected, ?BAD_RESP_HEADER(Mode)};
 check_502_error_class(<<"result unexpected">>, Headers, Mode, WoodyState) ->
     {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
 check_502_error_class(<<"resource unavailable">>, Headers, Mode, WoodyState) ->
@@ -267,9 +264,6 @@ do_check_error_reason(none, 200, _Mode, _WoodyState) ->
 do_check_error_reason(none, Code, Mode, WoodyState) ->
     _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON(Mode), " header missing"])}),
     woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON(Mode), " header"]);
-% do_check_error_reason(multiple, _, Mode, WoodyState) ->
-%     _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON(Mode)], WoodyState),
-%     ?BAD_RESP_HEADER(Mode); % Check get_header_value
 do_check_error_reason(Reason, _, _, _) ->
     Reason.
 

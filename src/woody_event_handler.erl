@@ -92,7 +92,6 @@
     error  := any(),
     reason := any(),
     class  := atom(),
-    stack  => woody_error:stack() | undefined,
     final  => boolean(),  %% Server handler failed and woody_server_thrift_http_handler:terminate/3
                           %% is called abnormally.
                           %% Cleanup proc dict if necessary: this is the last event in request flow

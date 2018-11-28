@@ -1,6 +1,7 @@
 -module(woody_server_thrift_http_handler).
 
 -behaviour(woody_server).
+-behaviour(cowboy_handler).
 
 -dialyzer(no_undefined_callbacks).
 
@@ -26,9 +27,11 @@
 
 -type transport_opts() :: [
     ranch_tcp:opt()                       |
-    {socket          , inet:socket()}     |
-    {max_connections , ranch:max_conns()} |
-    {shutdown        , timeout()}
+    #{
+        socket          => inet:socket(),
+        max_connections => ranch:max_conns(),
+        shutdown        => timeout()
+    }
 ].
 -export_type([transport_opts/0]).
 
@@ -45,7 +48,7 @@
     protocol              => thrift,
     transport             => http,
     transport_opts        => transport_opts(),
-    protocol_opts         => cowboy_http:opts(),
+    protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
     additional_routes     => [route(_)]
 }.
@@ -59,8 +62,13 @@
     handler_limits        => handler_limits()
 }.
 -export_type([route_opts/0]).
+-export_type([server_opts/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
+-type protocol_opts() :: cowboy_http:opts().
+
+-export_type([protocol_opts/0]).
+
 -type server_opts() :: #{
     max_chunk_length => non_neg_integer(),
     regexp_meta     => re_mp()
@@ -106,15 +114,20 @@ child_spec(Id, Opts = #{
     ranch:child_spec({?MODULE, Id}, Transport, TransportOpts, cowboy_clear, CowboyOpts).
 
 get_socket_transport(SocketOpts, TransportOpts0) ->
-    AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-    TransportOpts = set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts0),
+    TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of
+        undefined ->
+            AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
+            set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts0);
+        _ ->
+            TransportOpts0
+    end,
     {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
 
 set_ranch_option(Key, Value, Opts) ->
     Opts#{Key => Value}.
 
 -spec get_cowboy_config(options()) ->
-    cowboy_http:opts().
+    protocol_opts().
 get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
@@ -179,6 +192,7 @@ compile_filter_meta() ->
 
 -spec get_http_trace(woody:ev_handler(), server_opts()) ->
     #{'onrequest':=fun((_) -> any()), 'onresponse':=fun((_, _, _, _) -> any())}.
+% Hooks were removed in cowboy 2.0, need to be remade via streams I guess
 get_http_trace(EvHandler, ServerOpts) ->
     #{
         onrequest => fun(Req) ->
@@ -297,7 +311,6 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
             error  => <<"http handler terminated abnormally">>,
             reason => woody_error:format_details(Reason),
             class  => undefined,
-            % stack  => erlang:get_stacktrace(), %% to be removed
             final  => true
         }),
     ok.

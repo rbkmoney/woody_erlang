@@ -852,8 +852,8 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
 ->
     try call(Context, 'Powerups', get_powerup, [Name, self_to_bin()])
     catch
-        Class:Reason:StackTrace ->
-            erlang:raise(Class, Reason, StackTrace)
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
     after
         {ok, _} = receive_msg(Name, Context),
         ok      = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name})

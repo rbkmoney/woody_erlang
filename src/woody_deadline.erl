@@ -61,8 +61,8 @@ to_binary(Deadline = {{Date, Time}, Millisec}) ->
             %% so just throw any non succeess case here.
             erlang:error({bad_deadline, Error}, [Deadline])
     catch
-        error:Error:StackTrace ->
-            erlang:error({bad_deadline, {Error, StackTrace}}, [Deadline])
+        error:Error:Stacktrace ->
+            erlang:error({bad_deadline, {Error, Stacktrace}}, [Deadline])
     end.
 
 %% Suppress dialyzer warning until rfc3339 spec will be fixed.

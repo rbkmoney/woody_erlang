@@ -98,7 +98,7 @@ start_woody_server(Handler, TransportOpts, ProtocolOpts, C) ->
                 protocol_opts  => ProtocolOpts
             }
     ),
-    woody_gen_supervisor:start_link([SupervisorOpts]).
+    genlib_adhoc_supervisor:start_link(#{}, [SupervisorOpts]).
 
 stop_woody_server(Pid) ->
     true = unlink(Pid),
