@@ -53,6 +53,7 @@
     protocol              => thrift,
     transport             => http,
     transport_opts        => transport_opts(),
+    read_body_opts        => cowboy_req:read_body_opts(),
     protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
     additional_routes     => [route(_)]
@@ -75,8 +76,8 @@
 -export_type([protocol_opts/0]).
 
 -type server_opts() :: #{
-    max_chunk_length => non_neg_integer(),
-    regexp_meta     => re_mp()
+    regexp_meta => re_mp(),
+    read_body_opts => cowboy_req:read_body_opts()
 }.
 
 -type state() :: #{
@@ -96,7 +97,6 @@
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 
 %% nginx should be configured to take care of various limits.
--define(MAX_CHUNK_LENGTH, 65535). %% 64kbytes
 
 -define(DUMMY_REQ_ID, <<"undefined">>).
 
@@ -155,13 +155,15 @@ get_dispatch(Opts) ->
     [route(_)].
 get_all_routes(Opts) ->
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    AdditionalRoutes ++ get_routes(maps:with([handlers, event_handler, handler_limits, protocol, transport], Opts)).
+    AdditionalRoutes ++ get_routes(maps:with(
+        [handlers, event_handler, handler_limits, protocol, transport, read_body_opts], Opts)).
 
 -spec get_routes(route_opts())->
     [route(state())].
 get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits = maps:get(handler_limits, Opts, #{}),
-    get_routes(config(), Limits, EvHandler, Handlers, []).
+    Config = maps:update(read_body_opts, maps:get(read_body_opts, Opts, #{}), config()),
+    get_routes(Config, Limits, EvHandler, Handlers, []).
 
 -spec get_routes(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Routes) -> Routes when
     Handlers   :: list(woody:http_handler(woody:th_handler())),
@@ -184,7 +186,7 @@ get_routes(_, _, _, [Handler | _], _) ->
     server_opts().
 config() ->
     #{
-       max_chunk_length => ?MAX_CHUNK_LENGTH,
+       read_body_opts => #{},
        regexp_meta => compile_filter_meta()
     }.
 
@@ -480,8 +482,10 @@ reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) 
 %% handle functions
 -spec get_body(cowboy_req:req(), server_opts()) ->
     {ok, woody:http_body(), cowboy_req:req()}.
-get_body(Req, #{max_chunk_length := MaxChunk}) ->
-    do_get_body(<<>>, Req, #{length => MaxChunk}).
+get_body(Req, #{read_body_opts := ReadBodyOpts}) ->
+    do_get_body(<<>>, Req, ReadBodyOpts);
+get_body(Req, _) ->
+    do_get_body(<<>>, Req, #{}).
 
 do_get_body(Body, Req, Opts) ->
     case cowboy_req:read_body(Req, Opts) of

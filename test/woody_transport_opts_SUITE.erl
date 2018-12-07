@@ -72,7 +72,8 @@ respects_max_connections(C) ->
     % keepalive timeout of 60 s.
     TransportOpts = #{max_connections => MaxConns},
     ProtocolOpts = #{max_keepalive => 1},
-    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, C),
+    ReadBodyOpts = #{},
+    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),
     Results = genlib_pmap:map(
         fun (_) ->
             woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client)
@@ -88,12 +89,13 @@ respects_max_connections(C) ->
 
 %%
 
-start_woody_server(Handler, TransportOpts, ProtocolOpts, C) ->
+start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
     ServerOpts0 = ?config(server, C),
     SupervisorOpts = woody_server:child_spec(
             {?MODULE, ?config(testcase, C)},
             ServerOpts0#{
                 handlers       => [Handler],
+                read_body_opts => ReadBodyOpts,
                 transport_opts => TransportOpts,
                 protocol_opts  => ProtocolOpts
             }
