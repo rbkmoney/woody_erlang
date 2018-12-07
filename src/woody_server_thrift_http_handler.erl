@@ -13,6 +13,11 @@
 %% API
 -export([get_routes/1]).
 
+%% API for woody_stream_handler
+-export([config/0]).
+-export([trace_req/4]).
+-export([trace_resp/6]).
+
 %% cowboy callbacks
 -export([init/2]).
 -export([terminate/3]).
@@ -131,10 +136,9 @@ set_ranch_option(Key, Value, Opts) ->
 get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
-    CowboyOpts = maps:get(protocol_opts, Opts, #{}),
-    HttpTrace  = get_http_trace(EvHandler, config()),
+    CowboyOpts = maps:merge(#{stream_handlers => [woody_stream_handler]}, maps:get(protocol_opts, Opts, #{})),
     maps:merge(#{
-        env => maps:merge(HttpTrace, #{dispatch => Dispatch}),
+        env =>#{dispatch => Dispatch, event_handler => EvHandler},
         max_header_name_length => 64
     }, CowboyOpts).
 
@@ -189,17 +193,6 @@ config() ->
 compile_filter_meta() ->
     {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
     Re.
-
--spec get_http_trace(woody:ev_handler(), server_opts()) ->
-    #{'onrequest':=fun((_) -> any()), 'onresponse':=fun((_, _, _, _) -> any())}.
-% Hooks were removed in cowboy 2.0, need to be remade via streams I guess
-get_http_trace(EvHandler, ServerOpts) ->
-    #{
-        onrequest => fun(Req) ->
-            trace_req(genlib_app:env(woody, trace_http_server), Req, EvHandler, ServerOpts) end,
-        onresponse => fun(Code, Headers, Body, Req) ->
-            trace_resp(genlib_app:env(woody, trace_http_server), Req, Code, Headers, Body, EvHandler) end
-    }.
 
 -spec trace_req(true, cowboy_req:req(), woody:ev_handler(), server_opts()) ->
     cowboy_req:req().
