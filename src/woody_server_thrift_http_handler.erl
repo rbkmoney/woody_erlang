@@ -136,7 +136,8 @@ set_ranch_option(Key, Value, Opts) ->
 get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
-    CowboyOpts = maps:merge(#{stream_handlers => [woody_stream_handler]}, maps:get(protocol_opts, Opts, #{})),
+    ProtocolOpts = maps:get(protocol_opts, Opts, #{}),
+    CowboyOpts = maps:merge(#{stream_handlers => [cowboy_stream_h, woody_compress_stream_handler]}, ProtocolOpts),
     maps:merge(#{
         env =>#{dispatch => Dispatch, event_handler => EvHandler},
         max_header_name_length => 64
