@@ -16,15 +16,22 @@
 %% private functions
 
 trace_request(Req, Env) ->
-    case maps:get(ev_handler, Env, undefined) of
+    case maps:get(event_handler, Env, undefined) of
         undefined ->
             undefined;
         EvHandler ->
-            Config = woody_server_thrift_http_handler:config(),
+            Opts = get_read_body_opts(Env),
             _ = woody_server_thrift_http_handler:trace_req(genlib_app:env(woody, trace_http_server),
-                Req, EvHandler, Config),
+                Req, EvHandler, Opts),
             EvHandler
     end.
+
+get_read_body_opts(#{dispatch := Disp}) ->
+    [{_, _, [Head | _]}] = Disp, %  unsure if we need to use specific opts for each element
+    {_, _, _, Opts} = Head,
+    maps:get(read_body_opts, maps:get(server_opts, Opts)).
+
+%% callbacks
 
 -spec init(cowboy_stream:streamid(), cowboy_req:req(), cowboy:opts())
     -> {cowboy_stream:commands(), state()}.

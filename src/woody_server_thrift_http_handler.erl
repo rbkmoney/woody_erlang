@@ -45,6 +45,8 @@
 
 %% ToDo: restructure options() to split server options and route options and
 %%       get rid of separate route_opts() when backward compatibility isn't an issue.
+-type read_body_opts() :: cowboy_req:read_body_opts().
+
 -type options() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
     event_handler         := woody:ev_handler(),
@@ -53,7 +55,7 @@
     protocol              => thrift,
     transport             => http,
     transport_opts        => transport_opts(),
-    read_body_opts        => cowboy_req:read_body_opts(),
+    read_body_opts        => read_body_opts(),
     protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
     additional_routes     => [route(_)]
@@ -77,7 +79,7 @@
 
 -type server_opts() :: #{
     regexp_meta => re_mp(),
-    read_body_opts => cowboy_req:read_body_opts()
+    read_body_opts => read_body_opts()
 }.
 
 -type state() :: #{
@@ -137,7 +139,7 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
     ProtocolOpts = maps:get(protocol_opts, Opts, #{}),
-    CowboyOpts = maps:merge(#{stream_handlers => [cowboy_stream_h, woody_compress_stream_handler]}, ProtocolOpts),
+    CowboyOpts = maps:merge(#{stream_handlers => [cowboy_stream_h, woody_stream_handler]}, ProtocolOpts),
     maps:merge(#{
         env =>#{dispatch => Dispatch, event_handler => EvHandler},
         max_header_name_length => 64
