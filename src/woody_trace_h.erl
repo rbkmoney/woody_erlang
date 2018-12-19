@@ -1,5 +1,7 @@
--module(woody_stream_handler).
--behavior(cowboy_stream).
+-module(woody_trace_h).
+-behaviour(cowboy_stream).
+
+-dialyzer(no_undefined_callbacks).
 
 -export([init/3]).
 -export([data/4]).
@@ -15,21 +17,9 @@
 
 %% private functions
 
-trace_request(Req, Env) ->
-    case maps:get(event_handler, Env, undefined) of
-        undefined ->
-            undefined;
-        EvHandler ->
-            Opts = get_read_body_opts(Env),
-            _ = woody_server_thrift_http_handler:trace_req(genlib_app:env(woody, trace_http_server),
-                Req, EvHandler, Opts),
-            EvHandler
-    end.
-
-get_read_body_opts(#{dispatch := Disp}) ->
-    [{_, _, [Head | _]}] = Disp, %  unsure if we need to use specific opts for each element
-    {_, _, _, Opts} = Head,
-    maps:get(read_body_opts, maps:get(server_opts, Opts)).
+trace_request(Req, EvHandler, ReadBodyOpts) ->
+    % there shoud be no situation, when we don't have read_body_opts at this moment
+    woody_server_thrift_http_handler:trace_req(genlib_app:env(woody, trace_http_server),Req, EvHandler, ReadBodyOpts).
 
 %% callbacks
 
@@ -37,7 +27,9 @@ get_read_body_opts(#{dispatch := Disp}) ->
     -> {cowboy_stream:commands(), state()}.
 init(StreamID, Req, Opts) ->
     Env = maps:get(env, Opts, #{}),
-    EvHandler = trace_request(Req, Env),
+    EvHandler = maps:get(event_handler, Env),
+    ReadBodyOpts = maps:get(read_body_opts, Env),
+    _ = trace_request(Req, EvHandler, ReadBodyOpts),
     {Commands0, Next} = cowboy_stream:init(StreamID, Req, Opts),
     {Commands0, #{next => Next, req => Req, ev_handler => EvHandler}}.
 

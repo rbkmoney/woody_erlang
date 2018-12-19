@@ -14,7 +14,6 @@
 -export([get_routes/1]).
 
 %% API for woody_stream_handler
--export([config/0]).
 -export([trace_req/4]).
 -export([trace_resp/6]).
 
@@ -30,14 +29,8 @@
 }.
 -export_type([handler_limits/0]).
 
--type transport_opts() :: [
-    ranch_tcp:opt()                       |
-    #{
-        socket          => inet:socket(),
-        max_connections => ranch:max_conns(),
-        shutdown        => timeout()
-    }
-].
+-type transport_opts() :: ranch:opts().
+
 -export_type([transport_opts/0]).
 
 -type route(T) :: {woody:path(), module(), T}.
@@ -77,10 +70,7 @@
 
 -export_type([protocol_opts/0]).
 
--type server_opts() :: #{
-    regexp_meta => re_mp(),
-    read_body_opts => read_body_opts()
-}.
+-type server_opts() :: #{regexp_meta => re_mp()}.
 
 -type state() :: #{
     th_handler     := woody:th_handler(),
@@ -139,9 +129,10 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
     ProtocolOpts = maps:get(protocol_opts, Opts, #{}),
-    CowboyOpts = maps:merge(#{stream_handlers => [cowboy_stream_h, woody_stream_handler]}, ProtocolOpts),
+    CowboyOpts   = maps:put(stream_handlers, [cowboy_stream_h, woody_trace_h], ProtocolOpts),
+    ReadBodyOpts = maps:get(read_body_opts, Opts, #{}),
     maps:merge(#{
-        env =>#{dispatch => Dispatch, event_handler => EvHandler},
+        env =>#{dispatch => Dispatch, event_handler => EvHandler, read_body_opts => ReadBodyOpts},
         max_header_name_length => 64
     }, CowboyOpts).
 
@@ -159,14 +150,13 @@ get_dispatch(Opts) ->
 get_all_routes(Opts) ->
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
     AdditionalRoutes ++ get_routes(maps:with(
-        [handlers, event_handler, handler_limits, protocol, transport, read_body_opts], Opts)).
+        [handlers, event_handler, handler_limits, protocol, transport], Opts)).
 
 -spec get_routes(route_opts())->
     [route(state())].
 get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits = maps:get(handler_limits, Opts, #{}),
-    Config = maps:update(read_body_opts, maps:get(read_body_opts, Opts, #{}), config()),
-    get_routes(Config, Limits, EvHandler, Handlers, []).
+    get_routes(config(), Limits, EvHandler, Handlers, []).
 
 -spec get_routes(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Routes) -> Routes when
     Handlers   :: list(woody:http_handler(woody:th_handler())),
@@ -188,10 +178,7 @@ get_routes(_, _, _, [Handler | _], _) ->
 -spec config() ->
     server_opts().
 config() ->
-    #{
-       read_body_opts => #{},
-       regexp_meta => compile_filter_meta()
-    }.
+    #{regexp_meta => compile_filter_meta()}.
 
 -spec compile_filter_meta() ->
     re_mp().
