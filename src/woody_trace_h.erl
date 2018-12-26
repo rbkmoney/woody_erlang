@@ -19,7 +19,7 @@
 
 trace_request(Req, EvHandler, ReadBodyOpts) ->
     % there shoud be no situation, when we don't have read_body_opts at this moment
-    woody_server_thrift_http_handler:trace_req(genlib_app:env(woody, trace_http_server),Req, EvHandler, ReadBodyOpts).
+    woody_server_thrift_http_handler:trace_req(genlib_app:env(woody, trace_http_server), Req, EvHandler, ReadBodyOpts).
 
 %% callbacks
 

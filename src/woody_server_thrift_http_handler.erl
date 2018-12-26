@@ -13,14 +13,13 @@
 %% API
 -export([get_routes/1]).
 
-%% API for woody_stream_handler
--export([trace_req/4]).
--export([trace_resp/6]).
-
-%% cowboy callbacks
+%% cowboy_handler callbacks
 -export([init/2]).
 -export([terminate/3]).
 
+%% API for woody_stream_handler
+-export([trace_req/4]).
+-export([trace_resp/6]).
 
 %% Types
 -type handler_limits() :: #{
@@ -63,7 +62,6 @@
     handler_limits        => handler_limits()
 }.
 -export_type([route_opts/0]).
--export_type([server_opts/0]).
 
 -type re_mp() :: tuple(). %% fuck otp for hiding the types.
 -type protocol_opts() :: cowboy_http:opts().
@@ -149,8 +147,7 @@ get_dispatch(Opts) ->
     [route(_)].
 get_all_routes(Opts) ->
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    AdditionalRoutes ++ get_routes(maps:with(
-        [handlers, event_handler, handler_limits, protocol, transport], Opts)).
+    AdditionalRoutes ++ get_routes(maps:with([handlers, event_handler, handler_limits, protocol, transport], Opts)).
 
 -spec get_routes(route_opts())->
     [route(state())].
@@ -235,8 +232,8 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     case have_resources_to_continue(Limits) of
         true ->
             Opts1 = Opts#{url => Url, woody_state => WoodyState},
-            {ok, Req2, State} = check_request(Req, Opts1),
-            handle(Req2, State);
+            {ok, Req, State} = check_request(Req, Opts1),
+            handle(Req, State);
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
@@ -309,14 +306,12 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
 -spec check_request(cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_request(Req, State) ->
-    Method = cowboy_req:method(Req),
-    check_method(Method, Req, State).
+    check_method(cowboy_req:method(Req), Req, State).
 
 -spec check_method(woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_init_result().
 check_method(<<"POST">>, Req, State) ->
-    Header = cowboy_req:header(<<"content-type">>, Req),
-    check_content_type(Header, Req, State);
+    check_content_type(cowboy_req:header(<<"content-type">>, Req), Req, State);
 
 check_method(Method, Req, State) ->
     Req1 = cowboy_req:set_resp_header(<<"allow">>, <<"POST">>, Req),
@@ -347,9 +342,8 @@ check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
         {ok, RpcId, Req1} ->
-            Header = cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
             check_deadline_header(
-                Header,
+                cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
                 Req1,
                 Mode,
                 State#{woody_state => set_rpc_id(RpcId, WoodyState)}
@@ -389,8 +383,7 @@ check_ids(Map = #{req := Req}) ->
 -spec check_deadline_header(Header, Req, woody_util:headers_mode(), state()) -> cowboy_init_result() when
     Header :: woody:http_header_val() | undefined, Req :: cowboy_req:req().
 check_deadline_header(undefined, Req, Mode, State) ->
-    Headers = cowboy_req:headers(Req),
-    check_metadata_headers(Headers, Req, Mode, State);
+    check_metadata_headers(cowboy_req:headers(Req), Req, Mode, State);
 check_deadline_header(DeadlineBin, Req, Mode, State) ->
     try woody_deadline:from_binary(DeadlineBin) of
         Deadline -> check_deadline(Deadline, Req, Mode, State)
@@ -539,8 +532,7 @@ set_error_headers(Class, Reason, Req) ->
 -spec reply(woody:http_code(), cowboy_req:req(), woody_state:st()) ->
     cowboy_req:req().
 reply(200, Req, WoodyState) ->
-    Req1 = cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req),
-    do_reply(200, Req1, WoodyState);
+    do_reply(200, cowboy_req:set_resp_header(<<"content-type">>, ?CONTENT_TYPE_THRIFT, Req), WoodyState);
 reply(Code, Req, WoodyState) ->
     do_reply(Code, Req, WoodyState).
 

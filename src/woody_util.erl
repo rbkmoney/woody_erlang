@@ -59,8 +59,7 @@ get_rpc_reply_type(_) -> call.
 -spec get_req_headers_mode(cowboy_req:req()) ->
     {headers_mode(), cowboy_req:req()}.
 get_req_headers_mode(Req) ->
-    Mode = application:get_env(woody, server_headers_mode, auto),
-    get_req_headers_mode(Mode, Req).
+    get_req_headers_mode(application:get_env(woody, server_headers_mode, auto), Req).
 
 -spec get_error_headers_mode(woody:http_headers()) ->
     headers_mode().
@@ -74,10 +73,10 @@ get_error_headers_mode(Headers) ->
 
 apply_mode_rules([], _Rules, Default) ->
     Default;
-apply_mode_rules([Name | HeadersNamesTail] = _Headers, Rules, Default) ->
+apply_mode_rules([Name | HeadersTail], Rules, Default) ->
     case maps:get(Name, Rules, undefined) of
         undefined ->
-            apply_mode_rules(HeadersNamesTail, Rules, Default);
+            apply_mode_rules(HeadersTail, Rules, Default);
         Mode ->
             Mode
     end.

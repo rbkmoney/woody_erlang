@@ -921,8 +921,7 @@ log_event(Event, RpcId, Meta) ->
 %%
 init(Req, Code) ->
     ct:pal("Cowboy fail server received request. Replying: ~p", [Code]),
-    Req1 = cowboy_req:reply(Code, Req),
-    {stop, Req1, Code}.
+    {stop, cowboy_req:reply(Code, Req), Code}.
 
 terminate(_, _, _) ->
     ok.

@@ -285,7 +285,6 @@ get_header_value(Name, Headers) ->
     case [V || {K, V} <- HeaderList, Name =:= genlib_string:to_lower(K)] of
         [Value] -> Value;
         []      -> none
-        % _       -> multiple %% Not actually possible as maps can't hold multiple Values for one Key, to be removed
     end.
 
 -spec make_woody_headers(woody_context:ctx()) ->
@@ -310,8 +309,7 @@ add_optional_headers(Context, Headers) ->
 -spec add_metadata_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
 add_metadata_headers(Context, Headers) ->
-    Meta = woody_context:get_meta(Context),
-    maps:fold(fun add_metadata_header/3, Headers, Meta).
+    maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
 
 -spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
