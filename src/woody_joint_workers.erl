@@ -190,6 +190,6 @@ set_worker_deadline_timer(Deadline) ->
 do_task_safe(Task, Deadline) ->
     try
         {ok, Task(Deadline)}
-    catch Class:Error ->
-        {exception, {Class, Error, erlang:get_stacktrace()}}
+    catch Class:Error:Stacktrace ->
+        {exception, {Class, Error, Stacktrace}}
     end.
