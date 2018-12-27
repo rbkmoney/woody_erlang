@@ -216,10 +216,10 @@ format_deadline(Meta) ->
 
 -spec format_event(event(), event_meta()) ->
     log_msg().
-format_event(?EV_CLIENT_BEGIN, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' begin", [URL]}};
-format_event(?EV_CLIENT_END, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' end", [URL]}};
+format_event(?EV_CLIENT_BEGIN, _Meta) ->
+    {debug, {"[client] request begin", []}};
+format_event(?EV_CLIENT_END, _Meta) ->
+    {debug, {"[client] request end", []}};
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
@@ -258,10 +258,10 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
-format_event(?EV_CLIENT_CACHE_BEGIN, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' begin", [URL]}};
-format_event(?EV_CLIENT_CACHE_END, #{url:=URL}) ->
-    {debug, {"[client] request to '~p' end", [URL]}};
+format_event(?EV_CLIENT_CACHE_BEGIN, _Meta) ->
+    {debug, {"[client] request begin", []}};
+format_event(?EV_CLIENT_CACHE_END, _Meta) ->
+    {debug, {"[client] request end", []}};
 format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
