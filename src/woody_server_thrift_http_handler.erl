@@ -35,9 +35,10 @@
 -type route(T) :: {woody:path(), module(), T}.
 -export_type([route/1]).
 
+-type read_body_opts() :: cowboy_req:read_body_opts().
+
 %% ToDo: restructure options() to split server options and route options and
 %%       get rid of separate route_opts() when backward compatibility isn't an issue.
--type read_body_opts() :: cowboy_req:read_body_opts().
 
 -type options() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
@@ -80,8 +81,7 @@
 }.
 
 -type cowboy_init_result() ::
-    {ok       , cowboy_req:req(), state()} |
-    {ok       , cowboy_req:req(), undefined} |
+    {ok       , cowboy_req:req(), state() | undefined} |
     {shutdown , cowboy_req:req(), undefined}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
