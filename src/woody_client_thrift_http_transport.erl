@@ -14,7 +14,7 @@
 
 
 %% Types
--type options() :: list(tuple()).
+-type options() :: map().
 -export_type([options/0]).
 
 -type woody_transport() :: #{
@@ -50,8 +50,8 @@ new(Url, Opts, WoodyState) ->
 -spec child_spec(options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
-    Name = proplists:get_value(pool, Options),
-    hackney_pool:child_spec(Name, Options).
+    Name = maps:get(pool, Options, undefined),
+    hackney_pool:child_spec(Name, maps:to_list(Options)).
 
 %%
 %% Thrift transport callbacks
@@ -105,7 +105,7 @@ send(Url, Body, Options, WoodyState) ->
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             Timeouts = set_timeouts(Options, Context),
             HeaderList = maps:to_list(Headers),
-            Result = hackney:request(post, Url, HeaderList, Body, Timeouts),
+            Result = hackney:request(post, Url, HeaderList, Body, maps:to_list(Timeouts)),
             transform_request_results(Result)
     end.
 
@@ -127,11 +127,11 @@ set_timeouts(Options, Context) ->
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
             %% the precedence).
-            Options ++ [
-                {connect_timeout, ConnectTimeout},
-                {send_timeout,    SendTimeout},
-                {recv_timeout,    Timeout}
-            ]
+            maps:merge(Options, #{
+                connect_timeout => ConnectTimeout,
+                send_timeout =>    SendTimeout,
+                recv_timeout =>    Timeout
+            })
     end.
 
 -define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
