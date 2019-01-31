@@ -341,7 +341,6 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
         port          => ?SERVER_PORT
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
-
     Specs = [woody_client:child_spec(pool_opts(Pool)) || Pool <- Params],
 
     _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
@@ -373,7 +372,11 @@ pool_opts(Pool) ->
     }.
 
 start_pool_opts({Name, Timeout, MaxConnections}) ->
-    [{pool, Name}, {timeout, Timeout}, {max_connections, MaxConnections}].
+    #{
+        pool => Name,
+        timeout => Timeout,
+        max_connections => MaxConnections
+    }.
 
 get_handler('Powerups') ->
     {
@@ -692,7 +695,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     EvHandler = ?MODULE,
     WoodyState = woody_state:new(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], WoodyState),
+        woody_client_thrift_http_transport:new(Url, #{}, WoodyState),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
