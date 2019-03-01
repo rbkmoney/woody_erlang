@@ -127,11 +127,11 @@ set_timeouts(Options, Context) ->
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
             %% the precedence).
-            maps:merge(Options, #{
+            maps:merge(#{
                 connect_timeout => ConnectTimeout,
                 send_timeout =>    SendTimeout,
                 recv_timeout =>    Timeout
-            })
+            }, Options)
     end.
 
 -define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
