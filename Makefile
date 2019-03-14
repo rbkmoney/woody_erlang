@@ -30,6 +30,7 @@ compile: submodules rebar-update
 	$(REBAR) compile
 
 test: submodules
+	$(REBAR) eunit
 	$(REBAR) ct
 
 xref: submodules
