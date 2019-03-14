@@ -103,7 +103,8 @@ send(Url, Body, Options, WoodyState) ->
         false ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-            hackney:request(post, Url, Headers, Body, set_timeouts(Options, Context))
+            ResolvedAddr = woody_resolver:resolve_url(Url),
+            hackney:request(post, ResolvedAddr, Headers, Body, set_timeouts(Options, Context))
     end.
 
 set_timeouts(Options, Context) ->
