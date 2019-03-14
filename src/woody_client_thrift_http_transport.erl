@@ -103,8 +103,10 @@ send(Url, Body, Options, WoodyState) ->
         false ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-            ResolvedAddr = woody_resolver:resolve_url(Url),
-            hackney:request(post, ResolvedAddr, Headers, Body, set_timeouts(Options, Context))
+            % MSPF-416: We resolve url host to an ip here to prevent
+            % reusing keep-alive connections do dead hosts
+            {ok, ResolvedUrl} = woody_resolver:resolve_url(Url),
+            hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context))
     end.
 
 set_timeouts(Options, Context) ->

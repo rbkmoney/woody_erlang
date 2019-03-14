@@ -5,26 +5,39 @@
 
 -export([resolve_url/1]).
 
--spec resolve_url(http_uri:uri()) ->
-    {ok, ResolvedUrl :: http_uri:uri()} |
+-spec resolve_url(binary()) ->
+    {ok, ResolvedUrl :: binary()} |
     {error, Reason :: atom()}.
 
-resolve_url(Url) when is_binary(Url) ->
-    resolve_url(binary_to_list(Url));
-resolve_url(Url) when is_list(Url) ->
+resolve_url(Url) ->
     ParsedUrl = hackney_url:parse_url(Url),
-    ResolvedUrl = case inet_parse:address(ParsedUrl#hackney_url.host) of
-        {ok, _} -> ParsedUrl;
-        {error, _} -> resolve(ParsedUrl)
-    end,
-    hackney_url:unparse_url(ResolvedUrl).
+    case inet_parse:address(ParsedUrl#hackney_url.host) of
+        {ok, _} -> {ok, Url}; % url host is already an ip, move on
+        {error, _} -> do_resolve_url(ParsedUrl)
+    end.
 
-resolve(ParsedUrl) ->
-    {ok, HostEnt} = inet:gethostbyname(ParsedUrl#hackney_url.host),
-    ResolvedHost = inet:ntoa(get_ip(HostEnt)),
+do_resolve_url(ParsedUrl) ->
+    case resolve_host(ParsedUrl#hackney_url.host) of
+        {ok, ResolvedHost} ->
+            {ok, reassemble_url(ParsedUrl, ResolvedHost)};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+resolve_host(Host) ->
+    case inet:gethostbyname(Host) of
+        {ok, HostEnt} ->
+            {ok, parse_hostent(HostEnt)};
+        {error, _} ->
+            {error, unable_to_resolve_host}
+    end.
+
+reassemble_url(ParsedUrl, {IpAddr, IpVer}) ->
+    HostStr = inet:ntoa(IpAddr),
     %kind of a dirty method to make unparse_url work
-    Netloc = encode_hackney_netloc(ResolvedHost, ParsedUrl#hackney_url.port, get_ipver(HostEnt)),
-    ParsedUrl#hackney_url{netloc = Netloc, host = ResolvedHost}.
+    Netloc = encode_hackney_netloc(HostStr, ParsedUrl#hackney_url.port, IpVer),
+    ResolvedUrl = ParsedUrl#hackney_url{netloc = Netloc, host = HostStr},
+    hackney_url:unparse_url(ResolvedUrl).
 
 encode_hackney_netloc(Host, Port, IpVer) ->
     BinHost = list_to_binary(Host),
@@ -33,6 +46,9 @@ encode_hackney_netloc(Host, Port, IpVer) ->
          inet -> <<BinHost/binary, ":", BinPort/binary>>;
          inet6 -> <<"[", BinHost/binary, "]:", BinPort/binary>>
     end.
+
+parse_hostent(HostEnt) ->
+    {get_ip(HostEnt), get_ipver(HostEnt)}.
 
 get_ip(HostEnt) ->
     AddrList = HostEnt#hostent.h_addr_list,
