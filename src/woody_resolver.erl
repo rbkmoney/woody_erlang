@@ -7,11 +7,11 @@
 
 -spec resolve_url(binary()) ->
     {ok, ResolvedUrl :: binary()} |
-    {error, Reason :: atom()}.
+    {error, unable_to_resolve_host}.
 
 resolve_url(Url) ->
     ParsedUrl = hackney_url:parse_url(Url),
-    case inet_parse:address(ParsedUrl#hackney_url.host) of
+    case inet:parse_address(ParsedUrl#hackney_url.host) of
         {ok, _} -> {ok, Url}; % url host is already an ip, move on
         {error, _} -> do_resolve_url(ParsedUrl)
     end.
@@ -51,8 +51,8 @@ parse_hostent(HostEnt) ->
     {get_ip(HostEnt), get_ipver(HostEnt)}.
 
 get_ip(HostEnt) ->
-    AddrList = HostEnt#hostent.h_addr_list,
-    lists:last(AddrList).
+    [Ip | _] = HostEnt#hostent.h_addr_list,
+    Ip.
 
 get_ipver(HostEnt) ->
     HostEnt#hostent.h_addrtype.
