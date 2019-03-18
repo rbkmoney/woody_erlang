@@ -140,7 +140,7 @@
 
 -define(SERVER_IP      , {0, 0, 0, 0}).
 -define(SERVER_PORT    , 8085).
--define(URL_BASE       , "0.0.0.0:8085").
+-define(URL_BASE       , "http://0.0.0.0:8085").
 -define(PATH_WEAPONS   , "/v1/woody/test/weapons").
 -define(PATH_POWERUPS  , "/v1/woody/test/powerups").
 

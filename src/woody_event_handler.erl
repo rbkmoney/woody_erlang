@@ -17,6 +17,8 @@
     ?EV_CALL_SERVICE   |
     ?EV_SERVICE_RESULT |
     ?EV_CLIENT_SEND    |
+    ?EV_CLIENT_RSLV_BEGIN |
+    ?EV_CLIENT_RSLV_RESULT |
     ?EV_CLIENT_RECEIVE |
     ?EV_CLIENT_END.
 
@@ -53,11 +55,11 @@
     metadata       := woody_context:meta(),
     deadline       := woody:deadline(),
 
-    url      => woody:url(),                          %% EV_CLIENT_SEND
+    url      => woody:url(),                          %% EV_CLIENT_SEND | EV_CLIENT_RSLV_BEGIN
     code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
-    reason   => woody_error:details(),                %% EV_CLIENT_RECEIVE
-    status   => status(),                             %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT
-    result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT
+    reason   => woody_error:details(),                %% EV_CLIENT_RECEIVE | EV_CLIENT_RSLV_RESULT
+    status   => status(),                             %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RSLV_RESULT
+    result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT | EV_CLIENT_RSLV_RESULT
 }.
 -export_type([meta_client/0]).
 
@@ -231,6 +233,12 @@ format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
     {info, {"[client] request handled successfully ~p", [Result]}};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
+format_event(?EV_CLIENT_RSLV_BEGIN, #{url:=URL}) ->
+    {debug, {"[client] resolving location of ~s", [URL]}};
+format_event(?EV_CLIENT_RSLV_RESULT, #{status:=ok, url:= URL, reason:=Reason}) ->
+    {debug, {"[client] resolved location of ~s to ~ts", [URL, Reason]}};
+format_event(?EV_CLIENT_RSLV_RESULT, #{status:=error, url:= URL, reason:=Reason}) ->
+    {debug, {"[client] resolving location of ~s failed due to: ~ts", [URL, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
     {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->

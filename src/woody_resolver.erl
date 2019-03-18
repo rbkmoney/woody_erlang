@@ -1,59 +1,112 @@
 -module(woody_resolver).
 
--include_lib("hackney/include/hackney_lib.hrl").
 -include_lib("kernel/include/inet.hrl").
 
--type url() :: #hackney_url{}.
+-record(woody_url, {
+    scheme :: atom(),
+    user_info :: string(),
+    host :: string(),
+    port :: integer(),
+    path :: string(),
+    query :: string()
+}).
+
+-type resolver_opts() :: #{
+    ip_selector_fun := function()
+}.
 
 -export([resolve_url/1]).
 
 -spec resolve_url(binary()) ->
-    {ok, ResolvedUrl :: url()} |
-    {error, unable_to_resolve_host}.
+    {ok, ResolvedUrl :: binary()} |
+    {error, Reason :: atom()}.
 
 resolve_url(Url) ->
-    ParsedUrl = hackney_url:parse_url(Url),
-    case inet:parse_address(ParsedUrl#hackney_url.host) of
-        {ok, _} -> {ok, ParsedUrl}; % url host is already an ip, move on
-        {error, _} -> do_resolve_url(ParsedUrl)
+    resolve_url(Url, #{
+        ip_selector_fun => fun first_ip/1
+    }).
+
+-spec resolve_url(binary(), resolver_opts()) ->
+    {ok, ResolvedUrl :: binary()} |
+    {error, Reason :: atom()}.
+
+resolve_url(Url, Opts) ->
+    case parse_url(Url) of
+        {ok, ParsedUrl} ->
+            resolve_url(ParsedUrl, Url, Opts);
+        {error, Reason} ->
+            {error, Reason}
     end.
 
-do_resolve_url(ParsedUrl) ->
-    case resolve_host(ParsedUrl#hackney_url.host) of
+resolve_url(ParsedUrl = #woody_url{}, Url, Opts) ->
+    case inet:parse_address(ParsedUrl#woody_url.host) of
+        {ok, _} -> {ok, Url}; % url host is already an ip, move on
+        {error, _} -> do_resolve_url(ParsedUrl, Opts)
+    end.
+
+parse_url(Url) ->
+    case http_uri:parse(binary_to_list(Url)) of
+        {ok, {Scheme, UserInfo, Host, Port, Path, Query}} ->
+            {ok, #woody_url{
+                scheme = Scheme,
+                user_info = UserInfo,
+                host = Host,
+                port = Port,
+                path = Path,
+                query = Query
+            }};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+do_resolve_url(ParsedUrl, Opts) ->
+    case resolve_host(ParsedUrl#woody_url.host, Opts) of
         {ok, ResolvedHost} ->
             {ok, reassemble_url(ParsedUrl, ResolvedHost)};
         {error, Reason} ->
             {error, Reason}
     end.
 
-resolve_host(Host) ->
+resolve_host(Host, Opts) ->
     case inet:gethostbyname(Host) of
         {ok, HostEnt} ->
-            {ok, parse_hostent(HostEnt)};
-        {error, _} ->
-            {error, unable_to_resolve_host}
+            {ok, parse_hostent(HostEnt, Opts)};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 reassemble_url(ParsedUrl, {IpAddr, IpVer}) ->
-    HostStr = inet:ntoa(IpAddr),
-    %kind of a dirty method to make unparse_url work
-    Netloc = encode_hackney_netloc(HostStr, ParsedUrl#hackney_url.port, IpVer),
-    ParsedUrl#hackney_url{netloc = Netloc, host = HostStr}.
+    BinScheme = encode_scheme(ParsedUrl#woody_url.scheme),
+    BinUserInfo = encode_userinfo(ParsedUrl#woody_url.user_info),
+    BinHost = list_to_binary(inet:ntoa(IpAddr)),
+    BinPort = integer_to_binary(ParsedUrl#woody_url.port),
+    BinPath = list_to_binary(ParsedUrl#woody_url.path),
+    BinQuery = list_to_binary(ParsedUrl#woody_url.query),
+    Netloc = case IpVer of
+        inet -> <<BinHost/binary, ":", BinPort/binary>>;
+        inet6 -> <<"[", BinHost/binary, "]:", BinPort/binary>>
+    end,
+    <<BinScheme/binary, BinUserInfo/binary, Netloc/binary,
+        BinPath/binary, BinQuery/binary>>.
 
-encode_hackney_netloc(Host, Port, IpVer) ->
-    BinHost = list_to_binary(Host),
-    BinPort = integer_to_binary(Port),
-    case IpVer of
-         inet -> <<BinHost/binary, ":", BinPort/binary>>;
-         inet6 -> <<"[", BinHost/binary, "]:", BinPort/binary>>
-    end.
+encode_scheme(Scheme) ->
+    BinScheme = atom_to_binary(Scheme, utf8),
+    <<BinScheme/binary, "://">>.
 
-parse_hostent(HostEnt) ->
-    {get_ip(HostEnt), get_ipver(HostEnt)}.
+encode_userinfo([]) ->
+    <<>>;
+encode_userinfo(UserInfo) ->
+    BinUserInfo = list_to_binary(UserInfo),
+    <<BinUserInfo/binary, "@">>.
 
-get_ip(HostEnt) ->
-    [Ip | _] = HostEnt#hostent.h_addr_list,
-    Ip.
+parse_hostent(HostEnt, Opts) ->
+    {get_ip(HostEnt, Opts), get_ipver(HostEnt)}.
+
+get_ip(HostEnt, #{ip_selector_fun := SelFun}) ->
+    SelFun(HostEnt#hostent.h_addr_list).
 
 get_ipver(HostEnt) ->
     HostEnt#hostent.h_addrtype.
+
+first_ip([Ip | _]) ->
+    Ip.

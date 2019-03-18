@@ -44,6 +44,8 @@
 
 -define(EV_CLIENT_BEGIN           , 'client begin').
 -define(EV_CLIENT_SEND            , 'client send').
+-define(EV_CLIENT_RSLV_BEGIN      , 'client resolve begin').
+-define(EV_CLIENT_RSLV_RESULT     , 'client resolve result').
 -define(EV_CLIENT_RECEIVE         , 'client receive').
 -define(EV_CLIENT_END             , 'client end').
 
