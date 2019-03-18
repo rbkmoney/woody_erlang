@@ -4,6 +4,7 @@
 -dialyzer(no_undefined_callbacks).
 
 -include("woody_defs.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 
 %% API
 -export([new       /3]).
@@ -102,11 +103,19 @@ send(Url, Body, Options, WoodyState) ->
             {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
         false ->
             Headers = make_woody_headers(Context),
-            _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             % MSPF-416: We resolve url host to an ip here to prevent
             % reusing keep-alive connections do dead hosts
-            {ok, ResolvedUrl} = woody_resolver:resolve_url(Url),
-            hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context))
+            case woody_resolver:resolve_url(Url) of
+                {ok, ResolvedUrl} ->
+                    _ = log_event(?EV_CLIENT_SEND, WoodyState, #{
+                        url => Url,
+                        ip => get_resolved_addr(ResolvedUrl)
+                    }),
+                    hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context));
+                {error, _} ->
+                    _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
+                    {error, nxdomain}
+            end
     end.
 
 set_timeouts(Options, Context) ->
@@ -331,3 +340,6 @@ log_internal_error(Error, Reason, WoodyState) ->
 
 log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
+
+get_resolved_addr(HackneyUrl) ->
+    HackneyUrl#hackney_url.netloc.

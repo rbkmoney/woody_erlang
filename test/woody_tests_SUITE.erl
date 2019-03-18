@@ -46,6 +46,7 @@
     deadline_to_from_timeout_test/1,
     deadline_to_from_binary_test/1,
     call_ok_test/1,
+    call_resolver_nxdomain/1,
     call3_ok_test/1,
     call_oneway_void_test/1,
     call_sequence_with_context_meta_test/1,
@@ -178,6 +179,7 @@ groups() ->
         deadline_to_from_timeout_test,
         deadline_to_from_binary_test,
         call_ok_test,
+        call_resolver_nxdomain,
         call3_ok_test,
         call_oneway_void_test,
         call_sequence_with_context_meta_test,
@@ -516,6 +518,13 @@ deadline_to_from_binary_test(_) ->
 call_ok_test(_) ->
     Gun = <<"Enforcer">>,
     gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+
+call_resolver_nxdomain(_) ->
+    Context = make_context(<<"nxdomain">>),
+    try call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
+    catch
+        error:{woody_error, {internal, resource_unavailable, <<"nxdomain">>}} -> ok
+    end.
 
 call3_ok_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
@@ -965,6 +974,11 @@ get_service_endpoint('Powerups') ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_POWERUPS),
         {?THRIFT_DEFS, 'Powerups'}
+    };
+get_service_endpoint('The Void') ->
+    {
+        <<"http://nxdomainme">>,
+        {?THRIFT_DEFS, 'Weapons'}
     }.
 
 check_msg(true, Msg, Context) ->
