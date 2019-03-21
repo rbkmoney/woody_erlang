@@ -4,6 +4,7 @@
 -dialyzer(no_undefined_callbacks).
 
 -include("woody_defs.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 
 %% API
 -export([new       /3]).
@@ -103,19 +104,19 @@ send(Url, Body, Options, WoodyState) ->
         false ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-            _ = log_event(?EV_CLIENT_RSLV_BEGIN, WoodyState, #{url => Url}),
+            _ = log_event(?EV_CLIENT_RESOLVE_BEGIN, WoodyState, #{url => Url}),
             % MSPF-416: We resolve url host to an ip here to prevent
             % reusing keep-alive connections do dead hosts
             case woody_resolver:resolve_url(Url) of
                 {ok, ResolvedUrl} ->
-                    _ = log_event(?EV_CLIENT_RSLV_RESULT, WoodyState, #{
+                    _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
                         status => ok,
                         url => Url,
-                        reason => ResolvedUrl
+                        address => get_hackney_host(ResolvedUrl)
                     }),
                     hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context));
                 {error, Reason} ->
-                    _ = log_event(?EV_CLIENT_RSLV_RESULT, WoodyState, #{
+                    _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
                         status => error,
                         url => Url,
                         reason => Reason
@@ -346,3 +347,6 @@ log_internal_error(Error, Reason, WoodyState) ->
 
 log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
+
+get_hackney_host(HackneyUrl) ->
+    HackneyUrl#hackney_url.host.
