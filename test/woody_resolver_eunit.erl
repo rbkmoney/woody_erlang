@@ -13,7 +13,7 @@ resolve_ipv4_test() ->
     {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"http://localhost/test">>),
     {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test?q=a">>)} =
-        woody_resolver:resolve_url(<<"http://localhost/test?q=a">>),
+        woody_resolver:resolve_url("http://localhost/test?q=a"),
     {ok, ?RESPONSE(https, <<"127.0.0.1:8080">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"https://localhost:8080/test">>),
     {ok, ?RESPONSE(https, <<"127.0.0.1:443">>, <<>>)} =
@@ -24,7 +24,7 @@ resolve_ipv6_test() ->
     {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"http://localhost/test">>),
     {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test?q=a">>)} =
-        woody_resolver:resolve_url(<<"http://localhost/test?q=a">>),
+        woody_resolver:resolve_url("http://localhost/test?q=a"),
     {ok, ?RESPONSE(https, <<"[::1]:8080">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"https://localhost:8080/test">>),
     {ok, ?RESPONSE(https, <<"[::1]:443">>, <<>>)} =
