@@ -4,7 +4,6 @@
 -dialyzer(no_undefined_callbacks).
 
 -include("woody_defs.hrl").
--include_lib("hackney/include/hackney_lib.hrl").
 
 %% API
 -export([new       /3]).
@@ -112,7 +111,7 @@ send(Url, Body, Options, WoodyState) ->
                     _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
                         status => ok,
                         url => Url,
-                        address => get_hackney_host(ResolvedUrl)
+                        address => woody_resolver:get_host(ResolvedUrl)
                     }),
                     hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context));
                 {error, Reason} ->
@@ -347,6 +346,3 @@ log_internal_error(Error, Reason, WoodyState) ->
 
 log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
-
-get_hackney_host(HackneyUrl) ->
-    HackneyUrl#hackney_url.host.

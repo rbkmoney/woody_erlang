@@ -12,23 +12,23 @@
 }.
 
 -export([resolve_url/1]).
+-export([resolve_url/2]).
+-export([get_host/1]).
 
--export([first_ip/1]).
+%%
 
 -spec resolve_url(url()) ->
     {ok, ResolvedUrl :: parsed_url()} |
     {error, Reason :: atom()}.
-
 resolve_url(Url) ->
     resolve_url(Url, #{
-        ip_picker => {woody_resolver, first_ip},
+        ip_picker => {erlang, hd},
         timeout => infinity
     }).
 
 -spec resolve_url(url(), resolver_opts()) ->
     {ok, ResolvedUrl :: parsed_url()} |
     {error, Reason :: atom()}.
-
 resolve_url(Url, Opts) when is_list(Url) ->
     resolve_url(list_to_binary(Url), Opts);
 resolve_url(<<"https://", _Rest/binary>> = Url, Opts) ->
@@ -37,6 +37,13 @@ resolve_url(<<"http://", _Rest/binary>> = Url, Opts) ->
     resolve_parsed_url(parse_url(Url), Opts);
 resolve_url(_Url, _Opts) ->
     {error, unsupported_protocol}.
+
+-spec get_host(parsed_url()) ->
+    nonempty_string().
+get_host(ParsedUrl) ->
+    ParsedUrl#hackney_url.host.
+
+%%
 
 parse_url(Url) ->
     hackney_url:parse_url(Url).
@@ -63,26 +70,26 @@ lookup_host(Host, #{timeout := Timeout} = Opts) ->
             {error, Reason}
     end.
 
-replace_host(ParsedUrl, {IpAddr, IpVer}) ->
+replace_host(ParsedUrl, {IpAddr, IpFamily}) ->
     HostStr = inet:ntoa(IpAddr),
-    Netloc = encode_netloc(HostStr, IpVer, ParsedUrl#hackney_url.port),
+    Netloc = encode_netloc(HostStr, IpFamily, ParsedUrl#hackney_url.port),
     ParsedUrl#hackney_url{netloc = Netloc, host = HostStr}.
 
-encode_netloc(HostStr, IpVer, Port) ->
+encode_netloc(HostStr, IpFamily, Port) ->
     BinHost = list_to_binary(HostStr),
     BinPort = integer_to_binary(Port),
-    case IpVer of
+    case IpFamily of
         inet -> <<BinHost/binary, ":", BinPort/binary>>;
         inet6 -> <<"[", BinHost/binary, "]:", BinPort/binary>>
     end.
 
 parse_hostent(HostEnt, Opts) ->
-    {get_ip(HostEnt, Opts), get_ipver(HostEnt)}.
+    {get_ip(HostEnt, Opts), get_ip_family(HostEnt)}.
 
 get_ip(HostEnt, #{ip_picker := {M, F}}) ->
     erlang:apply(M, F, [HostEnt#hostent.h_addr_list]).
 
-get_ipver(HostEnt) ->
+get_ip_family(HostEnt) ->
     HostEnt#hostent.h_addrtype.
 
 get_preferred_ip_family() ->
@@ -90,6 +97,3 @@ get_preferred_ip_family() ->
         true -> inet6;
         false -> inet
     end.
-
-first_ip([Ip | _]) ->
-    Ip.
