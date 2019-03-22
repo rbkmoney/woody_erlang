@@ -1,6 +1,7 @@
 -module(woody_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 
 -include("woody_test_thrift.hrl").
 -include("src/woody_defs.hrl").
@@ -75,7 +76,10 @@
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
     find_multiple_pools_test/1,
-    calls_with_cache/1
+    calls_with_cache/1,
+    woody_resolver_inet/1,
+    woody_resolver_inet6/1,
+    woody_resolver_errors/1
 ]).
 
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -162,7 +166,8 @@ all() ->
         {group, auto_client_legacy_server},
         {group, auto_both},
         {group, normal_both},
-        {group, legacy_both}
+        {group, legacy_both},
+        {group, woody_resolver}
     ].
 
 groups() ->
@@ -215,7 +220,12 @@ groups() ->
         {auto_client_legacy_server, [], SpecTests},
         {auto_both, [], SpecTests},
         {normal_both, [], SpecTests},
-        {legacy_both, [], SpecTests}
+        {legacy_both, [], SpecTests},
+        {woody_resolver, [], [
+            woody_resolver_inet,
+            woody_resolver_inet6,
+            woody_resolver_errors
+        ]}
     ].
 
 %%
@@ -289,6 +299,8 @@ init_per_group(normal_both, Config) ->
     config_headers_mode(normal, normal, Config);
 init_per_group(legacy_both, Config) ->
     config_headers_mode(legacy, legacy, Config);
+init_per_group(woody_resolver, Config) ->
+    config_headers_mode(normal, normal, Config);
 init_per_group(_Name, Config) ->
     Config.
 
@@ -297,7 +309,8 @@ end_per_group(Name, _Config) when
     Name =:= auto_client_legacy_server orelse
     Name =:= auto_both orelse
     Name =:= normal_both orelse
-    Name =:= legacy_both
+    Name =:= legacy_both orelse
+    Name =:= woody_resolver
 ->
     ok = application:set_env(woody, client_headers_mode, auto),
     ok = application:set_env(woody, server_headers_mode, auto),
@@ -819,6 +832,46 @@ calls_with_cache(_) ->
     {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
     {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
     ok.
+
+%%
+
+-define(
+    RESPONSE(Scheme, Netloc, Path),
+    #hackney_url{scheme = Scheme, netloc = Netloc, raw_path = Path}
+).
+
+woody_resolver_inet(_) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    ok = inet_db:set_inet6(false),
+    {ok, ?RESPONSE(http, <<"127.0.0.1">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://127.0.0.1/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test?q=a">>)} =
+        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
+    {ok, ?RESPONSE(https, <<"127.0.0.1:8080">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
+    {ok, ?RESPONSE(https, <<"127.0.0.1:443">>, <<>>)} =
+        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState).
+
+woody_resolver_inet6(_) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    ok = inet_db:set_inet6(true),
+    {ok, ?RESPONSE(http, <<"[::1]">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://[::1]/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test?q=a">>)} =
+        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
+    {ok, ?RESPONSE(https, <<"[::1]:8080">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
+    {ok, ?RESPONSE(https, <<"[::1]:443">>, <<>>)} =
+        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState).
+
+woody_resolver_errors(_) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    {error, nxdomain} = woody_resolver:resolve_url(<<"http://nxdomainme">>, WoodyState),
+    {error, unsupported_url_scheme} = woody_resolver:resolve_url(<<"ftp://localhost">>, WoodyState).
 
 %%
 %% supervisor callbacks

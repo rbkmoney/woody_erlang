@@ -1,5 +1,7 @@
 -module(woody_resolver).
 
+-include("woody_defs.hrl").
+
 -include_lib("kernel/include/inet.hrl").
 -include_lib("hackney/include/hackney_lib.hrl").
 
@@ -7,58 +9,63 @@
 -type parsed_url() :: #hackney_url{}.
 
 -type resolver_opts() :: #{
-    ip_picker := {atom(), atom()},
-    timeout := pos_integer() | infinity
+    ip_picker := {module(), atom()},
+    timeout := timeout()
 }.
 
--export([resolve_url/1]).
 -export([resolve_url/2]).
--export([get_host/1]).
+-export([resolve_url/3]).
 
 %%
 
--spec resolve_url(url()) ->
+-spec resolve_url(url(), woody_state:st()) ->
     {ok, ResolvedUrl :: parsed_url()} |
     {error, Reason :: atom()}.
-resolve_url(Url) ->
-    resolve_url(Url, #{
+resolve_url(Url, WoodyState) ->
+    resolve_url(Url, WoodyState, #{
         ip_picker => {erlang, hd},
         timeout => infinity
     }).
 
--spec resolve_url(url(), resolver_opts()) ->
+-spec resolve_url(url(), woody_state:st(), resolver_opts()) ->
     {ok, ResolvedUrl :: parsed_url()} |
     {error, Reason :: atom()}.
-resolve_url(Url, Opts) when is_list(Url) ->
-    resolve_url(list_to_binary(Url), Opts);
-resolve_url(<<"https://", _Rest/binary>> = Url, Opts) ->
-    resolve_parsed_url(parse_url(Url), Opts);
-resolve_url(<<"http://", _Rest/binary>> = Url, Opts) ->
-    resolve_parsed_url(parse_url(Url), Opts);
-resolve_url(_Url, _Opts) ->
-    {error, unsupported_protocol}.
-
--spec get_host(parsed_url()) ->
-    nonempty_string().
-get_host(ParsedUrl) ->
-    ParsedUrl#hackney_url.host.
+resolve_url(Url, WoodyState, Opts) when is_list(Url) ->
+    resolve_url(list_to_binary(Url), WoodyState, Opts);
+resolve_url(<<"https://", _Rest/binary>> = Url, WoodyState, Opts) ->
+    resolve_parsed_url(parse_url(Url), WoodyState, Opts);
+resolve_url(<<"http://", _Rest/binary>> = Url, WoodyState, Opts) ->
+    resolve_parsed_url(parse_url(Url), WoodyState, Opts);
+resolve_url(_Url, _WoodyState, _Opts) ->
+    {error, unsupported_url_scheme}.
 
 %%
 
 parse_url(Url) ->
     hackney_url:parse_url(Url).
 
-resolve_parsed_url(ParsedUrl = #hackney_url{}, Opts) ->
+resolve_parsed_url(ParsedUrl = #hackney_url{}, WoodyState, Opts) ->
     case inet:parse_address(ParsedUrl#hackney_url.host) of
         {ok, _} -> {ok, ParsedUrl}; % url host is already an ip, move on
-        {error, _} -> do_resolve_url(ParsedUrl, Opts)
+        {error, _} -> do_resolve_url(ParsedUrl, WoodyState, Opts)
     end.
 
-do_resolve_url(ParsedUrl, Opts) ->
+do_resolve_url(ParsedUrl, WoodyState, Opts) ->
+    _ = log_event(?EV_CLIENT_RESOLVE_BEGIN, WoodyState, #{host => ParsedUrl#hackney_url.host}),
     case lookup_host(ParsedUrl#hackney_url.host, Opts) of
-        {ok, AddrInfo} ->
+        {ok, {IpAddr, _} = AddrInfo} ->
+            _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
+                status => ok,
+                host => ParsedUrl#hackney_url.host,
+                address => inet:ntoa(IpAddr)
+            }),
             {ok, replace_host(ParsedUrl, AddrInfo)};
         {error, Reason} ->
+            _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
+                status => error,
+                host => ParsedUrl#hackney_url.host,
+                reason => Reason
+            }),
             {error, Reason}
     end.
 
@@ -97,3 +104,8 @@ get_preferred_ip_family() ->
         true -> inet6;
         false -> inet
     end.
+
+%%
+
+log_event(Event, WoodyState, ExtraMeta) ->
+        woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).

@@ -103,24 +103,13 @@ send(Url, Body, Options, WoodyState) ->
         false ->
             Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
-            _ = log_event(?EV_CLIENT_RESOLVE_BEGIN, WoodyState, #{url => Url}),
             % MSPF-416: We resolve url host to an ip here to prevent
             % reusing keep-alive connections do dead hosts
-            case woody_resolver:resolve_url(Url) of
+            case woody_resolver:resolve_url(Url, WoodyState) of
                 {ok, ResolvedUrl} ->
-                    _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
-                        status => ok,
-                        url => Url,
-                        address => woody_resolver:get_host(ResolvedUrl)
-                    }),
                     hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context));
                 {error, Reason} ->
-                    _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
-                        status => error,
-                        url => Url,
-                        reason => Reason
-                    }),
-                    {error, nxdomain}
+                    {error, {resolve_failed, Reason}}
             end
     end.
 
@@ -211,6 +200,10 @@ handle_result({error, Reason}, WoodyState) when
     Reason =:= enetdown        ;
     Reason =:= enetunreach
 ->
+    BinReason = woody_util:to_binary(Reason),
+    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
+    {error, {system, {internal, resource_unavailable, BinReason}}};
+handle_result({error, {resolve_failed, Reason}}, WoodyState) ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {internal, resource_unavailable, BinReason}}};
