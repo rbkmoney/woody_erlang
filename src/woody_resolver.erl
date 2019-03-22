@@ -56,7 +56,7 @@ do_resolve_url(ParsedUrl, Opts) ->
     end.
 
 lookup_host(Host, #{timeout := Timeout} = Opts) ->
-    case inet:gethostbyname(Host, get_inet_ver(), Timeout) of
+    case inet:gethostbyname(Host, get_preferred_ip_family(), Timeout) of
         {ok, HostEnt} ->
             {ok, parse_hostent(HostEnt, Opts)};
         {error, Reason} ->
@@ -85,7 +85,7 @@ get_ip(HostEnt, #{ip_picker := {M, F}}) ->
 get_ipver(HostEnt) ->
     HostEnt#hostent.h_addrtype.
 
-get_inet_ver() ->
+get_preferred_ip_family() ->
     case inet_db:res_option(inet6) of
         true -> inet6;
         false -> inet
