@@ -194,17 +194,13 @@ handle_result({error, Reason}, WoodyState) when
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
 handle_result({error, Reason}, WoodyState) when
-    Reason =:= econnrefused    ;
-    Reason =:= connect_timeout ;
-    Reason =:= nxdomain        ;
-    Reason =:= enetdown        ;
-    Reason =:= enetunreach
+    Reason             =:= econnrefused    ;
+    Reason             =:= connect_timeout ;
+    Reason             =:= enetdown        ;
+    Reason             =:= enetunreach     ;
+    element(1, Reason) =:= resolve_failed
 ->
-    BinReason = woody_util:to_binary(Reason),
-    _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
-    {error, {system, {internal, resource_unavailable, BinReason}}};
-handle_result({error, {resolve_failed, Reason}}, WoodyState) ->
-    BinReason = woody_util:to_binary(Reason),
+    BinReason = woody_error:format_details(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {internal, resource_unavailable, BinReason}}};
 handle_result(Error = {error, {system, _}}, _) ->

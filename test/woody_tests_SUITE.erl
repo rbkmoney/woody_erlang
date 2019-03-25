@@ -536,7 +536,7 @@ call_resolver_nxdomain(_) ->
     Context = make_context(<<"nxdomain">>),
     try call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
     catch
-        error:{woody_error, {internal, resource_unavailable, <<"nxdomain">>}} -> ok
+        error:{woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}} -> ok
     end.
 
 call3_ok_test(_) ->
