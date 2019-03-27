@@ -300,7 +300,8 @@ init_per_group(normal_both, Config) ->
 init_per_group(legacy_both, Config) ->
     config_headers_mode(legacy, legacy, Config);
 init_per_group(woody_resolver, Config) ->
-    config_headers_mode(normal, normal, Config);
+    Config0 = config_headers_mode(normal, normal, Config),
+    [{env_inet6, inet_db:res_option(inet6)} | Config0];
 init_per_group(_Name, Config) ->
     Config.
 
@@ -715,7 +716,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     EvHandler = ?MODULE,
     WoodyState = woody_state:new(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], WoodyState),
+        woody_client_thrift_http_transport:new(Url, [], #{}, WoodyState),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
@@ -836,41 +837,44 @@ calls_with_cache(_) ->
 %%
 
 -define(
-    RESPONSE(Scheme, Netloc, Path),
+    HACKNEY_URL(Scheme, Netloc, Path),
     #hackney_url{scheme = Scheme, netloc = Netloc, raw_path = Path}
 ).
 
-woody_resolver_inet(_) ->
-    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
-    EnvInet6 = inet_db:res_option(inet6),
-    ok = inet_db:set_inet6(false),
-    {ok, ?RESPONSE(http, <<"127.0.0.1">>, <<"/test">>)} =
-        woody_resolver:resolve_url(<<"http://127.0.0.1/test">>, WoodyState),
-    {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test">>)} =
-        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
-    {ok, ?RESPONSE(http, <<"127.0.0.1:80">>, <<"/test?q=a">>)} =
-        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
-    {ok, ?RESPONSE(https, <<"127.0.0.1:8080">>, <<"/test">>)} =
-        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
-    {ok, ?RESPONSE(https, <<"127.0.0.1:443">>, <<>>)} =
-        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState),
-    ok = inet_db:set_inet6(EnvInet6).
+-define(
+    RESPONSE(Scheme, OldNetloc, NewNetloc, Path),
+    {?HACKNEY_URL(Scheme, OldNetloc, Path), ?HACKNEY_URL(Scheme, NewNetloc, Path)}
+).
 
-woody_resolver_inet6(_) ->
+woody_resolver_inet(C) ->
     WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
-    EnvInet6 = inet_db:res_option(inet6),
-    ok = inet_db:set_inet6(true),
-    {ok, ?RESPONSE(http, <<"[::1]">>, <<"/test">>)} =
-        woody_resolver:resolve_url(<<"http://[::1]/test">>, WoodyState),
-    {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test">>)} =
+    ok = inet_db:set_inet6(false),
+    {ok, ?RESPONSE(http, <<"127.0.0.1">>, <<"127.0.0.1">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://127.0.0.1/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"127.0.0.1:80">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
-    {ok, ?RESPONSE(http, <<"[::1]:80">>, <<"/test?q=a">>)} =
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"127.0.0.1:80">>, <<"/test?q=a">>)} =
         woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
-    {ok, ?RESPONSE(https, <<"[::1]:8080">>, <<"/test">>)} =
+    {ok, ?RESPONSE(https, <<"localhost:8080">>, <<"127.0.0.1:8080">>, <<"/test">>)} =
         woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
-    {ok, ?RESPONSE(https, <<"[::1]:443">>, <<>>)} =
+    {ok, ?RESPONSE(https, <<"localhost">>, <<"127.0.0.1:443">>, <<>>)} =
         woody_resolver:resolve_url(<<"https://localhost">>, WoodyState),
-    ok = inet_db:set_inet6(EnvInet6).
+    ok = inet_db:set_inet6(?config(env_inet6, C)).
+
+woody_resolver_inet6(C) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    ok = inet_db:set_inet6(true),
+    {ok, ?RESPONSE(http, <<"[::1]">>, <<"[::1]">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://[::1]/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"[::1]:80">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"[::1]:80">>, <<"/test?q=a">>)} =
+        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost:8080">>, <<"[::1]:8080">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost">>, <<"[::1]:443">>, <<>>)} =
+        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState),
+    ok = inet_db:set_inet6(?config(env_inet6, C)).
 
 woody_resolver_errors(_) ->
     WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),

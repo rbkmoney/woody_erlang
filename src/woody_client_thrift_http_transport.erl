@@ -4,9 +4,10 @@
 -dialyzer(no_undefined_callbacks).
 
 -include("woody_defs.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 
 %% API
--export([new       /3]).
+-export([new       /4]).
 -export([child_spec/1]).
 
 %% Thrift transport callbacks
@@ -18,11 +19,12 @@
 -export_type([options/0]).
 
 -type woody_transport() :: #{
-    url          := woody:url(),
-    woody_state  := woody_state:st(),
-    options      := options(),
-    write_buffer := binary(),
-    read_buffer  := binary()
+    url              := woody:url(),
+    woody_state      := woody_state:st(),
+    options          := options(),
+    resolver_options := woody_resolver:options(),
+    write_buffer     := binary(),
+    read_buffer      := binary()
 }.
 
 -type error()              :: {error, {system, woody_error:system_error()}}.
@@ -35,15 +37,16 @@
 %%
 %% API
 %%
--spec new(woody:url(), options(), woody_state:st()) ->
+-spec new(woody:url(), options(), woody_resolver:options(), woody_state:st()) ->
     thrift_transport:t_transport() | no_return().
-new(Url, Opts, WoodyState) ->
+new(Url, Opts, ResOpts, WoodyState) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
-        url           => Url,
-        options       => Opts,
-        woody_state   => WoodyState,
-        write_buffer  => <<>>,
-        read_buffer   => <<>>
+        url              => Url,
+        options          => Opts,
+        resolver_options => ResOpts,
+        woody_state      => WoodyState,
+        write_buffer     => <<>>,
+        read_buffer      => <<>>
     }),
     Transport.
 
@@ -75,14 +78,15 @@ read(Transport = #{read_buffer := RBuffer}, Len) when is_binary(RBuffer) ->
 -spec flush(woody_transport()) ->
     {woody_transport(), ok | error()}.
 flush(Transport = #{
-    url           := Url,
-    woody_state   := WoodyState,
-    options       := Options,
-    write_buffer  := WBuffer,
-    read_buffer   := RBuffer
+    url              := Url,
+    woody_state      := WoodyState,
+    options          := Options,
+    resolver_options := ResOpts,
+    write_buffer     := WBuffer,
+    read_buffer      := RBuffer
 }) when is_binary(WBuffer), is_binary(RBuffer) ->
     case handle_result(
-        send(Url, WBuffer, Options, WoodyState),
+        send(Url, WBuffer, Options, ResOpts, WoodyState),
         WoodyState
     ) of
         {ok, Response} ->
@@ -94,20 +98,21 @@ flush(Transport = #{
             {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
     end.
 
-send(Url, Body, Options, WoodyState) ->
+send(Url, Body, Options, ResOpts, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
     case is_deadline_reached(Context) of
         true ->
             _ = log_event(?EV_INTERNAL_ERROR, WoodyState, #{status => error, reason => <<"Deadline reached">>}),
             {error, {system, {internal, resource_unavailable, <<"deadline reached">>}}};
         false ->
-            Headers = make_woody_headers(Context),
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             % MSPF-416: We resolve url host to an ip here to prevent
             % reusing keep-alive connections do dead hosts
-            case woody_resolver:resolve_url(Url, WoodyState) of
-                {ok, ResolvedUrl} ->
-                    hackney:request(post, ResolvedUrl, Headers, Body, set_timeouts(Options, Context));
+            case woody_resolver:resolve_url(Url, WoodyState, ResOpts) of
+                {ok, {OldUrl, NewUrl}} ->
+                    Headers0 = make_woody_headers(Context),
+                    Headers1 = add_host_header(OldUrl, Headers0),
+                    hackney:request(post, NewUrl, Headers1, Body, set_timeouts(Options, Context));
                 {error, Reason} ->
                     {error, {resolve_failed, Reason}}
             end
@@ -329,6 +334,9 @@ do_add_deadline_header(undefined, Headers) ->
 do_add_deadline_header(Deadline, Headers) ->
     [{?NORMAL_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)},
      {?LEGACY_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
+
+add_host_header(#hackney_url{netloc = Netloc}, Headers) ->
+    [{<<"Host">>, Netloc} | Headers].
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

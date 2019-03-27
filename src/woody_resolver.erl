@@ -8,27 +8,31 @@
 -type url() :: binary() | nonempty_string().
 -type parsed_url() :: #hackney_url{}.
 
--type resolver_opts() :: #{
-    ip_picker := {module(), atom()},
-    timeout := timeout()
+-type resolve_result() :: {Old::parsed_url(), New::parsed_url()}.
+
+-type options() :: #{
+    ip_picker => {module(), atom()},
+    timeout => timeout()
 }.
+
+-export_type([options/0]).
 
 -export([resolve_url/2]).
 -export([resolve_url/3]).
 
+-define(DEFAULT_RESOLVE_TIMEOUT, infinity).
+-define(DEFAULT_IP_PICKER, {erlang, hd}).
+
 %%
 
 -spec resolve_url(url(), woody_state:st()) ->
-    {ok, ResolvedUrl :: parsed_url()} |
+    {ok, resolve_result()}    |
     {error, Reason :: atom()}.
 resolve_url(Url, WoodyState) ->
-    resolve_url(Url, WoodyState, #{
-        ip_picker => {erlang, hd},
-        timeout => infinity
-    }).
+    resolve_url(Url, WoodyState, #{}).
 
--spec resolve_url(url(), woody_state:st(), resolver_opts()) ->
-    {ok, ResolvedUrl :: parsed_url()} |
+-spec resolve_url(url(), woody_state:st(), options()) ->
+    {ok, resolve_result()}    |
     {error, Reason :: atom()}.
 resolve_url(Url, WoodyState, Opts) when is_list(Url) ->
     resolve_url(list_to_binary(Url), WoodyState, Opts);
@@ -46,30 +50,32 @@ parse_url(Url) ->
 
 resolve_parsed_url(ParsedUrl = #hackney_url{}, WoodyState, Opts) ->
     case inet:parse_address(ParsedUrl#hackney_url.host) of
-        {ok, _} -> {ok, ParsedUrl}; % url host is already an ip, move on
+        {ok, _} -> {ok, {ParsedUrl, ParsedUrl}}; % url host is already an ip, move on
         {error, _} -> do_resolve_url(ParsedUrl, WoodyState, Opts)
     end.
 
 do_resolve_url(ParsedUrl, WoodyState, Opts) ->
-    _ = log_event(?EV_CLIENT_RESOLVE_BEGIN, WoodyState, #{host => ParsedUrl#hackney_url.host}),
-    case lookup_host(ParsedUrl#hackney_url.host, Opts) of
+    UnresolvedHost = ParsedUrl#hackney_url.host,
+    _ = log_event(?EV_CLIENT_RESOLVE_BEGIN, WoodyState, #{host => UnresolvedHost}),
+    case lookup_host(UnresolvedHost, Opts) of
         {ok, {IpAddr, _} = AddrInfo} ->
             _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
                 status => ok,
-                host => ParsedUrl#hackney_url.host,
+                host => UnresolvedHost,
                 address => inet:ntoa(IpAddr)
             }),
-            {ok, replace_host(ParsedUrl, AddrInfo)};
+            {ok, {ParsedUrl, replace_host(ParsedUrl, AddrInfo)}};
         {error, Reason} ->
             _ = log_event(?EV_CLIENT_RESOLVE_RESULT, WoodyState, #{
                 status => error,
-                host => ParsedUrl#hackney_url.host,
+                host => UnresolvedHost,
                 reason => Reason
             }),
             {error, Reason}
     end.
 
-lookup_host(Host, #{timeout := Timeout} = Opts) ->
+lookup_host(Host, Opts) ->
+    Timeout = maps:get(timeout, Opts, ?DEFAULT_RESOLVE_TIMEOUT),
     case inet:gethostbyname(Host, get_preferred_ip_family(), Timeout) of
         {ok, HostEnt} ->
             {ok, parse_hostent(HostEnt, Opts)};
@@ -93,7 +99,8 @@ encode_netloc(HostStr, IpFamily, Port) ->
 parse_hostent(HostEnt, Opts) ->
     {get_ip(HostEnt, Opts), get_ip_family(HostEnt)}.
 
-get_ip(HostEnt, #{ip_picker := {M, F}}) ->
+get_ip(HostEnt, Opts) ->
+    {M, F} = maps:get(ip_picker, Opts, ?DEFAULT_IP_PICKER),
     erlang:apply(M, F, [HostEnt#hostent.h_addr_list]).
 
 get_ip_family(HostEnt) ->

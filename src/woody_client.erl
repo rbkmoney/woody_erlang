@@ -15,6 +15,7 @@
     url            := woody:url(),
     event_handler  := woody:ev_handler(),
     transport_opts => woody_client_thrift_http_transport:options(), %% See hackney:request/5 for available options.
+    resolver_opts  => woody_resolver:options(),
     protocol       => thrift,
     transport      => http
 }.
