@@ -59,16 +59,26 @@ get_rpc_type(ThriftService = {Module, Service}, Function) ->
     thrift_client().
 make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, get_transport_opts(Opts), WoodyState),
+        woody_client_thrift_http_transport:new(
+            Url,
+            get_transport_opts(Opts),
+            get_resolver_opts(Opts),
+            WoodyState
+        ),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Client} = thrift_client:new(Protocol, Service),
     Client.
 
 -spec get_transport_opts(woody_client:options()) ->
-    woody_client_thrift_http_transport:options().
+    woody_client_thrift_http_transport:transport_options().
 get_transport_opts(Opts) ->
     maps:get(transport_opts, Opts, #{}).
+
+-spec get_resolver_opts(woody_client:options()) ->
+    woody_resolver:options().
+get_resolver_opts(Opts) ->
+    maps:get(resolver_opts, Opts, #{}).
 
 -spec do_call(thrift_client(), woody:func(), woody:args(), woody_state:st()) ->
     woody_client:result().
