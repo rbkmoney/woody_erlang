@@ -1,7 +1,19 @@
 -module(woody_joint_workers_pt).
 -include_lib("proper/include/proper.hrl").
--compile(export_all).
 
+-export([
+    prop_test/0,
+    start_workers/0,
+    stop_workers/1,
+    do/2,
+    task_timeouts/1,
+    id/0,
+    command/1,
+    initial_state/0,
+    precondition/2,
+    postcondition/3,
+    next_state/3
+]).
 %% проверяет работоспособность в условиях параллельных запросов,
 %% но по факту не может проверить, что запросы действительно соединяются
 prop_test() ->

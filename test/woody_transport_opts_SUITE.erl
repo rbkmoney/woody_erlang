@@ -70,7 +70,10 @@ respects_max_connections(C) ->
     % timeout is 5000 ms which is the same as the default woody request timeout.
     % I wonder how this behavior affects production traffic as most of woody servers there configured with
     % keepalive timeout of 60 s.
-    {ok, ServerPid} = start_woody_server(Handler, [{max_connections, MaxConns}], [{max_keepalive, 1}], C),
+    TransportOpts = #{max_connections => MaxConns},
+    ProtocolOpts = #{max_keepalive => 1},
+    ReadBodyOpts = #{},
+    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),
     Results = genlib_pmap:map(
         fun (_) ->
             woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client)
@@ -86,18 +89,18 @@ respects_max_connections(C) ->
 
 %%
 
-start_woody_server(Handler, TransportOpts, ProtocolOpts, C) ->
+start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
     ServerOpts0 = ?config(server, C),
-    woody_gen_supervisor:start_link([
-        woody_server:child_spec(
+    SupervisorOpts = woody_server:child_spec(
             {?MODULE, ?config(testcase, C)},
             ServerOpts0#{
                 handlers       => [Handler],
+                read_body_opts => ReadBodyOpts,
                 transport_opts => TransportOpts,
                 protocol_opts  => ProtocolOpts
             }
-        )
-    ]).
+    ),
+    genlib_adhoc_supervisor:start_link(#{}, [SupervisorOpts]).
 
 stop_woody_server(Pid) ->
     true = unlink(Pid),

@@ -15,7 +15,7 @@
 
 
 %% Types
--type transport_options() :: list(tuple()).
+-type transport_options() :: map().
 -export_type([transport_options/0]).
 
 -type woody_transport() :: #{
@@ -28,7 +28,7 @@
 }.
 
 -type error()              :: {error, {system, woody_error:system_error()}}.
--type header_parse_value() :: none | multiple | woody:http_header_val().
+-type header_parse_value() :: none | woody:http_header_val().
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
@@ -53,8 +53,8 @@ new(Url, Opts, ResOpts, WoodyState) ->
 -spec child_spec(transport_options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
-    Name = proplists:get_value(pool, Options),
-    hackney_pool:child_spec(Name, Options).
+    Name = maps:get(pool, Options, undefined),
+    hackney_pool:child_spec(Name, maps:to_list(Options)).
 
 %%
 %% Thrift transport callbacks
@@ -110,13 +110,22 @@ send(Url, Body, Options, ResOpts, WoodyState) ->
             % reusing keep-alive connections do dead hosts
             case woody_resolver:resolve_url(Url, WoodyState, ResOpts) of
                 {ok, {OldUrl, NewUrl}} ->
-                    Headers0 = make_woody_headers(Context),
-                    Headers1 = add_host_header(OldUrl, Headers0),
-                    hackney:request(post, NewUrl, Headers1, Body, set_timeouts(Options, Context));
+                    Headers  = add_host_header(OldUrl, make_woody_headers(Context)),
+                    Timeouts = maps:to_list(set_timeouts(Options, Context)),
+                    HeaderList = maps:to_list(Headers),
+                    Result = hackney:request(post, NewUrl, HeaderList, Body, Timeouts),
+                    transform_request_results(Result);
                 {error, Reason} ->
                     {error, {resolve_failed, Reason}}
             end
     end.
+
+transform_request_results({ok, Code, Headers, Ref}) ->
+    {ok, Code, maps:from_list(Headers), Ref};
+transform_request_results({ok, Code, Headers}) ->
+    {ok, Code, maps:from_list(Headers)};
+transform_request_results(Any) ->
+    Any.
 
 set_timeouts(Options, Context) ->
     case woody_context:get_deadline(Context) of
@@ -129,11 +138,11 @@ set_timeouts(Options, Context) ->
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
             %% the precedence).
-            Options ++ [
-                {connect_timeout, ConnectTimeout},
-                {send_timeout,    SendTimeout},
-                {recv_timeout,    Timeout}
-            ]
+            maps:merge(#{
+                connect_timeout => ConnectTimeout,
+                send_timeout =>    SendTimeout,
+                recv_timeout =>    Timeout
+            }, Options)
     end.
 
 -define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
@@ -244,9 +253,6 @@ get_error_class(_) ->
 check_502_error_class(none, Headers, Mode, WoodyState) ->
     _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS(Mode), " header missing"])}),
     {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(multiple, _, Mode, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_CLASS(Mode)], WoodyState),
-    {result_unexpected, ?BAD_RESP_HEADER(Mode)};
 check_502_error_class(<<"result unexpected">>, Headers, Mode, WoodyState) ->
     {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
 check_502_error_class(<<"resource unavailable">>, Headers, Mode, WoodyState) ->
@@ -269,9 +275,6 @@ do_check_error_reason(none, 200, _Mode, _WoodyState) ->
 do_check_error_reason(none, Code, Mode, WoodyState) ->
     _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON(Mode), " header missing"])}),
     woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON(Mode), " header"]);
-do_check_error_reason(multiple, _, Mode, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["multiple headers: ", ?HEADER_E_REASON(Mode)], WoodyState),
-    ?BAD_RESP_HEADER(Mode);
 do_check_error_reason(Reason, _, _, _) ->
     Reason.
 
@@ -288,25 +291,26 @@ get_error_class_header_value(Headers, Mode) ->
 -spec get_header_value(woody:http_header_name(), woody:http_headers()) ->
     header_parse_value().
 get_header_value(Name, Headers) ->
-    case [V || {K, V} <- Headers, Name =:= genlib_string:to_lower(K)] of
+    % Couldn't find a way to easily do same with maps
+    HeaderList = maps:to_list(Headers),
+    case [V || {K, V} <- HeaderList, Name =:= genlib_string:to_lower(K)] of
         [Value] -> Value;
-        []      -> none;
-        _       -> multiple
+        []      -> none
     end.
 
 -spec make_woody_headers(woody_context:ctx()) ->
     woody:http_headers().
 make_woody_headers(Context) ->
-    add_optional_headers(Context, [
-        {<<"content-type">>         , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>               , ?CONTENT_TYPE_THRIFT},
-        {?NORMAL_HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?NORMAL_HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?NORMAL_HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)},
-        {?LEGACY_HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?LEGACY_HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?LEGACY_HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
-    ]).
+    add_optional_headers(Context, #{
+        <<"content-type">>         => ?CONTENT_TYPE_THRIFT,
+        <<"accept">>               => ?CONTENT_TYPE_THRIFT,
+        ?NORMAL_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
+        ?NORMAL_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
+        ?NORMAL_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context),
+        ?LEGACY_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
+        ?LEGACY_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
+        ?LEGACY_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context)
+    }).
 
 -spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
     woody:http_headers().
@@ -321,8 +325,10 @@ add_metadata_headers(Context, Headers) ->
 -spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
 add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
-    [{<< ?NORMAL_HEADER_META_PREFIX/binary, H/binary >>, V},
-     {<< ?LEGACY_HEADER_META_PREFIX/binary, H/binary >>, V} | Headers];
+    maps:merge(#{
+        << ?NORMAL_HEADER_META_PREFIX/binary, H/binary >> => V,
+        << ?LEGACY_HEADER_META_PREFIX/binary, H/binary >> => V
+    }, Headers);
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
@@ -332,11 +338,13 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    [{?NORMAL_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)},
-     {?LEGACY_HEADER_DEADLINE, woody_deadline:to_binary(Deadline)} | Headers].
+    maps:merge(#{
+        ?NORMAL_HEADER_DEADLINE => woody_deadline:to_binary(Deadline),
+        ?LEGACY_HEADER_DEADLINE => woody_deadline:to_binary(Deadline)
+    }, Headers).
 
 add_host_header(#hackney_url{netloc = Netloc}, Headers) ->
-    [{<<"Host">>, Netloc} | Headers].
+    maps:merge(Headers, #{<<"Host">> => Netloc}).
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).

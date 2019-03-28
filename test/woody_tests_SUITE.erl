@@ -9,7 +9,6 @@
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
 -behaviour(woody_event_handler).
--behaviour(cowboy_http_handler).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -21,7 +20,7 @@
 -export([handle_event/4]).
 
 %% cowboy_http_handler callbacks
--export([init/3, handle/2, terminate/3]).
+-export([init/2, terminate/3]).
 
 %% common test API
 -export([
@@ -335,9 +334,9 @@ start_tc_sup() ->
 start_error_server(TC, Sup) ->
     Code      = get_fail_code(TC),
     Dispatch  = cowboy_router:compile([{'_', [{?PATH_WEAPONS, ?MODULE, Code}]}]),
-    Server    = ranch:child_spec(woody_ct, 10, ranch_tcp,
+    Server    = ranch:child_spec(woody_ct, ranch_tcp,
                  [{ip, ?SERVER_IP}, {port, ?SERVER_PORT}],
-                 cowboy_protocol, [{env, [{dispatch, Dispatch}]}]
+                 cowboy_clear, #{env => #{dispatch => Dispatch}}
              ),
     supervisor:start_child(Sup, Server).
 
@@ -358,7 +357,6 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
         port          => ?SERVER_PORT
     }),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
-
     Specs = [woody_client:child_spec(pool_opts(Pool)) || Pool <- Params],
 
     _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
@@ -390,7 +388,11 @@ pool_opts(Pool) ->
     }.
 
 start_pool_opts({Name, Timeout, MaxConnections}) ->
-    [{pool, Name}, {timeout, Timeout}, {max_connections, MaxConnections}].
+    #{
+        pool => Name,
+        timeout => Timeout,
+        max_connections => MaxConnections
+    }.
 
 get_handler('Powerups') ->
     {
@@ -716,7 +718,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     EvHandler = ?MODULE,
     WoodyState = woody_state:new(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], #{}, WoodyState),
+        woody_client_thrift_http_transport:new(Url, #{}, #{}, WoodyState),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
@@ -792,11 +794,13 @@ server_http_req_validation_test(Config) ->
         <<>>, [{url, Url}]),
 
     %% Check wrong methods
+    %% Cowboy 2.5.0 no longer supports trace and connect methods, so they were removed from tests
+    Methods = [get, put, delete, options, patch],
     lists:foreach(fun(M) ->
         {ok, 405, _, _} = hackney:request(M, Url, Headers, <<>>, Opts) end,
-        [get, put, delete, trace, options, patch]),
-    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, Opts),
-    {ok, 400, _, _} = hackney:request(connect, Url, Headers, <<>>, Opts).
+        Methods),
+    {ok, 405, _}    = hackney:request(head, Url, Headers, <<>>, Opts).
+
 
 try_bad_handler_spec_test(_) ->
     NaughtyHandler = {?PATH_POWERUPS, {{'should', 'be'}, '3-tuple'}},
@@ -921,8 +925,8 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
 ->
     try call(Context, 'Powerups', get_powerup, [Name, self_to_bin()])
     catch
-        Class:Reason ->
-            erlang:raise(Class, Reason, erlang:get_stacktrace())
+        Class:Reason:Stacktrace ->
+            erlang:raise(Class, Reason, Stacktrace)
     after
         {ok, _} = receive_msg(Name, Context),
         ok      = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name})
@@ -988,13 +992,9 @@ log_event(Event, RpcId, Meta) ->
 %%
 %% cowboy_http_handler callbacks
 %%
-init({_, http}, Req, Code) ->
+init(Req, Code) ->
     ct:pal("Cowboy fail server received request. Replying: ~p", [Code]),
-    {ok, Req1} = cowboy_req:reply(Code, Req),
-    {shutdown, Req1, Code}.
-
-handle(Req, _) ->
-    {ok, Req, neverhappen}.
+    {stop, cowboy_req:reply(Code, Req), Code}.
 
 terminate(_, _, _) ->
     ok.
@@ -1125,4 +1125,3 @@ handle_sleep(Context) ->
         BinTimer ->
             timer:sleep(binary_to_integer(BinTimer))
     end.
-

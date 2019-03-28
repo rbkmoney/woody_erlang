@@ -49,7 +49,9 @@ call(Request, Options) ->
     {exception, woody_error:business_error()} |
     no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    case call_safe(Request, Options, woody_state:new(client, woody_context:new_child(Context), EvHandler)) of
+    Child = woody_context:new_child(Context),
+    WoodyState = woody_state:new(client, Child, EvHandler),
+    case call_safe(Request, Options, WoodyState) of
         Result = {ok, _} ->
             Result;
         {error, {business, Error}} ->
@@ -71,22 +73,21 @@ call_safe(Request, Options, WoodyState) ->
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error
     catch
-        Class:Reason ->
-            StackTrace = erlang:get_stacktrace(),
-            handle_client_error(Class, Reason, StackTrace, WoodyState)
+        Class:Reason:Stacktrace ->
+            handle_client_error(Class, Reason, Stacktrace, WoodyState)
     after
         _ = woody_event_handler:handle_event(?EV_CLIENT_END, WoodyState, #{})
     end.
 
--spec handle_client_error(woody_error:erlang_except(), _Error, _StackTrace, woody_state:st()) ->
+-spec handle_client_error(woody_error:erlang_except(), _Error, _Stacktrace, woody_state:st()) ->
     {error, {system, {internal, result_unexpected, woody_error:details()}}}.
-handle_client_error(Class, Error, StackTrace, WoodyState) ->
+handle_client_error(Class, Error, Stacktrace, WoodyState) ->
     Details = woody_error:format_details(Error),
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
         error    => woody_util:to_binary([?EV_CALL_SERVICE, " error"]),
         class    => Class,
         reason   => Details,
-        stack    => StackTrace,
+        stack    => Stacktrace,
         final    => false
     }),
     {error, {system, {internal, result_unexpected, <<"client error: ", Details/binary>>}}}.

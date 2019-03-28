@@ -73,7 +73,7 @@ get_error_headers_mode(Headers) ->
 
 apply_mode_rules([], _Rules, Default) ->
     Default;
-apply_mode_rules([{Name, _Value} | HeadersTail], Rules, Default) ->
+apply_mode_rules([Name | HeadersTail], Rules, Default) ->
     case maps:get(Name, Rules, undefined) of
         undefined ->
             apply_mode_rules(HeadersTail, Rules, Default);
@@ -89,8 +89,8 @@ get_req_headers_mode(auto, Req) ->
         ?NORMAL_HEADER_RPC_PARENT_ID => normal,
         ?NORMAL_HEADER_RPC_ROOT_ID => normal
     },
-    {Headers, Req1} = cowboy_req:headers(Req),
-    {apply_mode_rules(Headers, Rules, legacy), Req1};
+    Headers = cowboy_req:headers(Req),
+    {apply_mode_rules(maps:keys(Headers), Rules, legacy), Req};
 get_req_headers_mode(legacy = Mode, Req) ->
     {Mode, Req};
 get_req_headers_mode(normal = Mode, Req) ->
@@ -105,7 +105,7 @@ get_error_headers_mode(auto, Headers) ->
         ?NORMAL_HEADER_E_CLASS => normal,
         ?NORMAL_HEADER_E_REASON => normal
     },
-    apply_mode_rules(Headers, Rules, legacy);
+    apply_mode_rules(maps:keys(Headers), Rules, legacy);
 get_error_headers_mode(legacy = Mode, _Headers) ->
     Mode;
 get_error_headers_mode(normal = Mode, _Headers) ->
