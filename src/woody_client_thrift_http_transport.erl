@@ -15,8 +15,8 @@
 
 
 %% Types
--type options() :: map().
--export_type([options/0]).
+-type transport_options() :: map().
+-export_type([transport_options/0]).
 
 -type woody_transport() :: #{
     url               := woody:url(),
@@ -110,11 +110,11 @@ send(Url, Body, Options, ResOpts, WoodyState) ->
             % reusing keep-alive connections do dead hosts
             case woody_resolver:resolve_url(Url, WoodyState, ResOpts) of
                 {ok, {OldUrl, NewUrl}} ->
-                    Headers  = add_host_header(OldUrl, make_woody_headers(Context),
+                    Headers  = add_host_header(OldUrl, make_woody_headers(Context)),
                     Timeouts = maps:to_list(set_timeouts(Options, Context)),
                     HeaderList = maps:to_list(Headers),
-                    Result = hackney:request(post, Url, HeaderList, Body, Timeouts),
-                    transform_request_results(Result)
+                    Result = hackney:request(post, NewUrl, HeaderList, Body, Timeouts),
+                    transform_request_results(Result);
                 {error, Reason} ->
                     {error, {resolve_failed, Reason}}
             end
@@ -344,7 +344,7 @@ do_add_deadline_header(Deadline, Headers) ->
     }, Headers).
 
 add_host_header(#hackney_url{netloc = Netloc}, Headers) ->
-    [{<<"Host">>, Netloc} | Headers].
+    maps:merge(Headers, #{<<"Host">> => Netloc}).
 
 log_internal_error(Error, Reason, WoodyState) ->
     log_event(?EV_INTERNAL_ERROR, WoodyState, #{error => Error, reason => woody_util:to_binary(Reason)}).
