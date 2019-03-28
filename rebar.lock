@@ -8,7 +8,7 @@
        {ref,"a6b9f52d61372cdbea6c5967053662dd3309e0d7"}},
   0},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.8.0">>},0},
- {<<"hackney">>,{pkg,<<"hackney">>,<<"1.13.0">>},0},
+ {<<"hackney">>,{pkg,<<"hackney">>,<<"1.15.0">>},0},
  {<<"idna">>,{pkg,<<"idna">>,<<"5.1.2">>},1},
  {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.0.2">>},1},
@@ -22,7 +22,7 @@
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.1">>},1},
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
-       {ref,"0abe24c85741cfbef9bf3c17102ee45ac6a287c8"}},
+       {ref,"7843146f22a9d9d63be4ae1276b5fa03938f2e9c"}},
   0},
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.3.1">>},2}]}.
 [
@@ -32,7 +32,7 @@
  {<<"cowboy">>, <<"4EF3AE066EE10FE01EA3272EDC8F024347A0D3EB95F6FBB9AED556DACBFC1337">>},
  {<<"cowlib">>, <<"8AA629F81A0FC189F261DC98A42243FA842625FEEA3C7EC56C48F4CCDB55490F">>},
  {<<"gproc">>, <<"CEA02C578589C61E5341FCE149EA36CCEF236CC2ECAC8691FBA408E7EA77EC2F">>},
- {<<"hackney">>, <<"24EDC8CD2B28E1C652593833862435C80661834F6C9344E84B6A2255E7AEEF03">>},
+ {<<"hackney">>, <<"287A5D2304D516F63E56C469511C42B016423BCB167E61B611F6BAD47E3CA60E">>},
  {<<"idna">>, <<"E21CB58A09F0228A9E0B95EAA1217F1BCFC31A1AAA6E1FDF2F53A33F7DBD9494">>},
  {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},
  {<<"mimerl">>, <<"993F9B0E084083405ED8252B99460C4F0563E41729AB42D9074FD5E52439BE88">>},
