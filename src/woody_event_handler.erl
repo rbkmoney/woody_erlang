@@ -17,6 +17,8 @@
     ?EV_CALL_SERVICE   |
     ?EV_SERVICE_RESULT |
     ?EV_CLIENT_SEND    |
+    ?EV_CLIENT_RESOLVE_BEGIN |
+    ?EV_CLIENT_RESOLVE_RESULT |
     ?EV_CLIENT_RECEIVE |
     ?EV_CLIENT_END.
 
@@ -53,10 +55,12 @@
     metadata       := woody_context:meta(),
     deadline       := woody:deadline(),
 
-    url      => woody:url(),                          %% EV_CLIENT_SEND
-    code     => woody:http_code(),                    %% EV_CLIENT_RECEIVE
-    reason   => woody_error:details(),                %% EV_CLIENT_RECEIVE
-    status   => status(),                             %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT
+    url      => woody:url(),                        %% EV_CLIENT_SEND
+    code     => woody:http_code(),                  %% EV_CLIENT_RECEIVE
+    reason   => woody_error:details(),              %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
+    status   => status(),                           %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
+    address  => string(),                           %% EV_CLIENT_RESOLVE_RESULT
+    host     => string(),                           %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
     result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT
 }.
 -export_type([meta_client/0]).
@@ -231,6 +235,12 @@ format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
     {info, {"[client] request handled successfully ~p", [Result]}};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
+format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
+    {debug, {"[client] resolving location of ~s", [Host]}};
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Address}) ->
+    {debug, {"[client] resolved location of ~s to ~ts", [Host, Address]}};
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}) ->
+    {debug, {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
     {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->

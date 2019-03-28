@@ -1,6 +1,7 @@
 -module(woody_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("hackney/include/hackney_lib.hrl").
 
 -include("woody_test_thrift.hrl").
 -include("src/woody_defs.hrl").
@@ -46,6 +47,7 @@
     deadline_to_from_timeout_test/1,
     deadline_to_from_binary_test/1,
     call_ok_test/1,
+    call_resolver_nxdomain/1,
     call3_ok_test/1,
     call_oneway_void_test/1,
     call_sequence_with_context_meta_test/1,
@@ -74,7 +76,10 @@
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
     find_multiple_pools_test/1,
-    calls_with_cache/1
+    calls_with_cache/1,
+    woody_resolver_inet/1,
+    woody_resolver_inet6/1,
+    woody_resolver_errors/1
 ]).
 
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -139,7 +144,7 @@
 
 -define(SERVER_IP      , {0, 0, 0, 0}).
 -define(SERVER_PORT    , 8085).
--define(URL_BASE       , "0.0.0.0:8085").
+-define(URL_BASE       , "http://0.0.0.0:8085").
 -define(PATH_WEAPONS   , "/v1/woody/test/weapons").
 -define(PATH_POWERUPS  , "/v1/woody/test/powerups").
 
@@ -161,7 +166,8 @@ all() ->
         {group, auto_client_legacy_server},
         {group, auto_both},
         {group, normal_both},
-        {group, legacy_both}
+        {group, legacy_both},
+        {group, woody_resolver}
     ].
 
 groups() ->
@@ -178,6 +184,7 @@ groups() ->
         deadline_to_from_timeout_test,
         deadline_to_from_binary_test,
         call_ok_test,
+        call_resolver_nxdomain,
         call3_ok_test,
         call_oneway_void_test,
         call_sequence_with_context_meta_test,
@@ -213,7 +220,12 @@ groups() ->
         {auto_client_legacy_server, [], SpecTests},
         {auto_both, [], SpecTests},
         {normal_both, [], SpecTests},
-        {legacy_both, [], SpecTests}
+        {legacy_both, [], SpecTests},
+        {woody_resolver, [], [
+            woody_resolver_inet,
+            woody_resolver_inet6,
+            woody_resolver_errors
+        ]}
     ].
 
 %%
@@ -287,6 +299,9 @@ init_per_group(normal_both, Config) ->
     config_headers_mode(normal, normal, Config);
 init_per_group(legacy_both, Config) ->
     config_headers_mode(legacy, legacy, Config);
+init_per_group(woody_resolver, Config) ->
+    Config0 = config_headers_mode(normal, normal, Config),
+    [{env_inet6, inet_db:res_option(inet6)} | Config0];
 init_per_group(_Name, Config) ->
     Config.
 
@@ -295,7 +310,8 @@ end_per_group(Name, _Config) when
     Name =:= auto_client_legacy_server orelse
     Name =:= auto_both orelse
     Name =:= normal_both orelse
-    Name =:= legacy_both
+    Name =:= legacy_both orelse
+    Name =:= woody_resolver
 ->
     ok = application:set_env(woody, client_headers_mode, auto),
     ok = application:set_env(woody, server_headers_mode, auto),
@@ -517,6 +533,13 @@ call_ok_test(_) ->
     Gun = <<"Enforcer">>,
     gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
 
+call_resolver_nxdomain(_) ->
+    Context = make_context(<<"nxdomain">>),
+    try call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
+    catch
+        error:{woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}} -> ok
+    end.
+
 call3_ok_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
@@ -693,7 +716,7 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     EvHandler = ?MODULE,
     WoodyState = woody_state:new(client, make_context(Id), EvHandler),
     {ok, Protocol} = thrift_binary_protocol:new(
-        woody_client_thrift_http_transport:new(Url, [], WoodyState),
+        woody_client_thrift_http_transport:new(Url, [], #{}, WoodyState),
         [{strict_read, true}, {strict_write, true}]
     ),
     {ok, Protocol1} = thrift_multiplexed_protocol:new(Protocol, ServiceName),
@@ -810,6 +833,53 @@ calls_with_cache(_) ->
     {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
     {exception, _} = woody_caching_client:call(InvalidRequest, cache, Opts, Context),
     ok.
+
+%%
+
+-define(
+    HACKNEY_URL(Scheme, Netloc, Path),
+    #hackney_url{scheme = Scheme, netloc = Netloc, raw_path = Path}
+).
+
+-define(
+    RESPONSE(Scheme, OldNetloc, NewNetloc, Path),
+    {?HACKNEY_URL(Scheme, OldNetloc, Path), ?HACKNEY_URL(Scheme, NewNetloc, Path)}
+).
+
+woody_resolver_inet(C) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    ok = inet_db:set_inet6(false),
+    {ok, ?RESPONSE(http, <<"127.0.0.1">>, <<"127.0.0.1">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://127.0.0.1/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"127.0.0.1:80">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"127.0.0.1:80">>, <<"/test?q=a">>)} =
+        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost:8080">>, <<"127.0.0.1:8080">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost">>, <<"127.0.0.1:443">>, <<>>)} =
+        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState),
+    ok = inet_db:set_inet6(?config(env_inet6, C)).
+
+woody_resolver_inet6(C) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    ok = inet_db:set_inet6(true),
+    {ok, ?RESPONSE(http, <<"[::1]">>, <<"[::1]">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://[::1]/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"[::1]:80">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"http://localhost/test">>, WoodyState),
+    {ok, ?RESPONSE(http, <<"localhost">>, <<"[::1]:80">>, <<"/test?q=a">>)} =
+        woody_resolver:resolve_url("http://localhost/test?q=a", WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost:8080">>, <<"[::1]:8080">>, <<"/test">>)} =
+        woody_resolver:resolve_url(<<"https://localhost:8080/test">>, WoodyState),
+    {ok, ?RESPONSE(https, <<"localhost">>, <<"[::1]:443">>, <<>>)} =
+        woody_resolver:resolve_url(<<"https://localhost">>, WoodyState),
+    ok = inet_db:set_inet6(?config(env_inet6, C)).
+
+woody_resolver_errors(_) ->
+    WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
+    {error, nxdomain} = woody_resolver:resolve_url(<<"http://nxdomainme">>, WoodyState),
+    {error, unsupported_url_scheme} = woody_resolver:resolve_url(<<"ftp://localhost">>, WoodyState).
 
 %%
 %% supervisor callbacks
@@ -965,6 +1035,11 @@ get_service_endpoint('Powerups') ->
     {
         genlib:to_binary(?URL_BASE ++ ?PATH_POWERUPS),
         {?THRIFT_DEFS, 'Powerups'}
+    };
+get_service_endpoint('The Void') ->
+    {
+        <<"http://nxdomainme">>,
+        {?THRIFT_DEFS, 'Weapons'}
     }.
 
 check_msg(true, Msg, Context) ->
