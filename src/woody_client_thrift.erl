@@ -71,7 +71,7 @@ make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->
     Client.
 
 -spec get_transport_opts(woody_client:options()) ->
-    woody_client_thrift_http_transport:options().
+    woody_client_thrift_http_transport:transport_options().
 get_transport_opts(Opts) ->
     maps:get(transport_opts, Opts, []).
 

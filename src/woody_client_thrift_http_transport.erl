@@ -15,16 +15,16 @@
 
 
 %% Types
--type options() :: list(tuple()).
--export_type([options/0]).
+-type transport_options() :: list(tuple()).
+-export_type([transport_options/0]).
 
 -type woody_transport() :: #{
-    url              := woody:url(),
-    woody_state      := woody_state:st(),
-    options          := options(),
-    resolver_options := woody_resolver:options(),
-    write_buffer     := binary(),
-    read_buffer      := binary()
+    url               := woody:url(),
+    woody_state       := woody_state:st(),
+    transport_options := transport_options(),
+    resolver_options  := woody_resolver:options(),
+    write_buffer      := binary(),
+    read_buffer       := binary()
 }.
 
 -type error()              :: {error, {system, woody_error:system_error()}}.
@@ -37,20 +37,20 @@
 %%
 %% API
 %%
--spec new(woody:url(), options(), woody_resolver:options(), woody_state:st()) ->
+-spec new(woody:url(), transport_options(), woody_resolver:options(), woody_state:st()) ->
     thrift_transport:t_transport() | no_return().
 new(Url, Opts, ResOpts, WoodyState) ->
     {ok, Transport} = thrift_transport:new(?MODULE, #{
-        url              => Url,
-        options          => Opts,
-        resolver_options => ResOpts,
-        woody_state      => WoodyState,
-        write_buffer     => <<>>,
-        read_buffer      => <<>>
+        url               => Url,
+        transport_options => Opts,
+        resolver_options  => ResOpts,
+        woody_state       => WoodyState,
+        write_buffer      => <<>>,
+        read_buffer       => <<>>
     }),
     Transport.
 
--spec child_spec(options()) ->
+-spec child_spec(transport_options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     Name = proplists:get_value(pool, Options),
@@ -78,12 +78,12 @@ read(Transport = #{read_buffer := RBuffer}, Len) when is_binary(RBuffer) ->
 -spec flush(woody_transport()) ->
     {woody_transport(), ok | error()}.
 flush(Transport = #{
-    url              := Url,
-    woody_state      := WoodyState,
-    options          := Options,
-    resolver_options := ResOpts,
-    write_buffer     := WBuffer,
-    read_buffer      := RBuffer
+    url               := Url,
+    woody_state       := WoodyState,
+    transport_options := Options,
+    resolver_options  := ResOpts,
+    write_buffer      := WBuffer,
+    read_buffer       := RBuffer
 }) when is_binary(WBuffer), is_binary(RBuffer) ->
     case handle_result(
         send(Url, WBuffer, Options, ResOpts, WoodyState),

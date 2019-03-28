@@ -10,11 +10,13 @@
 -export([call      /2]).
 -export([call      /3]).
 
+-type transport_options() :: woody_client_thrift_http_transport:transport_options().
+
 %% Types
 -type options() :: #{
     url            := woody:url(),
     event_handler  := woody:ev_handler(),
-    transport_opts => woody_client_thrift_http_transport:options(), %% See hackney:request/5 for available options.
+    transport_opts => transport_options(), %% See hackney:request/5 for available options.
     resolver_opts  => woody_resolver:options(),
     protocol       => thrift,
     transport      => http
