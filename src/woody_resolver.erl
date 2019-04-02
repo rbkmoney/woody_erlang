@@ -76,11 +76,26 @@ do_resolve_url(ParsedUrl, WoodyState, Opts) ->
 
 lookup_host(Host, Opts) ->
     Timeout = maps:get(timeout, Opts, ?DEFAULT_RESOLVE_TIMEOUT),
-    case inet:gethostbyname(Host, get_preferred_ip_family(), Timeout) of
-        {ok, HostEnt} ->
-            {ok, parse_hostent(HostEnt, Opts)};
-        {error, Reason} ->
-            {error, Reason}
+    Deadline = woody_deadline:from_timeout(Timeout),
+    IPFamilies = get_preferred_ip_family(),
+    lookup_host(Host, Opts, Deadline, IPFamilies).
+
+lookup_host(_Host, _Opts, _Deadline, []) ->
+    {error, nxdomain};
+lookup_host(Host, Opts, Deadline, [IPFamily | IPFamilies]) ->
+    try
+        Timeout = woody_deadline:to_timeout(Deadline),
+        case inet:gethostbyname(Host, IPFamily, Timeout) of
+            {ok, HostEnt} ->
+                {ok, parse_hostent(HostEnt, Opts)};
+            {error, nxdomain} ->
+                lookup_host(Host, Opts, Deadline, IPFamilies);
+            {error, Reason} ->
+                {error, Reason}
+        end
+    catch
+        error:deadline_reached ->
+            {error, timeout}
     end.
 
 replace_host(ParsedUrl, {IpAddr, IpFamily}) ->
@@ -106,10 +121,12 @@ get_ip(HostEnt, Opts) ->
 get_ip_family(HostEnt) ->
     HostEnt#hostent.h_addrtype.
 
+-spec get_preferred_ip_family() ->
+    [inet:address_family()].
 get_preferred_ip_family() ->
     case inet_db:res_option(inet6) of
-        true -> inet6;
-        false -> inet
+        true -> [inet6, inet];
+        false -> [inet, inet6]
     end.
 
 %%
