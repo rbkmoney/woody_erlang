@@ -3,7 +3,7 @@
 
 -type options() :: #{
     shutdown  := immediate | timeout(),
-    ranch_ref := atom()
+    ranch_ref := ranch:ref()
 }.
 
 -export([child_spec/1]).
