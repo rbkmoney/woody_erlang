@@ -51,7 +51,8 @@
     read_body_opts        => read_body_opts(),
     protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
-    additional_routes     => [route(_)]
+    additional_routes     => [route(_)],
+    shutdown_timeout      => timeout()
 }.
 -export_type([options/0]).
 
@@ -96,8 +97,9 @@
 -spec child_spec(_Id, options()) ->
     supervisor:child_spec().
 child_spec(Id, Opts = #{
-    ip            := Ip,
-    port          := Port
+    ip               := Ip,
+    port             := Port,
+    shutdown_timeout := ShutdownTimeout
 }) ->
     % TODO
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
@@ -106,7 +108,30 @@ child_spec(Id, Opts = #{
     TransportOpts0 = maps:get(transport_opts, Opts, #{}),
     {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
     CowboyOpts = get_cowboy_config(Opts),
-    ranch:child_spec({?MODULE, Id}, Transport, TransportOpts, cowboy_clear, CowboyOpts).
+    RanchRef = {?MODULE, Id},
+    DrainOpts = #{shutdown => ShutdownTimeout, ranch_ref => RanchRef},
+    DrainSpec = woody_drainer:child_spec(DrainOpts),
+    RanchSpec = make_ranch_childspec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
+    #{
+        id => woody_server_sup,
+        start => {woody_server_sup, start_link, [RanchSpec, DrainSpec]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor
+    }.
+
+make_ranch_childspec(Ref, Transport, TransOpts0, Protocol, ProtoOpts) ->
+    TransOpts = ranch:normalize_opts(TransOpts0),
+    #{
+        id => {ranch_listener_sup, Ref},
+        start => {ranch_listener_sup, start_link, [
+            Ref, Transport, TransOpts, Protocol, ProtoOpts
+        ]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [ranch_listener_sup]
+    }.
 
 get_socket_transport(SocketOpts, TransportOpts0) ->
     TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of

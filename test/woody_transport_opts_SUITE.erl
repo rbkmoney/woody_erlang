@@ -19,12 +19,14 @@
 -export([init_per_testcase/2]).
 
 -export([respects_max_connections/1]).
+-export([shuts_down_gracefully/1]).
 
 %%
 
 all() ->
     [
-        respects_max_connections
+        respects_max_connections,
+        shuts_down_gracefully
     ].
 
 init_per_suite(C) ->
@@ -41,14 +43,15 @@ end_per_suite(C) ->
 init_per_testcase(Name, C) ->
     Port = get_random_port(),
     [
-        {client , #{
-            url           => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
-            event_handler => {?MODULE, {client, Name}}
+        {client, #{
+            url              => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
+            event_handler    => {?MODULE, {client, Name}}
         }},
-        {server , #{
-            ip            => {127, 0, 0, 1},
-            port          => Port,
-            event_handler => {?MODULE, {server, Name}}
+        {server, #{
+            ip               => {127, 0, 0, 1},
+            port             => Port,
+            event_handler    => {?MODULE, {server, Name}},
+            shutdown_timeout => 5000
         }},
         {testcase, Name} | C
     ].
@@ -87,6 +90,31 @@ respects_max_connections(C) ->
     ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
+
+shuts_down_gracefully(C) ->
+    Client = ?config(client, C),
+    Handler = {"/", {{woody_test_thrift, 'Powerups'}, {?MODULE, {}}}},
+    TransportOpts = #{max_connections => 100},
+    ProtocolOpts = #{max_keepalive => 1},
+    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
+    ok = setup_delayed_kill(ServerPid, 1000),
+    Results = genlib_pmap:map(
+        fun (_) ->
+            get_powerup(Client, <<"Warbanner">>, <<>>)
+        end,
+        lists:seq(1, 10)
+    ),
+    %% server listener should be kill
+    timer:sleep(1500),
+    ?assertError(
+        {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
+        get_powerup(Client, <<"Warbanner">>, <<>>)
+    ),
+    %% but we finished all of our tasks
+    true = lists:all(
+        fun({ok, #'Powerup'{name = <<"Warbanner">>}}) -> true end,
+        Results
+    ).
 %%
 
 start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
@@ -107,15 +135,30 @@ stop_woody_server(Pid) ->
     true = exit(Pid, shutdown),
     ok.
 
+setup_delayed_kill(Pid, Timeout) ->
+    true = unlink(Pid),
+    _ = spawn_link(fun() ->
+        ok = timer:sleep(Timeout),
+        ok = proc_lib:stop(Pid, shutdown, infinity)
+    end),
+    ok.
+
 handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
     _ = ets:update_counter(Table, slot, -1),
-    {ok, #'Weapon'{name = Name, slot_pos = Slot}}.
+    {ok, #'Weapon'{name = Name, slot_pos = Slot}};
+
+handle_function(get_powerup, [Name, _], _Context, _) ->
+    ok = timer:sleep(2500),
+    {ok, #'Powerup'{name = Name}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
     {_Severity, {Format, Msg}, _} = woody_event_handler:format_event_and_meta(Event, Meta, RpcId),
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
+
+get_powerup(Client, Name, Arg) ->
+    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', [Name, Arg]}, Client).
 
 %%
 
