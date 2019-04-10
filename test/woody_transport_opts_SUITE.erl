@@ -98,17 +98,13 @@ shuts_down_gracefully(C) ->
     ProtocolOpts = #{max_keepalive => 1},
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
     ok = setup_delayed_kill(ServerPid, 1000),
+    %% server listener should be kill
+    ok = setup_listener_test(Client, 1500),
     Results = genlib_pmap:map(
         fun (_) ->
             get_powerup(Client, <<"Warbanner">>, <<>>)
         end,
         lists:seq(1, 10)
-    ),
-    %% server listener should be kill
-    timer:sleep(1500),
-    ?assertError(
-        {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
-        get_powerup(Client, <<"Warbanner">>, <<>>)
     ),
     %% but we finished all of our tasks
     true = lists:all(
@@ -116,7 +112,6 @@ shuts_down_gracefully(C) ->
         Results
     ).
 %%
-
 start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
     ServerOpts0 = ?config(server, C),
     SupervisorOpts = woody_server:child_spec(
@@ -140,6 +135,16 @@ setup_delayed_kill(Pid, Timeout) ->
     _ = spawn_link(fun() ->
         ok = timer:sleep(Timeout),
         ok = proc_lib:stop(Pid, shutdown, infinity)
+    end),
+    ok.
+
+setup_listener_test(Client, Timeout) ->
+    _ = spawn_link(fun() ->
+        ok = timer:sleep(Timeout),
+        ?assertError(
+            {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
+            get_powerup(Client, <<"Warbanner">>, <<>>)
+        )
     end),
     ok.
 
