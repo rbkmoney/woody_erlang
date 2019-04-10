@@ -86,6 +86,7 @@
     {shutdown , cowboy_req:req(), undefined}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
+-define(DEFAULT_SHUTDOWN_TIMEOUT,   5000).
 
 %% nginx should be configured to take care of various limits.
 
@@ -98,8 +99,7 @@
     supervisor:child_spec().
 child_spec(Id, Opts = #{
     ip               := Ip,
-    port             := Port,
-    shutdown_timeout := ShutdownTimeout
+    port             := Port
 }) ->
     % TODO
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
@@ -109,6 +109,7 @@ child_spec(Id, Opts = #{
     {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
     CowboyOpts = get_cowboy_config(Opts),
     RanchRef = {?MODULE, Id},
+    ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),
     DrainOpts = #{shutdown => ShutdownTimeout, ranch_ref => RanchRef},
     DrainSpec = woody_drainer:child_spec(DrainOpts),
     RanchSpec = make_ranch_childspec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
