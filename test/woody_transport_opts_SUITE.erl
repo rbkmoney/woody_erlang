@@ -114,7 +114,7 @@ handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Tabl
     {ok, #'Weapon'{name = Name, slot_pos = Slot}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
-    {_Severity, {Format, Msg}, _} = woody_event_handler:format_event_and_meta(Event, Meta, RpcId),
+    {_Severity, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
 
 %%
