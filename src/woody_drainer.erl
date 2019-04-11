@@ -41,9 +41,9 @@ handle_call(_, _, St) -> {reply, ok, St}.
 handle_cast(_, St) -> {noreply, St}.
 
 terminate(shutdown, Ref) ->
-    %%@todo probably need events here
     ok = ranch:suspend_listener(Ref),
-    ok = ranch:set_protocol_options(Ref, #{max_keepalive => 1}),
+    %ProtoOpts = ranch:get_protocol_options(Ref),
+    %ok = ranch:set_protocol_options(Ref, ProtoOpts#{max_keepalive => 1}),
     ok = ranch:wait_for_connections(Ref, '==', 0).
 
 %% internal

@@ -94,19 +94,21 @@ respects_max_connections(C) ->
 shuts_down_gracefully(C) ->
     Client = ?config(client, C),
     Handler = {"/", {{woody_test_thrift, 'Powerups'}, {?MODULE, {}}}},
-    {ok, ServerPid} = start_woody_server(Handler, #{}, #{}, #{}, C),
-    ok = setup_delayed_kill(ServerPid, 1000),
-    ok = setup_request_after_listener_suspended(Client, 1500),
-    Results = genlib_pmap:map(
+    TransportOpts = #{max_connections => 10},
+    ProtocolOpts = #{max_keepalive => 30000},
+    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
+    TestPid = setup_request_after_listener_suspended(Client),
+    ok = setup_delayed_kill(ServerPid, 1000, TestPid),
+    _ = genlib_pmap:map(
         fun (_) ->
-            get_powerup(Client, <<"Warbanner">>, <<>>)
+            ?assertEqual(
+                {ok, #'Powerup'{name = <<"Warbanner">>}},
+                get_powerup(Client, <<"Warbanner">>, <<>>)
+            )
         end,
         lists:seq(1, 10)
     ),
-    true = lists:all(
-        fun({ok, #'Powerup'{name = <<"Warbanner">>}}) -> true end,
-        Results
-    ).
+    ok = receive listener_suspended_success -> ok after 5000 -> timeout end.
 
 %%
 
@@ -128,23 +130,27 @@ stop_woody_server(Pid) ->
     true = exit(Pid, shutdown),
     ok.
 
-setup_delayed_kill(Pid, Timeout) ->
+setup_delayed_kill(Pid, Timeout, TestPid) ->
     true = unlink(Pid),
     _ = spawn_link(fun() ->
         ok = timer:sleep(Timeout),
+        erlang:send_after(500, TestPid, listener_suspended),
         ok = proc_lib:stop(Pid, shutdown, infinity)
     end),
     ok.
 
-setup_request_after_listener_suspended(Client, Timeout) ->
-    _ = spawn_link(fun() ->
-        ok = timer:sleep(Timeout),
-        ?assertError(
-            {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
-            get_powerup(Client, <<"Warbanner">>, <<>>)
-        )
-    end),
-    ok.
+setup_request_after_listener_suspended(Client) ->
+    ParentPid = self(),
+    spawn_link(fun() ->
+        receive
+            listener_suspended ->
+                ?assertError(
+                    {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
+                    get_powerup(Client, <<"Warbanner">>, <<>>)
+                ),
+                erlang:send(ParentPid, listener_suspended_success)
+        end
+    end).
 
 handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
@@ -153,7 +159,7 @@ handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Tabl
     {ok, #'Weapon'{name = Name, slot_pos = Slot}};
 
 handle_function(get_powerup, [Name, _], _Context, _) ->
-    ok = timer:sleep(2500),
+    ok = timer:sleep(4500),
     {ok, #'Powerup'{name = Name}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
