@@ -86,7 +86,7 @@
     {shutdown , cowboy_req:req(), undefined}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
--define(DEFAULT_SHUTDOWN_TIMEOUT,   immediate).
+-define(DEFAULT_SHUTDOWN_TIMEOUT,   0).
 
 %% nginx should be configured to take care of various limits.
 

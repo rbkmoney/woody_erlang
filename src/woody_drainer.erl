@@ -2,7 +2,7 @@
 -behaviour(gen_server).
 
 -type options() :: #{
-    shutdown  := immediate | timeout(),
+    shutdown  := timeout(),
     ranch_ref := ranch:ref()
 }.
 
@@ -40,15 +40,15 @@ init(RanchRef) ->
 handle_call(_, _, St) -> {reply, ok, St}.
 handle_cast(_, St) -> {noreply, St}.
 
-terminate(shutdown, St) ->
+terminate(shutdown, Ref) ->
     %%@todo probably need events here
-    ok = ranch:suspend_listener(St),
-    ok = ranch:wait_for_connections(St, '==', 0).
+    ok = ranch:suspend_listener(Ref),
+    ok = ranch:set_protocol_options(Ref, #{max_keepalive => 1}),
+    ok = ranch:wait_for_connections(Ref, '==', 0).
 
 %% internal
 
-get_shutdown_param(#{shutdown := immediate}) ->
+get_shutdown_param(#{shutdown := Timeout}) when Timeout =:= 0 ->
     brutal_kill;
-get_shutdown_param(#{shutdown := Timeout})
-    when is_integer(Timeout) orelse Timeout =:= infinite ->
+get_shutdown_param(#{shutdown := Timeout}) ->
     Timeout.

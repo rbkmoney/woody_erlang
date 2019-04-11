@@ -94,24 +94,22 @@ respects_max_connections(C) ->
 shuts_down_gracefully(C) ->
     Client = ?config(client, C),
     Handler = {"/", {{woody_test_thrift, 'Powerups'}, {?MODULE, {}}}},
-    TransportOpts = #{max_connections => 100},
-    ProtocolOpts = #{max_keepalive => 1},
-    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
+    {ok, ServerPid} = start_woody_server(Handler, #{}, #{}, #{}, C),
     ok = setup_delayed_kill(ServerPid, 1000),
-    %% server listener should be kill
-    ok = setup_listener_test(Client, 1500),
+    ok = setup_request_after_listener_suspended(Client, 1500),
     Results = genlib_pmap:map(
         fun (_) ->
             get_powerup(Client, <<"Warbanner">>, <<>>)
         end,
         lists:seq(1, 10)
     ),
-    %% but we finished all of our tasks
     true = lists:all(
         fun({ok, #'Powerup'{name = <<"Warbanner">>}}) -> true end,
         Results
     ).
+
 %%
+
 start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
     ServerOpts0 = ?config(server, C),
     SupervisorOpts = woody_server:child_spec(
@@ -138,7 +136,7 @@ setup_delayed_kill(Pid, Timeout) ->
     end),
     ok.
 
-setup_listener_test(Client, Timeout) ->
+setup_request_after_listener_suspended(Client, Timeout) ->
     _ = spawn_link(fun() ->
         ok = timer:sleep(Timeout),
         ?assertError(
