@@ -11,17 +11,24 @@
 -type resolve_result() :: {Old::parsed_url(), New::parsed_url()}.
 
 -type options() :: #{
-    ip_picker => {module(), atom()},
+    ip_picker => ip_picker(),
     timeout => timeout()
 }.
 
+-type ip_picker() :: {module(), atom()} | predefined_ip_picker().
+-type predefined_ip_picker() ::
+    random |
+    first.
+
 -export_type([options/0]).
+-export_type([ip_picker/0]).
+-export_type([predefined_ip_picker/0]).
 
 -export([resolve_url/2]).
 -export([resolve_url/3]).
 
 -define(DEFAULT_RESOLVE_TIMEOUT, infinity).
--define(DEFAULT_IP_PICKER, {erlang, hd}).
+-define(DEFAULT_IP_PICKER, first).
 
 %%
 
@@ -115,8 +122,15 @@ parse_hostent(HostEnt, Opts) ->
     {get_ip(HostEnt, Opts), get_ip_family(HostEnt)}.
 
 get_ip(HostEnt, Opts) ->
-    {M, F} = maps:get(ip_picker, Opts, ?DEFAULT_IP_PICKER),
-    erlang:apply(M, F, [HostEnt#hostent.h_addr_list]).
+    Picker = maps:get(ip_picker, Opts, ?DEFAULT_IP_PICKER),
+    apply_ip_picker(Picker, HostEnt#hostent.h_addr_list).
+
+apply_ip_picker(first, [Head | _Tail]) ->
+    Head;
+apply_ip_picker(random, AddrList) ->
+    lists:nth(rand:uniform(length(AddrList)), AddrList);
+apply_ip_picker({M, F}, AddrList) ->
+    erlang:apply(M, F, [AddrList]).
 
 get_ip_family(HostEnt) ->
     HostEnt#hostent.h_addrtype.

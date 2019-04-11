@@ -210,6 +210,7 @@ handle_result({error, Reason}, WoodyState) when
 handle_result({error, Reason}, WoodyState) when
     Reason             =:= econnrefused    ;
     Reason             =:= connect_timeout ;
+    Reason             =:= checkout_timeout;
     Reason             =:= enetdown        ;
     Reason             =:= enetunreach     ;
     element(1, Reason) =:= resolve_failed
