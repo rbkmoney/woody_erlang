@@ -224,6 +224,15 @@ trace_req(true, Req, EvHandler, ServerOpts) ->
 trace_req(_, Req, _, _) ->
     Req.
 
+-spec trace_resp(
+    true,
+    cowboy_req:req(),
+    woody:http_code(),
+    woody:http_headers(),
+    woody:http_body(),
+    woody:ev_handler()
+) ->
+    cowboy_req:req().
 trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
     _ = woody_event_handler:handle_event(EvHandler, ?EV_TRACE, undefined, #{
          role    => server,

@@ -28,21 +28,41 @@ child_spec(Opts) ->
         shutdown => Shutdown
     }.
 
+-spec start_link(ranch:ref()) ->
+    genlib_gen:start_ret().
+
 start_link(RanchRef) ->
     gen_server:start_link(?MODULE, RanchRef, []).
 
 %% supervisor callbacks
 
+-spec init(ranch:ref()) ->
+    {ok, ranch:ref()}.
+
 init(RanchRef) ->
     process_flag(trap_exit, true),
     {ok, RanchRef}.
 
-handle_call(_, _, St) -> {reply, ok, St}.
-handle_cast(_, St) -> {noreply, St}.
+-spec handle_call(_, _, ranch:ref()) ->
+    {reply, ok, ranch:ref()}.
+
+handle_call(_, _, St) ->
+    {reply, ok, St}.
+
+-spec handle_cast(_, ranch:ref()) ->
+    {noreply, ranch:ref()}.
+
+handle_cast(_, St) ->
+    {noreply, St}.
+
+-spec terminate(_, ranch:ref()) ->
+        ok.
 
 terminate(shutdown, Ref) ->
     ok = ranch:suspend_listener(Ref),
-    ok = ranch:wait_for_connections(Ref, '==', 0).
+    ok = ranch:wait_for_connections(Ref, '==', 0);
+terminate(_, _) ->
+    ok.
 
 %% internal
 
