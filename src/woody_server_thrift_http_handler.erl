@@ -52,6 +52,9 @@
     protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
     additional_routes     => [route(_)],
+    %% shutdown_timeout: time to drain current connections when shutdown signal is recieved
+    %% NOTE: when changing this value make sure to take into account the request_timeout and
+    %% max_keepalive settings of protocol_opts() to achieve the desired effect
     shutdown_timeout      => timeout()
 }.
 -export_type([options/0]).
@@ -111,12 +114,20 @@ child_spec(Id, Opts = #{
     RanchRef = {?MODULE, Id},
     DrainSpec = make_drain_childspec(RanchRef, Opts),
     RanchSpec = ranch:child_spec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
-    woody_server_sup:child_spec([RanchSpec, DrainSpec]).
+    make_server_childspec([RanchSpec, DrainSpec]).
 
 make_drain_childspec(Ref, Opts) ->
     ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),
     DrainOpts = #{shutdown => ShutdownTimeout, ranch_ref => Ref},
-    woody_drainer:child_spec(DrainOpts).
+    woody_server_http_drainer:child_spec(DrainOpts).
+
+make_server_childspec(Children) ->
+    Flags = #{strategy => one_for_all},
+    #{
+        id => genlib_adhoc_supervisor,
+        start => {genlib_adhoc_supervisor, start_link, [Flags, Children]},
+        type => supervisor
+    }.
 
 get_socket_transport(SocketOpts, TransportOpts0) ->
     TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of

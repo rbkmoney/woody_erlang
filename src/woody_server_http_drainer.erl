@@ -1,4 +1,4 @@
--module(woody_drainer).
+-module(woody_server_http_drainer).
 -behaviour(gen_server).
 
 -type options() :: #{
@@ -14,10 +14,10 @@
 -export([handle_cast/2]).
 -export([terminate/2]).
 
+%% API
+
 -spec child_spec(options()) ->
     supervisor:child_spec().
-
-%% API
 
 child_spec(Opts) ->
     RanchRef = maps:get(ranch_ref, Opts),
@@ -42,8 +42,6 @@ handle_cast(_, St) -> {noreply, St}.
 
 terminate(shutdown, Ref) ->
     ok = ranch:suspend_listener(Ref),
-    %ProtoOpts = ranch:get_protocol_options(Ref),
-    %ok = ranch:set_protocol_options(Ref, ProtoOpts#{max_keepalive => 1}),
     ok = ranch:wait_for_connections(Ref, '==', 0).
 
 %% internal

@@ -90,15 +90,23 @@ respects_max_connections(C) ->
     ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
+-define(receive_or_timeout(Msg, Timeout), receive Msg -> ok after Timeout -> timeout end).
 
 shuts_down_gracefully(C) ->
     Client = ?config(client, C),
     Handler = {"/", {{woody_test_thrift, 'Powerups'}, {?MODULE, {}}}},
     TransportOpts = #{max_connections => 10},
-    ProtocolOpts = #{max_keepalive => 30000},
+    ProtocolOpts = #{max_keepalive => 2, request_timeout => 1000},
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
-    TestPid = setup_request_after_listener_suspended(Client),
-    ok = setup_delayed_kill(ServerPid, 1000, TestPid),
+    ServerMonitor = erlang:monitor(process, ServerPid),
+    true = unlink(ServerPid),
+    ParentPid = self(),
+    %% send a shutdown signal to the server in 1000ms
+    %% then try making a new connection with it, expect econnrefused
+    TestPid = spawn_link(fun() -> process_econnrefused_test(Client, ParentPid)   end),
+    _       = spawn_link(fun() -> process_delayed_kill(ServerPid, TestPid, 1000) end),
+    %% fire some requests and expect them to finish successfuly
+    %% even when server is shutting down in the meantime
     _ = genlib_pmap:map(
         fun (_) ->
             ?assertEqual(
@@ -108,7 +116,24 @@ shuts_down_gracefully(C) ->
         end,
         lists:seq(1, 10)
     ),
-    ok = receive listener_suspended_success -> ok after 5000 -> timeout end.
+    %% wait for the async test and server shutdown to finish
+    ok = ?receive_or_timeout(econnrefused_test_success, 0),
+    ok = ?receive_or_timeout({'DOWN', ServerMonitor, _, _, _}, 5000).
+
+process_econnrefused_test(Client, ParentPid) ->
+    receive
+        listener_suspended ->
+            ?assertError(
+                {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
+                get_powerup(Client, <<"Warbanner">>, <<>>)
+            ),
+            erlang:send(ParentPid, econnrefused_test_success)
+    end.
+
+process_delayed_kill(ServerPid, TestPid, Timeout) ->
+    timer:sleep(Timeout),
+    erlang:send_after(500, TestPid, listener_suspended),
+    ok = proc_lib:stop(ServerPid, shutdown, infinity).
 
 %%
 
@@ -130,28 +155,6 @@ stop_woody_server(Pid) ->
     true = exit(Pid, shutdown),
     ok.
 
-setup_delayed_kill(Pid, Timeout, TestPid) ->
-    true = unlink(Pid),
-    _ = spawn_link(fun() ->
-        ok = timer:sleep(Timeout),
-        erlang:send_after(500, TestPid, listener_suspended),
-        ok = proc_lib:stop(Pid, shutdown, infinity)
-    end),
-    ok.
-
-setup_request_after_listener_suspended(Client) ->
-    ParentPid = self(),
-    spawn_link(fun() ->
-        receive
-            listener_suspended ->
-                ?assertError(
-                    {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
-                    get_powerup(Client, <<"Warbanner">>, <<>>)
-                ),
-                erlang:send(ParentPid, listener_suspended_success)
-        end
-    end).
-
 handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
@@ -159,7 +162,7 @@ handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Tabl
     {ok, #'Weapon'{name = Name, slot_pos = Slot}};
 
 handle_function(get_powerup, [Name, _], _Context, _) ->
-    ok = timer:sleep(4500),
+    ok = timer:sleep(2000),
     {ok, #'Powerup'{name = Name}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
