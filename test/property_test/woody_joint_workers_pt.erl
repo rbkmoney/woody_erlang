@@ -14,6 +14,19 @@
     postcondition/3,
     next_state/3
 ]).
+
+-spec prop_test() -> any().
+-spec start_workers() -> any().
+-spec stop_workers(any()) -> any().
+-spec do(any(), any()) -> any().
+-spec task_timeouts(any()) -> any().
+-spec id() -> any().
+-spec command(any()) -> any().
+-spec initial_state() -> any().
+-spec precondition(any(), any()) -> any().
+-spec postcondition(any(), any(), any()) -> any().
+-spec next_state(any(), any(), any()) -> any().
+
 %% проверяет работоспособность в условиях параллельных запросов,
 %% но по факту не может проверить, что запросы действительно соединяются
 prop_test() ->

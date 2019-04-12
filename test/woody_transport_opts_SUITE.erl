@@ -21,6 +21,20 @@
 -export([respects_max_connections/1]).
 -export([shuts_down_gracefully/1]).
 
+-type case_name() :: atom().
+-type config() :: list().
+
+-spec all() -> list().
+-spec init_per_suite(config()) -> config().
+-spec end_per_suite(config()) -> any().
+-spec init_per_testcase(case_name(), config()) -> config().
+
+-spec respects_max_connections(config()) -> any().
+-spec shuts_down_gracefully(config()) -> any().
+
+-spec handle_function(_, _, _, _) -> _.
+-spec handle_event(_, _, _, _) -> _.
+
 %%
 
 all() ->

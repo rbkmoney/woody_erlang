@@ -156,6 +156,70 @@
 -define(WEAPON_STACK_OVERFLOW  , pos_out_of_boundaries).
 -define(BAD_POWERUP_REPLY      , powerup_unknown).
 
+-type config() :: list().
+
+-spec handle_function(_, _, _, _) -> _.
+-spec handle_event(_, _, _, _) -> _.
+
+-spec init(any()) -> any().
+-spec init(any(), any()) -> any().
+-spec terminate(any(), any(), any()) -> any().
+
+-spec all() -> list().
+-spec groups() -> list().
+-spec init_per_suite(config()) -> config().
+-spec end_per_suite(config()) -> any().
+-spec init_per_group(atom(), config()) -> config().
+-spec end_per_group(atom(), config()) -> any().
+-spec init_per_testcase(atom(), config()) -> config().
+-spec end_per_test_case(atom(), config()) -> any().
+
+-spec context_add_put_get_meta_ok_test(config()) -> any().
+-spec context_get_meta_by_key_ok_test(config()) -> any().
+-spec context_get_empty_meta_ok_test(config()) -> any().
+-spec context_get_empty_meta_by_key_ok_test(config()) -> any().
+-spec context_given_rpc_id_test(config()) -> any().
+-spec context_given_id_test(config()) -> any().
+-spec context_generated_rpc_id_test(config()) -> any().
+-spec ids_monotonic_incr_test(config()) -> any().
+-spec deadline_reached_test(config()) -> any().
+-spec deadline_to_from_timeout_test(config()) -> any().
+-spec deadline_to_from_binary_test(config()) -> any().
+-spec call_ok_test(config()) -> any().
+-spec call_resolver_nxdomain(config()) -> any().
+-spec call3_ok_test(config()) -> any().
+-spec call_oneway_void_test(config()) -> any().
+-spec call_sequence_with_context_meta_test(config()) -> any().
+-spec call_business_error_test(config()) -> any().
+-spec call_throw_unexpected_test(config()) -> any().
+-spec call_system_external_error_test(config()) -> any().
+-spec call_client_error_test(config()) -> any().
+-spec call_server_internal_error_test(config()) -> any().
+-spec call_pass_thru_ok_test(config()) -> any().
+-spec call_pass_thru_except_test(config()) -> any().
+-spec call_pass_thru_bad_result_test(config()) -> any().
+-spec call_pass_thru_bad_except_test(config()) -> any().
+-spec call_pass_thru_result_unexpected_test(config()) -> any().
+-spec call_pass_thru_resource_unavail_test(config()) -> any().
+-spec call_pass_thru_result_unknown_test(config()) -> any().
+-spec call_no_headers_404_test(config()) -> any().
+-spec call_no_headers_500_test(config()) -> any().
+-spec call_no_headers_502_test(config()) -> any().
+-spec call_no_headers_503_test(config()) -> any().
+-spec call_no_headers_504_test(config()) -> any().
+-spec call3_ok_default_ev_handler_test(config()) -> any().
+-spec call_thrift_multiplexed_test(config()) -> any().
+-spec call_deadline_ok_test(config()) -> any().
+-spec call_deadline_reached_on_client_test(config()) -> any().
+-spec call_deadline_timeout_test(config()) -> any().
+-spec server_http_req_validation_test(config()) -> any().
+-spec try_bad_handler_spec_test(config()) -> any().
+-spec find_multiple_pools_test(config()) -> any().
+-spec calls_with_cache(config()) -> any().
+-spec woody_resolver_inet(config()) -> any().
+-spec woody_resolver_inet6(config()) -> any().
+-spec woody_resolver_errors(config()) -> any().
+
 %%
 %% tests descriptions
 %%
