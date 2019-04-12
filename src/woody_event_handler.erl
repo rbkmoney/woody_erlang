@@ -165,11 +165,12 @@
 -spec handle_event(event(), woody_state:st(), meta()) ->
     ok.
 handle_event(Event, WoodyState, ExtraMeta) ->
+    EvMeta = maybe_add_exec_time(Event, woody_state:get_ev_meta(WoodyState)),
     handle_event(
         woody_state:get_ev_handler(WoodyState),
         Event,
         woody_context:get_rpc_id(woody_state:get_context(WoodyState)),
-        maps:merge(woody_state:get_ev_meta(WoodyState), ExtraMeta)
+        maps:merge(EvMeta, ExtraMeta)
     ).
 
 -spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
@@ -332,3 +333,10 @@ get_url_or_code(#{url := Url}) ->
     Url;
 get_url_or_code(#{code := Code}) ->
     Code.
+
+maybe_add_exec_time(Event, #{created := Created} = WoodyStateEvMeta) when
+    Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND ->
+
+    ExecutionTime = erlang:system_time(millisecond) - Created,
+    maps:remove(created, WoodyStateEvMeta#{execution_time => ExecutionTime});
+maybe_add_exec_time(_Event, WoodyStateEvMeta) -> WoodyStateEvMeta.
