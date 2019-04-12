@@ -46,7 +46,7 @@ terminate(shutdown, Ref) ->
 
 %% internal
 
-get_shutdown_param(#{shutdown := Timeout}) when Timeout =:= 0 ->
+get_shutdown_param(#{shutdown := 0}) ->
     brutal_kill;
 get_shutdown_param(#{shutdown := Timeout}) ->
     Timeout.
