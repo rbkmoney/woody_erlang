@@ -32,8 +32,8 @@
 -spec respects_max_connections(config()) -> any().
 -spec shuts_down_gracefully(config()) -> any().
 
--spec handle_function(atom(), list(), woody_context:ctx(), any()) ->
-    {ok, any()}.
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
+    {ok, woody:result()}.
 
 -spec handle_event(
     woody_event_handler:event(),

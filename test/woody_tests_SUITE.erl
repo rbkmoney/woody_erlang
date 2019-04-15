@@ -160,8 +160,8 @@
 -type case_name() :: atom().
 -type group_name() :: atom().
 
--spec handle_function(atom(), list(), woody_context:ctx(), any()) ->
-    {ok, any()}.
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
+    {ok, woody:result()}.
 
 -spec handle_event(
     woody_event_handler:event(),
@@ -172,8 +172,10 @@
 
 -spec init(any()) -> genlib_gen:supervisor_ret().
 
--spec init(any(), any()) -> {stop, cowboy_req:req(), non_neg_integer()}.
--spec terminate(any(), any(), any()) -> ok.
+-spec init(cowboy_req:req(), cowboy:http_status()) ->
+    {stop, cowboy_req:req(), cowboy:http_status()}.
+-spec terminate(any(), any(), any()) ->
+    ok.
 
 -spec all() -> [{group, group_name()}].
 -spec groups() -> [{group_name(), list(), [case_name()]}].
