@@ -44,19 +44,19 @@ init(RanchRef) ->
     {ok, RanchRef}.
 
 -spec handle_call(_, _, ranch:ref()) ->
-    {reply, ok, ranch:ref()}.
+    {noreply, ranch:ref()}.
 
-handle_call(_, _, St) ->
-    {reply, ok, St}.
+handle_call(_Call, _From, St) ->
+    {noreply, St}.
 
 -spec handle_cast(_, ranch:ref()) ->
     {noreply, ranch:ref()}.
 
-handle_cast(_, St) ->
+handle_cast(_Call, St) ->
     {noreply, St}.
 
 -spec terminate(_, ranch:ref()) ->
-        ok.
+    ok.
 
 terminate(shutdown, Ref) ->
     ok = ranch:suspend_listener(Ref),

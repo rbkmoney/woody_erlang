@@ -9,12 +9,13 @@
 
 -export([prop_test/1]).
 
--type config() :: list().
+-type config() :: [{atom(), any()}].
+-type case_name() :: atom().
 
--spec all() -> list().
+-spec all() -> [case_name()].
 -spec init_per_suite(config()) -> config().
 -spec end_per_suite(config()) -> any().
--spec prop_test(config()) -> any().
+-spec prop_test(config()) -> ok.
 
 %%
 %% tests descriptions

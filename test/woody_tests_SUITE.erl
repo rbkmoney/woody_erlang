@@ -156,23 +156,33 @@
 -define(WEAPON_STACK_OVERFLOW  , pos_out_of_boundaries).
 -define(BAD_POWERUP_REPLY      , powerup_unknown).
 
--type config() :: list().
+-type config() :: [{atom(), any()}].
+-type case_name() :: atom().
+-type group_name() :: atom().
 
--spec handle_function(_, _, _, _) -> _.
--spec handle_event(_, _, _, _) -> _.
+-spec handle_function(atom(), list(), woody_context:ctx(), any()) ->
+    {ok, any()}.
 
--spec init(any()) -> any().
--spec init(any(), any()) -> any().
--spec terminate(any(), any(), any()) -> any().
+-spec handle_event(
+    woody_event_handler:event(),
+    woody:rpc_id(),
+    woody_event_handler:event_meta(),
+    woody:options()
+) -> _.
 
--spec all() -> list().
--spec groups() -> list().
+-spec init(any()) -> genlib_gen:supervisor_ret().
+
+-spec init(any(), any()) -> {stop, cowboy_req:req(), non_neg_integer()}.
+-spec terminate(any(), any(), any()) -> ok.
+
+-spec all() -> [{group, group_name()}].
+-spec groups() -> [{group_name(), list(), [case_name()]}].
 -spec init_per_suite(config()) -> config().
 -spec end_per_suite(config()) -> any().
--spec init_per_group(atom(), config()) -> config().
--spec end_per_group(atom(), config()) -> any().
--spec init_per_testcase(atom(), config()) -> config().
--spec end_per_test_case(atom(), config()) -> any().
+-spec init_per_group(group_name(), config()) -> config().
+-spec end_per_group(group_name(), config()) -> any().
+-spec init_per_testcase(case_name(), config()) -> config().
+-spec end_per_test_case(case_name(), config()) -> any().
 
 -spec context_add_put_get_meta_ok_test(config()) -> any().
 -spec context_get_meta_by_key_ok_test(config()) -> any().
