@@ -48,7 +48,7 @@ init_per_testcase(Name, C) ->
         {server , #{
             ip            => {127, 0, 0, 1},
             port          => Port,
-            event_handler => {?MODULE, {server, Name}}
+            event_handler => [{?MODULE, {server, Name}}]
         }},
         {testcase, Name} | C
     ].

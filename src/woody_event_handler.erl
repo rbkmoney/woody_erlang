@@ -175,10 +175,16 @@ handle_event(Event, WoodyState, ExtraMeta) ->
 
 -spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
+handle_event(Handlers, Event, RpcId, Meta) when is_list(Handlers) ->
+    lists:foreach(
+        fun(Handler) ->
+            {Module, Opts} = woody_util:get_mod_opts(Handler),
+            _ = Module:handle_event(Event, RpcId, Meta, Opts)
+        end,
+        Handlers),
+    ok;
 handle_event(Handler, Event, RpcId, Meta) ->
-    {Module, Opts} = woody_util:get_mod_opts(Handler),
-    _ = Module:handle_event(Event, RpcId, Meta, Opts),
-    ok.
+    handle_event([Handler], Event, RpcId, Meta).
 
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().

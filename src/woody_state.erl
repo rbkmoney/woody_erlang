@@ -17,7 +17,7 @@
 %% Types
 -type st() :: #{
     context    := woody_context:ctx(),
-    ev_handler := woody:ev_handler(),
+    ev_handler := woody:ev_handler() | [woody:ev_handler()],
     ev_meta    := woody_event_handler:meta()
 }.
 -export_type([st/0]).
@@ -48,7 +48,7 @@ get_context(#{context := Context}) ->
     Context.
 
 -spec get_ev_handler(st()) ->
-    woody:ev_handler().
+    woody:ev_handler() | [woody:ev_handler()].
 get_ev_handler(#{ev_handler := Handler}) ->
     Handler.
 
