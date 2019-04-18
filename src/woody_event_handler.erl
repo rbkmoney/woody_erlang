@@ -345,4 +345,5 @@ maybe_add_exec_time(Event, #{created := Created} = WoodyStateEvMeta) when
 
     ExecutionTime = erlang:system_time(millisecond) - Created,
     maps:remove(created, WoodyStateEvMeta#{execution_time => ExecutionTime});
-maybe_add_exec_time(_Event, WoodyStateEvMeta) -> WoodyStateEvMeta.
+maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
+    WoodyStateEvMeta.
