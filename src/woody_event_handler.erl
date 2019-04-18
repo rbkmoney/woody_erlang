@@ -340,10 +340,10 @@ get_url_or_code(#{url := Url}) ->
 get_url_or_code(#{code := Code}) ->
     Code.
 
-maybe_add_exec_time(Event, #{created := Created} = WoodyStateEvMeta) when
+maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = WoodyStateEvMeta) when
     Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND ->
 
-    ExecutionTime = erlang:system_time(millisecond) - Created,
-    maps:remove(created, WoodyStateEvMeta#{execution_time => ExecutionTime});
+    ExecutionTime = erlang:system_time(millisecond) - ExecutionStartTime,
+    maps:remove(execution_start_time, WoodyStateEvMeta#{execution_time => ExecutionTime});
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.

@@ -37,7 +37,7 @@ new(Role, Context, EvHandler) ->
             #{
                 context    => Context,
                 ev_handler => EvHandler,
-                ev_meta    => #{role => Role, created => erlang:system_time(millisecond)}
+                ev_meta    => #{role => Role, execution_start_time => erlang:system_time(millisecond)}
             }
         )
     ).
