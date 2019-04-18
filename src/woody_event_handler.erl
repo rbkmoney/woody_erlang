@@ -55,6 +55,10 @@
     metadata       := woody_context:meta(),
     deadline       := woody:deadline(),
 
+    execution_start_time  := integer(),
+    execution_duration_ms => integer(),              %% EV_CLIENT_RECEIVE
+    execution_end_time    => integer(),              %% EV_CLIENT_RECEIVE
+
     url      => woody:url(),                        %% EV_CLIENT_SEND
     code     => woody:http_code(),                  %% EV_CLIENT_RECEIVE
     reason   => woody_error:details(),              %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
@@ -71,6 +75,10 @@
     status   => status(),              %% EV_SERVER_RECEIVE | EV_SERVER_SEND | EV_SERVICE_HANDLER_RESULT
     reason   => woody_error:details(), %% EV_SERVER_RECEIVE
     code     => woody:http_code(),     %% EV_SERVER_SEND
+
+    execution_start_time  := integer(),
+    execution_duration_ms => integer(),       %% EV_SERVER_SEND
+    execution_end_time    => integer(),       %% EV_SERVER_SEND
 
     service        => woody:service_name(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     service_schema => woody:service(),       %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
@@ -343,7 +351,11 @@ get_url_or_code(#{code := Code}) ->
 maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = WoodyStateEvMeta) when
     Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND ->
 
-    ExecutionTime = erlang:system_time(millisecond) - ExecutionStartTime,
-    maps:remove(execution_start_time, WoodyStateEvMeta#{execution_time => ExecutionTime});
+    ExecutionEndTime = os:system_time(millisecond),
+    ExecutionTimeMs =  ExecutionEndTime - ExecutionStartTime,
+    WoodyStateEvMeta#{
+        execution_end_time => ExecutionEndTime,
+        execution_duration_ms => ExecutionTimeMs
+    };
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
