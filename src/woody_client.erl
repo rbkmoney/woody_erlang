@@ -4,6 +4,7 @@
 -module(woody_client).
 
 -include("woody_defs.hrl").
+-include("otp_20_compatibility.hrl").
 
 %% API
 -export([child_spec/1]).
@@ -73,7 +74,7 @@ call_safe(Request, Options, WoodyState) ->
         Error = {error, {Type, _}} when Type =:= system ; Type =:= business ->
             Error
     catch
-        Class:Reason:Stacktrace ->
+        ?STACKTRACE(Class, Reason, Stacktrace)
             handle_client_error(Class, Reason, Stacktrace, WoodyState)
     after
         _ = woody_event_handler:handle_event(?EV_CLIENT_END, WoodyState, #{})
