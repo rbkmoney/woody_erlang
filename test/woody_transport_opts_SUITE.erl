@@ -19,12 +19,35 @@
 -export([init_per_testcase/2]).
 
 -export([respects_max_connections/1]).
+-export([shuts_down_gracefully/1]).
+
+-type case_name() :: atom().
+-type config() :: [{atom(), any()}].
+
+-spec all() -> [case_name()].
+-spec init_per_suite(config()) -> config().
+-spec end_per_suite(config()) -> any().
+-spec init_per_testcase(case_name(), config()) -> config().
+
+-spec respects_max_connections(config()) -> any().
+-spec shuts_down_gracefully(config()) -> any().
+
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
+    {ok, woody:result()}.
+
+-spec handle_event(
+    woody_event_handler:event(),
+    woody:rpc_id(),
+    woody_event_handler:event_meta(),
+    woody:options()
+) -> _.
 
 %%
 
 all() ->
     [
-        respects_max_connections
+        respects_max_connections,
+        shuts_down_gracefully
     ].
 
 init_per_suite(C) ->
@@ -41,14 +64,15 @@ end_per_suite(C) ->
 init_per_testcase(Name, C) ->
     Port = get_random_port(),
     [
-        {client , #{
-            url           => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
-            event_handler => {?MODULE, {client, Name}}
+        {client, #{
+            url              => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
+            event_handler    => {?MODULE, {client, Name}}
         }},
         {server , #{
-            ip            => {127, 0, 0, 1},
-            port          => Port,
-            event_handler => [{?MODULE, {server, Name}}]
+            ip               => {127, 0, 0, 1},
+            port             => Port,
+            event_handler    => [{?MODULE, {server, Name}}],
+            shutdown_timeout => 5000
         }},
         {testcase, Name} | C
     ].
@@ -87,6 +111,51 @@ respects_max_connections(C) ->
     ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
+-define(receive_or_timeout(Msg, Timeout), receive Msg -> ok after Timeout -> timeout end).
+
+shuts_down_gracefully(C) ->
+    Client = ?config(client, C),
+    Handler = {"/", {{woody_test_thrift, 'Powerups'}, {?MODULE, {}}}},
+    TransportOpts = #{max_connections => 10},
+    ProtocolOpts = #{max_keepalive => 2, request_timeout => 1000},
+    {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, #{}, C),
+    ServerMonitor = erlang:monitor(process, ServerPid),
+    true = unlink(ServerPid),
+    ParentPid = self(),
+    %% send a shutdown signal to the server in 1000ms
+    %% then try making a new connection with it, expect econnrefused
+    TestPid = spawn_link(fun() -> process_econnrefused_test(Client, ParentPid)   end),
+    _       = spawn_link(fun() -> process_delayed_kill(ServerPid, TestPid, 1000) end),
+    %% fire some requests and expect them to finish successfuly
+    %% even when server is shutting down in the meantime
+    _ = genlib_pmap:map(
+        fun (_) ->
+            ?assertEqual(
+                {ok, #'Powerup'{name = <<"Warbanner">>}},
+                get_powerup(Client, <<"Warbanner">>, <<>>)
+            )
+        end,
+        lists:seq(1, 10)
+    ),
+    %% wait for the async test and server shutdown to finish
+    ok = ?receive_or_timeout(econnrefused_test_success, 0),
+    ok = ?receive_or_timeout({'DOWN', ServerMonitor, _, _, _}, 5000).
+
+process_econnrefused_test(Client, ParentPid) ->
+    receive
+        listener_suspended ->
+            ?assertError(
+                {woody_error, {internal, resource_unavailable, <<"econnrefused">>}},
+                get_powerup(Client, <<"Warbanner">>, <<>>)
+            ),
+            erlang:send(ParentPid, econnrefused_test_success)
+    end.
+
+process_delayed_kill(ServerPid, TestPid, Timeout) ->
+    timer:sleep(Timeout),
+    erlang:send_after(500, TestPid, listener_suspended),
+    ok = proc_lib:stop(ServerPid, shutdown, infinity).
+
 %%
 
 start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
@@ -111,11 +180,18 @@ handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Tabl
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
     _ = ets:update_counter(Table, slot, -1),
-    {ok, #'Weapon'{name = Name, slot_pos = Slot}}.
+    {ok, #'Weapon'{name = Name, slot_pos = Slot}};
+
+handle_function(get_powerup, [Name, _], _Context, _) ->
+    ok = timer:sleep(2000),
+    {ok, #'Powerup'{name = Name}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
     {_Severity, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
+
+get_powerup(Client, Name, Arg) ->
+    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', [Name, Arg]}, Client).
 
 %%
 

@@ -51,7 +51,11 @@
     read_body_opts        => read_body_opts(),
     protocol_opts         => protocol_opts(),
     handler_limits        => handler_limits(),
-    additional_routes     => [route(_)]
+    additional_routes     => [route(_)],
+    %% shutdown_timeout: time to drain current connections when shutdown signal is recieved
+    %% NOTE: when changing this value make sure to take into account the request_timeout and
+    %% max_keepalive settings of protocol_opts() to achieve the desired effect
+    shutdown_timeout      => timeout()
 }.
 -export_type([options/0]).
 
@@ -85,6 +89,7 @@
     {shutdown , cowboy_req:req(), undefined}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
+-define(DEFAULT_SHUTDOWN_TIMEOUT,   0).
 
 %% nginx should be configured to take care of various limits.
 
@@ -96,8 +101,8 @@
 -spec child_spec(_Id, options()) ->
     supervisor:child_spec().
 child_spec(Id, Opts = #{
-    ip            := Ip,
-    port          := Port
+    ip               := Ip,
+    port             := Port
 }) ->
     % TODO
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
@@ -106,7 +111,23 @@ child_spec(Id, Opts = #{
     TransportOpts0 = maps:get(transport_opts, Opts, #{}),
     {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
     CowboyOpts = get_cowboy_config(Opts),
-    ranch:child_spec({?MODULE, Id}, Transport, TransportOpts, cowboy_clear, CowboyOpts).
+    RanchRef = {?MODULE, Id},
+    DrainSpec = make_drain_childspec(RanchRef, Opts),
+    RanchSpec = ranch:child_spec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
+    make_server_childspec([RanchSpec, DrainSpec]).
+
+make_drain_childspec(Ref, Opts) ->
+    ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),
+    DrainOpts = #{shutdown => ShutdownTimeout, ranch_ref => Ref},
+    woody_server_http_drainer:child_spec(DrainOpts).
+
+make_server_childspec(Children) ->
+    Flags = #{strategy => one_for_all},
+    #{
+        id => genlib_adhoc_supervisor,
+        start => {genlib_adhoc_supervisor, start_link, [Flags, Children]},
+        type => supervisor
+    }.
 
 get_socket_transport(SocketOpts, TransportOpts0) ->
     TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of
@@ -209,6 +230,15 @@ trace_req(true, Req, EvHandler, ServerOpts) ->
 trace_req(_, Req, _, _) ->
     Req.
 
+-spec trace_resp(
+    true,
+    cowboy_req:req(),
+    woody:http_code(),
+    woody:http_headers(),
+    woody:http_body(),
+    woody:ev_handler()
+) ->
+    cowboy_req:req().
 trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
     _ = woody_event_handler:handle_event(EvHandler, ?EV_TRACE, undefined, #{
          role    => server,

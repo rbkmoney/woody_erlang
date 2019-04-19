@@ -27,12 +27,14 @@ Erlang реализация [Библиотеки RPC вызовов для об
 5>     %% transport_opts => woody_server_thrift_http_handler:transport_opts()
 5>     %% protocol_opts  => cowboy_protocol:opts()
 5>     %% handler_limits => woody_server_thrift_http_handler:handler_limits()
+5>     %% shutdown_timeout => timeout()
 5> }).
 ```
 С помощью опциональных полей можно:
 * `transport_opts` - задать дополнительные опции для обработчика входящих соединений
 * `protocol_opts` - задать дополнительные опции для обработчика http протокола сервера cowboy
 * `handler_limits` - поставить лимиты на _heap size_ процесса хэндлера (_beam_ убьет хэндлер при превышении лимита - см. [erlang:process_flag(max_heap_size, MaxHeapSize)](http://erlang.org/doc/man/erlang.html#process_flag-2)) и на максимальный размер памяти vm (см. [erlang:memory(total)](http://erlang.org/doc/man/erlang.html#memory-1)), при достижении которого woody server начнет отбрасывать входящие rpc вызовы с системной ошибкой `internal resourse unavailable`.
+* `shutdown_timeout` - задать время ожидания завершения всех текущих соединений при получении сервером сигнала `shutdown`. При выборе значения данного параметра учитывайте опции `request_timeout` и `max_keepalive` в `protocol_opts`. Безопасным будет являться значение `request_timeout`, плюс теоретическое максимальное время обслуживания операции на сервере. При этом подразумевается, что отсутствие возможности обращения к удерживаемым в это время открытыми сокетам будет обеспечено внешними средствами. В том случае, если `max_keepalive =:= 1`, значением `request_timeout` в расчете и вышеупомянутыми средствами возможно пренебречь.
 
 Теперь можно поднять RPC сервер в рамках supervision tree приложения. Например:
 

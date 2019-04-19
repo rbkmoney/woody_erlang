@@ -14,6 +14,23 @@
     postcondition/3,
     next_state/3
 ]).
+
+-type state() :: #{}.
+-type successfulness() :: success | fail.
+-type id_t() :: non_neg_integer().
+
+-spec prop_test() -> any().
+-spec start_workers() -> genlib_gen:start_ret().
+-spec stop_workers(any()) -> ok.
+-spec do(id_t(), successfulness()) -> any().
+-spec task_timeouts(successfulness()) -> {timeout(), timeout()}.
+-spec id() -> id_t().
+-spec command(any()) -> any().
+-spec initial_state() -> state().
+-spec precondition(any(), any()) -> boolean().
+-spec postcondition(any(), any(), any()) -> boolean().
+-spec next_state(state(), any(), any()) -> state().
+
 %% проверяет работоспособность в условиях параллельных запросов,
 %% но по факту не может проверить, что запросы действительно соединяются
 prop_test() ->
