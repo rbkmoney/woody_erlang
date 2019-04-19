@@ -42,7 +42,7 @@
 
 -type options() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
-    event_handler         := woody:ev_handler(),
+    event_handler         := woody:ev_handler() | [woody:ev_handler()],
     ip                    := inet:ip_address(),
     port                  := inet:port_number(),
     protocol              => thrift,
@@ -57,7 +57,7 @@
 
 -type route_opts() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
-    event_handler         := woody:ev_handler(),
+    event_handler         := woody:ev_handler() | [woody:ev_handler()],
     protocol              => thrift,
     transport             => http,
     handler_limits        => handler_limits()
@@ -73,7 +73,7 @@
 
 -type state() :: #{
     th_handler     := woody:th_handler(),
-    ev_handler     := woody:ev_handler(),
+    ev_handler     := woody:ev_handler() | [woody:ev_handler()],
     server_opts    := server_opts(),
     handler_limits := handler_limits(),
     url            => woody:url(),
@@ -134,9 +134,15 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
         max_header_name_length => 64
     }, CowboyOpts).
 
+validate_event_handler(Handlers) when is_list(Handlers) ->
+    true = lists:all(
+        fun(Handler) ->
+            is_tuple(woody_util:get_mod_opts(Handler))
+        end, Handlers),
+    ok;
 validate_event_handler(Handler) ->
-    {_, _} = woody_util:get_mod_opts(Handler),
-    ok.
+    validate_event_handler([Handler]).
+
 
 -spec get_dispatch(options())->
     cowboy_router:dispatch_rules().
