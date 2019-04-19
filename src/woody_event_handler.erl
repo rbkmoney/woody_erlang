@@ -55,6 +55,10 @@
     metadata       := woody_context:meta(),
     deadline       := woody:deadline(),
 
+    execution_start_time  := integer(),
+    execution_duration_ms => integer(),              %% EV_CLIENT_RECEIVE
+    execution_end_time    => integer(),              %% EV_CLIENT_RECEIVE
+
     url      => woody:url(),                        %% EV_CLIENT_SEND
     code     => woody:http_code(),                  %% EV_CLIENT_RECEIVE
     reason   => woody_error:details(),              %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
@@ -71,6 +75,10 @@
     status   => status(),              %% EV_SERVER_RECEIVE | EV_SERVER_SEND | EV_SERVICE_HANDLER_RESULT
     reason   => woody_error:details(), %% EV_SERVER_RECEIVE
     code     => woody:http_code(),     %% EV_SERVER_SEND
+
+    execution_start_time  := integer(),
+    execution_duration_ms => integer(),       %% EV_SERVER_SEND
+    execution_end_time    => integer(),       %% EV_SERVER_SEND
 
     service        => woody:service_name(),  %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
     service_schema => woody:service(),       %% EV_INVOKE_SERVICE_HANDLER | EV_SERVICE_HANDLER_RESULT | EV_SERVER_SEND
@@ -165,19 +173,26 @@
 -spec handle_event(event(), woody_state:st(), meta()) ->
     ok.
 handle_event(Event, WoodyState, ExtraMeta) ->
+    EvMeta = maybe_add_exec_time(Event, woody_state:get_ev_meta(WoodyState)),
     handle_event(
         woody_state:get_ev_handler(WoodyState),
         Event,
         woody_context:get_rpc_id(woody_state:get_context(WoodyState)),
-        maps:merge(woody_state:get_ev_meta(WoodyState), ExtraMeta)
+        maps:merge(EvMeta, ExtraMeta)
     ).
 
--spec handle_event(woody:ev_handler(), event(), woody:rpc_id() | undefined, event_meta()) ->
+-spec handle_event(woody:ev_handler() | [woody:ev_handler()], event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
+handle_event(Handlers, Event, RpcId, Meta) when is_list(Handlers) ->
+    lists:foreach(
+        fun(Handler) ->
+            {Module, Opts} = woody_util:get_mod_opts(Handler),
+            _ = Module:handle_event(Event, RpcId, Meta, Opts)
+        end,
+        Handlers),
+    ok;
 handle_event(Handler, Event, RpcId, Meta) ->
-    {Module, Opts} = woody_util:get_mod_opts(Handler),
-    _ = Module:handle_event(Event, RpcId, Meta, Opts),
-    ok.
+    handle_event([Handler], Event, RpcId, Meta).
 
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
@@ -332,3 +347,15 @@ get_url_or_code(#{url := Url}) ->
     Url;
 get_url_or_code(#{code := Code}) ->
     Code.
+
+maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = WoodyStateEvMeta) when
+    Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND ->
+
+    ExecutionEndTime = os:system_time(millisecond),
+    ExecutionTimeMs =  ExecutionEndTime - ExecutionStartTime,
+    WoodyStateEvMeta#{
+        execution_end_time => ExecutionEndTime,
+        execution_duration_ms => ExecutionTimeMs
+    };
+maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
+    WoodyStateEvMeta.

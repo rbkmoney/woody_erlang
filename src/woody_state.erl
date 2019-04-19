@@ -17,7 +17,7 @@
 %% Types
 -type st() :: #{
     context    := woody_context:ctx(),
-    ev_handler := woody:ev_handler(),
+    ev_handler := woody:ev_handler() | [woody:ev_handler()],
     ev_meta    := woody_event_handler:meta()
 }.
 -export_type([st/0]).
@@ -37,7 +37,7 @@ new(Role, Context, EvHandler) ->
             #{
                 context    => Context,
                 ev_handler => EvHandler,
-                ev_meta    => #{role => Role}
+                ev_meta    => #{role => Role, execution_start_time => os:system_time(millisecond)}
             }
         )
     ).
@@ -48,7 +48,7 @@ get_context(#{context := Context}) ->
     Context.
 
 -spec get_ev_handler(st()) ->
-    woody:ev_handler().
+    woody:ev_handler() | [woody:ev_handler()].
 get_ev_handler(#{ev_handler := Handler}) ->
     Handler.
 
