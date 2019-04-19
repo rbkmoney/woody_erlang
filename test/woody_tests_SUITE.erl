@@ -959,7 +959,8 @@ woody_resolver_inet6(C) ->
 woody_resolver_errors(_) ->
     WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
     {error, nxdomain} = woody_resolver:resolve_url(<<"http://nxdomainme">>, WoodyState),
-    {error, unsupported_url_scheme} = woody_resolver:resolve_url(<<"ftp://localhost">>, WoodyState).
+    UnsupportedUrl = <<"ftp://localhost">>,
+    {error, {unsupported_url_scheme, UnsupportedUrl}} = woody_resolver:resolve_url(UnsupportedUrl, WoodyState).
 
 %%
 %% supervisor callbacks

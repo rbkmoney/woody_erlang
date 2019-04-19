@@ -47,8 +47,8 @@ resolve_url(<<"https://", _Rest/binary>> = Url, WoodyState, Opts) ->
     resolve_parsed_url(parse_url(Url), WoodyState, Opts);
 resolve_url(<<"http://", _Rest/binary>> = Url, WoodyState, Opts) ->
     resolve_parsed_url(parse_url(Url), WoodyState, Opts);
-resolve_url(_Url, _WoodyState, _Opts) ->
-    {error, unsupported_url_scheme}.
+resolve_url(Url, _WoodyState, _Opts) ->
+    {error, {unsupported_url_scheme, Url}}.
 
 %%
 
