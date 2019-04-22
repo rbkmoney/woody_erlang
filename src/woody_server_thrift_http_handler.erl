@@ -213,7 +213,7 @@ compile_filter_meta() ->
 -spec trace_req(true, cowboy_req:req(), woody:ev_handler(), server_opts()) ->
     cowboy_req:req().
 trace_req(true, Req, EvHandler, ServerOpts) ->
-    Url = cowboy_req:uri(Req),
+    Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
     Headers = cowboy_req:headers(Req),
     Meta = #{
          role    => server,
@@ -258,7 +258,7 @@ trace_resp(_, Req, _, _, _, _) ->
     cowboy_init_result().
 init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
-    Url = cowboy_req:uri(Req),
+    Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
     DummyRpcID = #{
         span_id   => ?DUMMY_REQ_ID,
         trace_id  => ?DUMMY_REQ_ID,
