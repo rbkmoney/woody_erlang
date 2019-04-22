@@ -46,7 +46,7 @@
 -export_type([handler/1, ev_handler/0, options/0]).
 
 -type role()                :: client | server.
--type url()                 :: string(). %% http://erlang.org/doc/man/httpc.html#http-data-types
+-type url()                 :: binary() | string().
 -type path()                :: '_' | iodata(). %% cowboy_router:route_match()
 -type http_handler(Handler) :: {path(), Handler}.
 -export_type([role/0, url/0, path/0, http_handler/1]).
