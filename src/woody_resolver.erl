@@ -5,7 +5,7 @@
 -include_lib("kernel/include/inet.hrl").
 -include_lib("hackney/include/hackney_lib.hrl").
 
--type url() :: binary() | nonempty_string().
+-type url() :: woody:url().
 -type parsed_url() :: #hackney_url{}.
 
 -type resolve_result() :: {Old::parsed_url(), New::parsed_url()}.
@@ -42,7 +42,7 @@ resolve_url(Url, WoodyState) ->
     {ok, resolve_result()}    |
     {error, Reason :: atom()}.
 resolve_url(Url, WoodyState, Opts) when is_list(Url) ->
-    resolve_url(list_to_binary(Url), WoodyState, Opts);
+    resolve_url(unicode:characters_to_binary(Url), WoodyState, Opts);
 resolve_url(<<"https://", _Rest/binary>> = Url, WoodyState, Opts) ->
     resolve_parsed_url(parse_url(Url), WoodyState, Opts);
 resolve_url(<<"http://", _Rest/binary>> = Url, WoodyState, Opts) ->
