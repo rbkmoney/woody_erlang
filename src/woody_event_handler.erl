@@ -199,7 +199,7 @@ handle_event(Handler, Event, RpcId, Meta) ->
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
     {"[~s ~s ~s]", [Trace, Parent, Span]};
 format_rpc_id(undefined) ->
-    {"~w", [undefined]}.
+    {"~p", [undefined]}.
 
 -spec format_event(event(), event_meta(), woody:rpc_id() | undefined) ->
     log_msg().
@@ -242,11 +242,11 @@ format_event(?EV_CLIENT_END, _Meta) ->
 format_event(?EV_CALL_SERVICE, Meta) ->
     {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
-    {error, format_exception({"[client] error while handling request: ~w", [Error]}, Stack)};
+    {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
-    {warning, {"[client] error while handling request ~w", [Result]}};
+    {warning, {"[client] error while handling request ~p", [Result]}};
 format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
-    {info, {"[client] request handled successfully ~w", [Result]}};
+    {info, {"[client] request handled successfully ~p", [Result]}};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
@@ -256,11 +256,11 @@ format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Addre
 format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}) ->
     {debug, {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
-    {debug, {"[client] received response with code ~w and info details: ~ts", [Code, Reason]}};
+    {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->
-    {debug, {"[client] received response with code ~w", [Code]}};
+    {debug, {"[client] received response with code ~p", [Code]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}) ->
-    {warning, {"[client] received response with code ~w and details: ~ts", [Code, Reason]}};
+    {warning, {"[client] received response with code ~p and details: ~ts", [Code, Reason]}};
 format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}) ->
     {warning, {"[client] sending request error ~ts", [Reason]}};
 format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}) ->
@@ -268,21 +268,21 @@ format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}) ->
 format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}) ->
     {debug, {"[server] request to ~s unpacking error ~ts", [URL, Reason]}};
 format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}) ->
-    {debug, {"[server] response sent with code ~w", [Code]}};
+    {debug, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
-    {warning, {"[server] response sent with code ~w", [Code]}};
+    {warning, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result}) ->
-    {info, {"[server] handling result: ~w", [Result]}};
+    {info, {"[server] handling result: ~p", [Result]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}) ->
-    {info, {"[server] handling result business error: ~w", [Error]}};
+    {info, {"[server] handling result business error: ~p", [Error]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
     except_class:=Class})
 ->
-    {error, format_exception({"[server] handling system internal error: ~s:~w", [Class, Error]}, Stack)};
+    {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
-    {warning, {"[server] handling system woody error: ~w", [Error]}};
+    {warning, {"[server] handling system woody error: ~p", [Error]}};
 format_event(?EV_CLIENT_CACHE_BEGIN, _Meta) ->
     {debug, {"[client] request begin", []}};
 format_event(?EV_CLIENT_CACHE_END, _Meta) ->
@@ -292,19 +292,19 @@ format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
 format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result}) ->
-    {debug, {"[client] request to '~s' cache update: '~w'", [URL, Result]}};
+    {debug, {"[client] request to '~s' cache update: '~p'", [URL, Result]}};
 format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := Result}) ->
-    {debug, {"[client] request to '~s' cache result: '~w'", [URL, Result]}};
+    {debug, {"[client] request to '~s' cache result: '~p'", [URL, Result]}};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
-    {error, format_exception({"[~w] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
+    {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
-    {warning, {"[~w] internal error ~w, ~ts", [Role, Error, Reason]}};
+    {warning, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
 format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}) ->
-    {debug, {"[~w] trace ~s, with ~w~nheaders:~n~w~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
+    {debug, {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
 format_event(?EV_TRACE, #{event:=Event, role:=Role}) ->
-    {debug, {"[~w] trace ~ts", [Role, Event]}};
+    {debug, {"[~p] trace ~ts", [Role, Event]}};
 format_event(UnknownEventType, Meta) ->
-    {warning, {"unknown woody event type '~s' with meta ~w", [UnknownEventType, Meta]}}.
+    {warning, {"unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
 
 %%
 %% Internal functions
@@ -336,7 +336,7 @@ format_args([FirstArg | Args]) ->
 -spec format_arg(term()) ->
     msg().
 format_arg(Arg) ->
-    {"~w", [Arg]}.
+    {"~p", [Arg]}.
 
 -spec append_msg(msg(), msg()) ->
     msg().
