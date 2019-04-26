@@ -11,7 +11,7 @@
 
 -type state() :: #{
     req := cowboy_req:req(),
-    ev_handler := woody:ev_handler(),
+    ev_handler := woody:ev_handler() | [woody:ev_handler()],
     next := any()
 }.
 
