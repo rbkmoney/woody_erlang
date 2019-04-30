@@ -182,9 +182,13 @@ get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits = maps:get(handler_limits, Opts, #{}),
     get_routes(config(), Limits, EvHandler, Handlers, []).
 
--spec get_routes(server_opts(), handler_limits(), woody:ev_handler() | [woody:ev_handler()], Handlers, Routes) -> Routes when
-    Handlers   :: list(woody:http_handler(woody:th_handler())),
-    Routes     :: [route(state())].
+-spec get_routes(server_opts(),
+    handler_limits(),
+    woody:ev_handler() | [woody:ev_handler()],
+    Handlers,
+    Routes
+) ->
+    Routes when Handlers :: list(woody:http_handler(woody:th_handler())), Routes :: [route(state())].
 get_routes(_, _, _, [], Routes) ->
     Routes;
 get_routes(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], Routes) ->
