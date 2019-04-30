@@ -182,7 +182,7 @@ get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
     Limits = maps:get(handler_limits, Opts, #{}),
     get_routes(config(), Limits, EvHandler, Handlers, []).
 
--spec get_routes(server_opts(), handler_limits(), woody:ev_handler(), Handlers, Routes) -> Routes when
+-spec get_routes(server_opts(), handler_limits(), woody:ev_handler() | [woody:ev_handler()], Handlers, Routes) -> Routes when
     Handlers   :: list(woody:http_handler(woody:th_handler())),
     Routes     :: [route(state())].
 get_routes(_, _, _, [], Routes) ->
@@ -210,7 +210,7 @@ compile_filter_meta() ->
     {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
     Re.
 
--spec trace_req(true, cowboy_req:req(), woody:ev_handler(), server_opts()) ->
+-spec trace_req(true, cowboy_req:req(), woody:ev_handler() | [woody:ev_handler()], server_opts()) ->
     cowboy_req:req().
 trace_req(true, Req, EvHandler, ServerOpts) ->
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
@@ -236,7 +236,7 @@ trace_req(_, Req, _, _) ->
     woody:http_code(),
     woody:http_headers(),
     woody:http_body(),
-    woody:ev_handler()
+    woody:ev_handler() | [woody:ev_handler()]
 ) ->
     cowboy_req:req().
 trace_resp(true, Req, Code, Headers, Body, EvHandler) ->

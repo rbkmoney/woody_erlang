@@ -25,7 +25,7 @@
 %%
 %% API
 %%
--spec new(woody:role(), woody_context:ctx(), woody:ev_handler()) ->
+-spec new(woody:role(), woody_context:ctx(), woody:ev_handler() | [woody:ev_handler()]) ->
     st().
 new(Role, Context, EvHandler) ->
     Deadline = woody_context:get_deadline(Context),
