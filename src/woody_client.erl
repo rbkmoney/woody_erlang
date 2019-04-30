@@ -16,7 +16,7 @@
 %% Types
 -type options() :: #{
     url            := woody:url(),
-    event_handler  := woody:ev_handler() | [woody:ev_handler()],
+    event_handler  := woody:ev_handlers(),
     transport_opts => transport_options(), %% See hackney:request/5 for available options.
     resolver_opts  => woody_resolver:options(),
     protocol       => thrift,

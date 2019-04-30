@@ -198,7 +198,7 @@ emit_event(Event, Meta, #{rpc_id := RPCID}, Options) ->
     ok.
 
 -spec woody_event_handler(options()) ->
-    woody:ev_handler() | [woody:ev_handler()].
+    woody:ev_handlers().
 woody_event_handler(#{woody_client := #{event_handler := EventHandler}}) ->
     EventHandler.
 

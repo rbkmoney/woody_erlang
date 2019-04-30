@@ -181,7 +181,7 @@ handle_event(Event, WoodyState, ExtraMeta) ->
         maps:merge(EvMeta, ExtraMeta)
     ).
 
--spec handle_event(woody:ev_handler() | [woody:ev_handler()], event(), woody:rpc_id() | undefined, event_meta()) ->
+-spec handle_event(woody:ev_handlers(), event(), woody:rpc_id() | undefined, event_meta()) ->
     ok.
 handle_event(Handlers, Event, RpcId, Meta) when is_list(Handlers) ->
     lists:foreach(
