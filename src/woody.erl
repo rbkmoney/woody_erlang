@@ -43,7 +43,8 @@
 -type options()     :: any().
 -type handler(Opts) :: {module(), Opts} | module().
 -type ev_handler()  :: handler(options()).
--export_type([handler/1, ev_handler/0, options/0]).
+-type ev_handlers() :: ev_handler() | [ev_handler()].
+-export_type([handler/1, ev_handler/0, ev_handlers/0, options/0]).
 
 -type role()                :: client | server.
 -type url()                 :: binary() | string().

@@ -17,7 +17,7 @@
 %% Types
 -type st() :: #{
     context    := woody_context:ctx(),
-    ev_handler := woody:ev_handler() | [woody:ev_handler()],
+    ev_handler := woody:ev_handlers(),
     ev_meta    := woody_event_handler:meta()
 }.
 -export_type([st/0]).
@@ -25,7 +25,7 @@
 %%
 %% API
 %%
--spec new(woody:role(), woody_context:ctx(), woody:ev_handler()) ->
+-spec new(woody:role(), woody_context:ctx(), woody:ev_handlers()) ->
     st().
 new(Role, Context, EvHandler) ->
     Deadline = woody_context:get_deadline(Context),
@@ -48,7 +48,7 @@ get_context(#{context := Context}) ->
     Context.
 
 -spec get_ev_handler(st()) ->
-    woody:ev_handler() | [woody:ev_handler()].
+    woody:ev_handlers().
 get_ev_handler(#{ev_handler := Handler}) ->
     Handler.
 
