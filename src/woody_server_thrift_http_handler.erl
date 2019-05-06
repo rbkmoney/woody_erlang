@@ -98,7 +98,7 @@
 %%
 %% woody_server callback
 %%
--spec child_spec(_Id, options()) ->
+-spec child_spec(atom(), options()) ->
     supervisor:child_spec().
 child_spec(Id, Opts = #{
     ip               := Ip,
@@ -114,17 +114,17 @@ child_spec(Id, Opts = #{
     RanchRef = {?MODULE, Id},
     DrainSpec = make_drain_childspec(RanchRef, Opts),
     RanchSpec = ranch:child_spec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
-    make_server_childspec([RanchSpec, DrainSpec]).
+    make_server_childspec(Id, [RanchSpec, DrainSpec]).
 
 make_drain_childspec(Ref, Opts) ->
     ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),
     DrainOpts = #{shutdown => ShutdownTimeout, ranch_ref => Ref},
     woody_server_http_drainer:child_spec(DrainOpts).
 
-make_server_childspec(Children) ->
+make_server_childspec(Id, Children) ->
     Flags = #{strategy => one_for_all},
     #{
-        id => genlib_adhoc_supervisor,
+        id => Id,
         start => {genlib_adhoc_supervisor, start_link, [Flags, Children]},
         type => supervisor
     }.
