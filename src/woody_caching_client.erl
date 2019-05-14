@@ -186,7 +186,7 @@ woody_client_options(#{woody_client := Options}) ->
     Options.
 
 -spec now_ms() ->
-    non_neg_integer().
+    integer().
 now_ms() ->
     % The cache library uses os:timestamp/0 to get the current time, so just do the same
     os:system_time(millisecond).

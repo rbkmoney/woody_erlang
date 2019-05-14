@@ -16,7 +16,8 @@
 handle_event(Event, RpcId, Meta, _Opts) ->
     {Level, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
     Function = get_logger_function(Level),
-    error_logger:Function(Format, Msg).
+    _ = error_logger:Function(Format, Msg),
+    ok.
 
 get_logger_function(Level) when Level =:= debug ; Level =:= info ->
     info_msg;
