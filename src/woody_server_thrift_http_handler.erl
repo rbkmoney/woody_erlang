@@ -84,7 +84,9 @@
     woody_state    => woody_state:st()
 }.
 
--type cowboy_init_result() :: {ok, cowboy_req:req(), state() | undefined}.
+-type cowboy_init_result() ::
+    {ok, cowboy_req:req(), state() | undefined}
+    | {module(), cowboy_req:req(), state() | undefined, any()}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 -define(DEFAULT_SHUTDOWN_TIMEOUT,   0).
