@@ -85,8 +85,8 @@
 }.
 
 -type cowboy_init_result() ::
-    {ok       , cowboy_req:req(), state() | undefined} |
-    {shutdown , cowboy_req:req(), undefined}.
+    {ok, cowboy_req:req(), state() | undefined}
+    | {module(), cowboy_req:req(), state() | undefined, any()}.
 
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 -define(DEFAULT_SHUTDOWN_TIMEOUT,   0).
@@ -274,7 +274,7 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => Details}),
             Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
-            {stop, Req2, undefined}
+            {ok, Req2, undefined}
     end.
 
 -spec set_handler_limits(handler_limits()) ->
@@ -436,7 +436,7 @@ check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodySt
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
-            {stop, Req1, undefined};
+            {ok, Req1, undefined};
         false ->
             NewState = State#{woody_state => set_deadline(Deadline, WoodyState)},
             Headers = cowboy_req:headers(Req),
@@ -485,10 +485,10 @@ set_metadata(Meta, WoodyState) ->
     woody_state:add_context_meta(Meta, WoodyState).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
-    {stop, cowboy_req:req(), undefined}.
+    {ok, cowboy_req:req(), undefined}.
 reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
     Req1 = reply_client_error(Code, Reason, Req, State),
-    {stop, Req1, undefined}.
+    {ok, Req1, undefined}.
 
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().

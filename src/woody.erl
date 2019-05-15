@@ -52,7 +52,7 @@
 -type http_handler(Handler) :: {path(), Handler}.
 -export_type([role/0, url/0, path/0, http_handler/1]).
 
--type http_code()        :: pos_integer().
+-type http_code()        :: integer().
 -type http_header_name() :: binary().
 -type http_header_val()  :: binary().
 -type http_headers()     :: #{http_header_name() => http_header_val()}.

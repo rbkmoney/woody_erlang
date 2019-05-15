@@ -31,11 +31,11 @@ get_protocol_handler(Role, Opts) ->
         _                      -> error(badarg, [Role, Opts])
     end.
 
--spec get_mod_opts(woody:handler(_)) ->
+-spec get_mod_opts(woody:handler(woody:options())) ->
     {module(), woody:options()}.
-get_mod_opts(Handler = {_Mod, _Opts}) ->
+get_mod_opts(Handler = {Mod, _Opts}) when is_atom(Mod) ->
     Handler;
-get_mod_opts(Mod) ->
+get_mod_opts(Mod) when is_atom(Mod) ->
     {Mod, ?DEFAULT_HANDLER_OPTS}.
 
 -spec to_binary(atom() | list() | binary()) ->

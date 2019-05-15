@@ -9,6 +9,7 @@
 -type parsed_url() :: #hackney_url{}.
 
 -type resolve_result() :: {Old::parsed_url(), New::parsed_url()}.
+-type resolve_error()  :: einval | nxdomain | timeout | {unsupported_url_scheme, woody:url()}.
 
 -type options() :: #{
     ip_picker => ip_picker(),
@@ -23,6 +24,8 @@
 -export_type([options/0]).
 -export_type([ip_picker/0]).
 -export_type([predefined_ip_picker/0]).
+-export_type([resolve_error/0]).
+-export_type([resolve_result/0]).
 
 -export([resolve_url/2]).
 -export([resolve_url/3]).
@@ -34,13 +37,13 @@
 
 -spec resolve_url(url(), woody_state:st()) ->
     {ok, resolve_result()}    |
-    {error, Reason :: atom()}.
+    {error, resolve_error()}.
 resolve_url(Url, WoodyState) ->
     resolve_url(Url, WoodyState, #{}).
 
 -spec resolve_url(url(), woody_state:st(), options()) ->
     {ok, resolve_result()}    |
-    {error, Reason :: atom()}.
+    {error, resolve_error()}.
 resolve_url(Url, WoodyState, Opts) when is_list(Url) ->
     resolve_url(unicode:characters_to_binary(Url), WoodyState, Opts);
 resolve_url(<<"https://", _Rest/binary>> = Url, WoodyState, Opts) ->
