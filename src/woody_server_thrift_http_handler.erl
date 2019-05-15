@@ -88,6 +88,10 @@
     {ok, cowboy_req:req(), state() | undefined}
     | {module(), cowboy_req:req(), state() | undefined, any()}.
 
+-type check_result() ::
+    {ok, cowboy_req:req(), state() | undefined}
+    | {stop, cowboy_req:req(), undefined}.
+
 -define(DEFAULT_ACCEPTORS_POOLSIZE, 100).
 -define(DEFAULT_SHUTDOWN_TIMEOUT,   0).
 
@@ -267,8 +271,10 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     case have_resources_to_continue(Limits) of
         true ->
             Opts1 = Opts#{url => Url, woody_state => WoodyState},
-            {ok, Req, State} = check_request(Req, Opts1),
-            handle(Req, State);
+            case check_request(Req, Opts1) of
+                {ok, Req1, State} -> handle(Req1, State);
+                {stop, Req1, State} -> {ok, Req1, State}
+            end;
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
@@ -339,12 +345,12 @@ terminate(Reason, _Req, #{woody_state := WoodyState}) ->
 %% then check woody related headers: IDs, deadline, meta.
 
 -spec check_request(cowboy_req:req(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_request(Req, State) ->
     check_method(cowboy_req:method(Req), Req, State).
 
 -spec check_method(woody:http_header_val(), cowboy_req:req(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_method(<<"POST">>, Req, State) ->
     check_content_type(cowboy_req:header(<<"content-type">>, Req), Req, State);
 
@@ -354,7 +360,7 @@ check_method(Method, Req, State) ->
     reply_bad_header(405, Reason, Req1, State).
 
 -spec check_content_type(woody:http_header_val() | undefined, cowboy_req:req(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_content_type(?CONTENT_TYPE_THRIFT, Req, State) ->
     Header = cowboy_req:header(<<"accept">>, Req),
     check_accept(Header, Req, State);
@@ -362,7 +368,7 @@ check_content_type(BadCType, Req, State) ->
     reply_bad_header(415, woody_util:to_binary(["wrong content type: ", BadCType]), Req, State).
 
 -spec check_accept(woody:http_header_val() | undefined, cowboy_req:req(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_accept(Accept, Req, State) when
     Accept =:= ?CONTENT_TYPE_THRIFT ;
     Accept =:= undefined
@@ -372,7 +378,7 @@ check_accept(BadAccept, Req1, State) ->
     reply_bad_header(406, woody_util:to_binary(["wrong client accept: ", BadAccept]), Req1, State).
 
 -spec check_woody_headers(cowboy_req:req(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
@@ -429,14 +435,14 @@ check_deadline_header(DeadlineBin, Req, Mode, State) ->
     end.
 
 -spec check_deadline(woody:deadline(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
     case woody_deadline:is_reached(Deadline) of
         true ->
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
-            {ok, Req1, undefined};
+            {stop, Req1, undefined};
         false ->
             NewState = State#{woody_state => set_deadline(Deadline, WoodyState)},
             Headers = cowboy_req:headers(Req),
@@ -444,7 +450,7 @@ check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodySt
     end.
 
 -spec check_metadata_headers(woody:http_headers(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
-    cowboy_init_result().
+    check_result().
 check_metadata_headers(Headers, Req, Mode, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
     {ok, Req, State#{woody_state => set_metadata(find_metadata(Headers, Mode, ServerOpts), WoodyState)}}.
 
@@ -485,10 +491,10 @@ set_metadata(Meta, WoodyState) ->
     woody_state:add_context_meta(Meta, WoodyState).
 
 -spec reply_bad_header(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
-    {ok, cowboy_req:req(), undefined}.
+    {stop, cowboy_req:req(), undefined}.
 reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
     Req1 = reply_client_error(Code, Reason, Req, State),
-    {ok, Req1, undefined}.
+    {stop, Req1, undefined}.
 
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
