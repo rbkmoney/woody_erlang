@@ -132,7 +132,7 @@ set_timeouts(Options, Context) ->
         undefined ->
             Options;
         Deadline ->
-            Timeout = woody_deadline:to_timeout(Deadline),
+            Timeout = deadline_to_timeout(Deadline),
             ConnectTimeout = SendTimeout = calc_timeouts(Timeout),
 
             %% It is intentional, that application can override the timeout values
@@ -143,6 +143,16 @@ set_timeouts(Options, Context) ->
                 send_timeout =>    SendTimeout,
                 recv_timeout =>    Timeout
             }, Options)
+    end.
+
+-spec deadline_to_timeout(woody:deadline()) ->
+    non_neg_integer().
+deadline_to_timeout(Deadline) ->
+    try
+        woody_deadline:to_timeout(Deadline)
+    catch
+        error:deadline_reached ->
+            0
     end.
 
 -define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
