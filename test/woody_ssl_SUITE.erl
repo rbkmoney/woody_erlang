@@ -37,6 +37,9 @@
 -type config()    :: [{atom(), any()}].
 -type case_name() :: atom().
 
+-type cert()      :: #'OTPCertificate'{}.
+-type extension() :: #'Extension'{}.
+
 -define(PATH, "/v1/test/weapons").
 -define(THRIFT_DEFS, woody_test_thrift).
 
@@ -147,8 +150,8 @@ init(_) ->
 %%%
 
 -spec verify_cert(
-    OtpCert :: #'OTPCertificate'{},
-    Event :: {bad_cert, Reason :: atom() | {revoked, atom()}} | {extension, #'Extension'{}},
+    OtpCert :: cert(),
+    Event :: {bad_cert, Reason :: atom() | {revoked, atom()}} | {extension, extension()},
     InitialUserState :: term()
 ) ->
     {fail, atom()} | {unknown, _} | {valid, _}.
