@@ -111,8 +111,8 @@ child_spec(Id, Opts = #{
     % TODO
     % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
     % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
-    SocketOpts = [{ip, Ip}, {port, Port}],
     TransportOpts0 = maps:get(transport_opts, Opts, #{}),
+    SocketOpts = [{ip, Ip}, {port, Port} | maps:get(socket_opts, TransportOpts0, [])],
     {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
     CowboyOpts = get_cowboy_config(Opts),
     RanchRef = {?MODULE, Id},
@@ -141,7 +141,8 @@ get_socket_transport(SocketOpts, TransportOpts0) ->
         _ ->
             TransportOpts0
     end,
-    {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
+    Transport = maps:get(transport, TransportOpts, ranch_tcp),
+    {Transport, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
 
 set_ranch_option(Key, Value, Opts) ->
     Opts#{Key => Value}.
