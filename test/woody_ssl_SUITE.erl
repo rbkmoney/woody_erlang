@@ -18,6 +18,7 @@
 
 %% tests
 -export([
+    client_wo_cert_test/1,
     valid_client_cert_test/1,
     invalid_client_cert_test/1
 ]).
@@ -31,14 +32,8 @@
 %% supervisor callback
 -export([init/1]).
 
-%% ssl peer certificate validation
--export([verify_cert/3]).
-
 -type config()    :: [{atom(), any()}].
 -type case_name() :: atom().
-
--type cert()      :: #'OTPCertificate'{}.
--type extension() :: #'Extension'{}.
 
 -define(PATH, "/v1/test/weapons").
 -define(THRIFT_DEFS, woody_test_thrift).
@@ -62,6 +57,7 @@
 
 all() ->
     [
+        client_wo_cert_test,
         invalid_client_cert_test,
         valid_client_cert_test
     ].
@@ -82,8 +78,7 @@ init_per_suite(C) ->
 
 end_per_suite(C) ->
     Sup = ?config(sup, C),
-    ok = supervisor:terminate_child(Sup, ?MODULE),
-    ok = supervisor:delete_child(Sup, ?MODULE),
+    ok  = proc_lib:stop(Sup),
     [application:stop(App) || App <- proplists:get_value(apps, C)],
     ok.
 
@@ -91,18 +86,30 @@ end_per_suite(C) ->
 %%% Tests
 %%%
 
+-spec client_wo_cert_test(config()) -> _.
+
+client_wo_cert_test(C) ->
+    SSLOptions = [{cacertfile, ?ca_cert(C)}],
+    ?assertException(
+        error,
+        {woody_error, {internal, result_unexpected, <<"{tls_alert,\"handshake failure\"}">>}},
+        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions)
+    ).
+
 -spec valid_client_cert_test(config()) -> _.
 
 valid_client_cert_test(C) ->
-    {ok, #'Weapon'{}} = get_weapon(?FUNCTION_NAME, <<"BFG">>, ?ca_cert(C), ?client_cert(C)).
+    SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?client_cert(C)}],
+    {ok, #'Weapon'{}} = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions).
 
 -spec invalid_client_cert_test(config()) -> _.
 
 invalid_client_cert_test(C) ->
+    SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?invalid_client_cert(C)}],
     ?assertException(
         error,
         {woody_error, {internal, result_unexpected, <<"{tls_alert,\"unknown ca\"}">>}},
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, ?ca_cert(C), ?invalid_client_cert(C))
+        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions)
     ).
 
 %%%
@@ -146,26 +153,6 @@ init(_) ->
 }}.
 
 %%%
-%%% SSL peer certificate validation
-%%%
-
--spec verify_cert(
-    OtpCert :: cert(),
-    Event :: {bad_cert, Reason :: atom() | {revoked, atom()}} | {extension, extension()},
-    InitialUserState :: term()
-) ->
-    {fail, atom()} | {unknown, _} | {valid, _}.
-
-verify_cert(_Cert, {bad_cert, _} = Reason, _UserState) ->
-    {fail, Reason};
-verify_cert(_Cert, {extension, _}, UserState) ->
-    {unknown, UserState};
-verify_cert(_Cert, valid, UserState) ->
-    {valid, UserState};
-verify_cert(_Cert, valid_peer, UserState) ->
-    {valid, UserState}.
-
-%%%
 %%% Internal functions
 %%%
 
@@ -179,15 +166,16 @@ start_woody_server(C) ->
         transport_opts => #{
             transport   => ranch_ssl,
             socket_opts => [
-                {cacertfile, ?ca_cert(C)},
-                {certfile,   ?server_cert(C)},
-                {verify,     verify_peer}
+                {cacertfile,           ?ca_cert(C)},
+                {certfile,             ?server_cert(C)},
+                {verify,               verify_peer},
+                {fail_if_no_peer_cert, true}
             ]
         }
     }),
     supervisor:start_child(Sup, Server).
 
-get_weapon(Id, Gun, CACert, ClientCert) ->
+get_weapon(Id, Gun, SSLOptions) ->
     Context = woody_context:new(to_binary(Id)),
     {Url, Service} = get_service_endpoint('Weapons'),
     Options = #{
@@ -195,10 +183,9 @@ get_weapon(Id, Gun, CACert, ClientCert) ->
         event_handler => ?MODULE,
         transport_opts => #{
             ssl_options => [
-                {cacertfile, CACert},
-                {certfile,   ClientCert},
-                {verify_fun, {fun ?MODULE:verify_cert/3, []}},
-                {verify,     verify_peer}
+                {server_name_indication, "Test Server"},
+                {verify,     verify_peer} |
+                SSLOptions
             ]
         }
     },
