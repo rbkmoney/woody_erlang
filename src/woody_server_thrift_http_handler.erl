@@ -115,9 +115,6 @@
 -spec child_spec(atom(), options()) ->
     supervisor:child_spec().
 child_spec(Id, Opts) ->
-    % TODO
-    % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
-    % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
     {Transport, TransportOpts} = get_socket_transport(Opts),
     CowboyOpts = get_cowboy_config(Opts),
     RanchRef = {?MODULE, Id},
@@ -139,16 +136,9 @@ make_server_childspec(Id, Children) ->
     }.
 
 get_socket_transport(Opts = #{ip := Ip, port := Port}) ->
-    TransportOpts0 = maps:get(transport_opts, Opts, #{}),
-    TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of
-        undefined ->
-            AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-            set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts0);
-        _ ->
-            TransportOpts0
-    end,
-    Transport = maps:get(transport, TransportOpts, ranch_tcp),
-    SocketOpts = [{ip, Ip}, {port, Port} | maps:get(socket_opts, TransportOpts, [])],
+    TransportOpts = maps:get(transport_opts, Opts, #{}),
+    Transport     = maps:get(transport, TransportOpts, ranch_tcp),
+    SocketOpts    = [{ip, Ip}, {port, Port} | maps:get(socket_opts, TransportOpts, [])],
     {Transport, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
 
 set_ranch_option(Key, Value, Opts) ->
