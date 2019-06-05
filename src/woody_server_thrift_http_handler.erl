@@ -136,7 +136,8 @@ make_server_childspec(Id, Children) ->
     }.
 
 get_socket_transport(Opts = #{ip := Ip, port := Port}) ->
-    TransportOpts = maps:get(transport_opts, Opts, #{}),
+    Defaults      = #{num_acceptors => ?DEFAULT_ACCEPTORS_POOLSIZE},
+    TransportOpts = maps:merge(Defaults, maps:get(transport_opts, Opts, #{})),
     Transport     = maps:get(transport, TransportOpts, ranch_tcp),
     SocketOpts    = [{ip, Ip}, {port, Port} | maps:get(socket_opts, TransportOpts, [])],
     {Transport, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
