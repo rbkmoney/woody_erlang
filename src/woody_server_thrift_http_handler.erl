@@ -37,7 +37,7 @@
     shutdown => timeout() | brutal_kill,
     socket => any(),
     socket_opts => any(),
-    transport => atom()
+    transport => module() % ranch_tcp | ranch_ssl
 }.
 
 -export_type([transport_opts/0]).
