@@ -29,15 +29,15 @@
 -export_type([handler_limits/0]).
 
 -type transport_opts() :: #{
-    connection_type => worker | supervisor,
+    connection_type   => worker | supervisor,
     handshake_timeout => timeout(),
-    max_connections => ranch:max_conns(),
-    logger => module(),
-    num_acceptors => pos_integer(),
-    shutdown => timeout() | brutal_kill,
-    socket => any(),
-    socket_opts => any(),
-    transport => module() % ranch_tcp | ranch_ssl
+    max_connections   => ranch:max_conns(),
+    logger            => module(),
+    num_acceptors     => pos_integer(),
+    shutdown          => timeout() | brutal_kill,
+    socket            => any(),
+    socket_opts       => any(),
+    transport         => module() % ranch_tcp | ranch_ssl
 }.
 
 -export_type([transport_opts/0]).
