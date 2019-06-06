@@ -31,7 +31,7 @@
     init_per_group/2,
     end_per_group/2,
     init_per_testcase/2,
-    end_per_test_case/2
+    end_per_testcase/2
 ]).
 -export([
     context_add_put_get_meta_ok_test/1,
@@ -184,7 +184,7 @@
 -spec init_per_group(group_name(), config()) -> config().
 -spec end_per_group(group_name(), config()) -> any().
 -spec init_per_testcase(case_name(), config()) -> config().
--spec end_per_test_case(case_name(), config()) -> any().
+-spec end_per_testcase(case_name(), config()) -> any().
 
 -spec context_add_put_get_meta_ok_test(config()) -> any().
 -spec context_get_meta_by_key_ok_test(config()) -> any().
@@ -490,21 +490,12 @@ get_fail_code(call_no_headers_502_test) -> 502;
 get_fail_code(call_no_headers_503_test) -> 503;
 get_fail_code(call_no_headers_504_test) -> 504.
 
-end_per_test_case(_, C) ->
+end_per_testcase(_, C) ->
     case proplists:get_value(sup, C, undefined) of
         undefined ->
             ok;
         Sup ->
-            exit(Sup, shutdown),
-            Ref = monitor(process, Sup),
-            receive
-                {'DOWN', Ref, process, Sup, _Reason} ->
-                    demonitor(Ref),
-                    ok
-            after 1000 ->
-                    demonitor(Ref, [flush]),
-                    error(exit_timeout)
-            end
+            ok = proc_lib:stop(Sup)
     end.
 
 %%

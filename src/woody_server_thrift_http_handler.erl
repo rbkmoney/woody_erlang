@@ -28,7 +28,17 @@
 }.
 -export_type([handler_limits/0]).
 
--type transport_opts() :: ranch:opts().
+-type transport_opts() :: #{
+    connection_type   => worker | supervisor,
+    handshake_timeout => timeout(),
+    max_connections   => ranch:max_conns(),
+    logger            => module(),
+    num_acceptors     => pos_integer(),
+    shutdown          => timeout() | brutal_kill,
+    socket            => any(),
+    socket_opts       => any(),
+    transport         => module() % ranch_tcp | ranch_ssl
+}.
 
 -export_type([transport_opts/0]).
 
@@ -104,16 +114,8 @@
 %%
 -spec child_spec(atom(), options()) ->
     supervisor:child_spec().
-child_spec(Id, Opts = #{
-    ip               := Ip,
-    port             := Port
-}) ->
-    % TODO
-    % It's essentially a _transport option_ as it is in the newer ranch versions, therefore we should
-    % probably make it such here too. Ultimately we need to stop looking woody environment vars up.
-    SocketOpts = [{ip, Ip}, {port, Port}],
-    TransportOpts0 = maps:get(transport_opts, Opts, #{}),
-    {Transport, TransportOpts} = get_socket_transport(SocketOpts, TransportOpts0),
+child_spec(Id, Opts) ->
+    {Transport, TransportOpts} = get_socket_transport(Opts),
     CowboyOpts = get_cowboy_config(Opts),
     RanchRef = {?MODULE, Id},
     DrainSpec = make_drain_childspec(RanchRef, Opts),
@@ -133,15 +135,12 @@ make_server_childspec(Id, Children) ->
         type => supervisor
     }.
 
-get_socket_transport(SocketOpts, TransportOpts0) ->
-    TransportOpts = case maps:get(num_acceptors, TransportOpts0, undefined) of
-        undefined ->
-            AcceptorsPool  = genlib_app:env(woody, acceptors_pool_size, ?DEFAULT_ACCEPTORS_POOLSIZE),
-            set_ranch_option(num_acceptors, AcceptorsPool, TransportOpts0);
-        _ ->
-            TransportOpts0
-    end,
-    {ranch_tcp, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
+get_socket_transport(Opts = #{ip := Ip, port := Port}) ->
+    Defaults      = #{num_acceptors => ?DEFAULT_ACCEPTORS_POOLSIZE},
+    TransportOpts = maps:merge(Defaults, maps:get(transport_opts, Opts, #{})),
+    Transport     = maps:get(transport, TransportOpts, ranch_tcp),
+    SocketOpts    = [{ip, Ip}, {port, Port} | maps:get(socket_opts, TransportOpts, [])],
+    {Transport, set_ranch_option(socket_opts, SocketOpts, TransportOpts)}.
 
 set_ranch_option(Key, Value, Opts) ->
     Opts#{Key => Value}.

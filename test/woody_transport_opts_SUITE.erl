@@ -53,7 +53,7 @@ all() ->
 init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({ranch_server, '_', '_'}, x),
-    Apps = genlib_app:start_application_with(woody, [{acceptors_pool_size, 1}]),
+    {ok, Apps} = application:ensure_all_started(woody),
     [{suite_apps, Apps} | C].
 
 end_per_suite(C) ->
@@ -94,7 +94,7 @@ respects_max_connections(C) ->
     % timeout is 5000 ms which is the same as the default woody request timeout.
     % I wonder how this behavior affects production traffic as most of woody servers there configured with
     % keepalive timeout of 60 s.
-    TransportOpts = #{max_connections => MaxConns},
+    TransportOpts = #{max_connections => MaxConns, num_acceptors => 1},
     ProtocolOpts = #{max_keepalive => 1},
     ReadBodyOpts = #{},
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),

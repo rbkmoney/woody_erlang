@@ -107,7 +107,7 @@ send(Url, Body, Options, ResOpts, WoodyState) ->
         false ->
             _ = log_event(?EV_CLIENT_SEND, WoodyState, #{url => Url}),
             % MSPF-416: We resolve url host to an ip here to prevent
-            % reusing keep-alive connections do dead hosts
+            % reusing keep-alive connections to dead hosts
             case woody_resolver:resolve_url(Url, WoodyState, ResOpts) of
                 {ok, {OldUrl, NewUrl}} ->
                     Headers  = add_host_header(OldUrl, make_woody_headers(Context)),
