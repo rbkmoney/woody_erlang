@@ -15,8 +15,7 @@
 %%%
 
 -module(woody_api_hay).
-% commented, so it can compile without hay
-% -behaviour(hay_metrics_handler).
+-behaviour(hay_metrics_handler).
 
 %% how_are_you callbacks
 -export([init/1]).
@@ -26,6 +25,7 @@
 %% Types
 
 -type options() :: #{
+    refs := [ranch:ref()],
     interval := timeout()
 }.
 
@@ -35,6 +35,7 @@
 
 
 -type state() :: #{
+    refs => [ranch:ref()],
     interval := timeout()
 }.
 -type metric() :: how_are_you:metric().
@@ -47,7 +48,8 @@
 -spec init(options()) -> {ok, state()}.
 init(Options) ->
     {ok, #{
-        interval => maps:get(interval, Options, 10 * 1000)
+        refs => maps:get(refs, Options, undefined),
+        interval   => maps:get(interval, Options, 10 * 1000)
     }}.
 
 -spec get_interval(state()) -> timeout().
@@ -55,37 +57,39 @@ get_interval(#{interval := Interval}) ->
     Interval.
 
 -spec gather_metrics(state()) -> [hay_metrics:metric()].
-gather_metrics(_) ->
-    lists:foldl(fun create_metrics/2, [], get_active_connections()).
+gather_metrics(#{refs := undefined}) ->
+    [];
+gather_metrics(#{refs := Refs}) ->
+    lists:map(fun create_server_metrics/1, get_active_connections(Refs)).
 
 %% Internals
 
-create_metrics({Id, Nconns}, AccIn) when is_tuple(Id) ->
-    create_metrics({tuple_to_list(Id), Nconns}, AccIn);
-create_metrics({Id, Nconns}, AccIn) ->
-    try
-        Metric = gauge([woody, Id, active_connections], Nconns),
-        [Metric | AccIn]
-    catch _:_:_ ->
-        AccIn
-    end.
+create_server_metrics({Ref, Nconns}) when is_tuple(Ref) ->
+    create_server_metrics({tuple_to_list(Ref), Nconns});
+create_server_metrics({Ref, Nconns}) ->
+    gauge([woody, server, Ref, active_connections], Nconns).
 
 get_ranch_info() ->
-    try ranch:info()
-    catch _:_:_ ->
-        []
-    end.
+    ranch:info().
 
-get_active_connections() ->
-    F = fun({Id, Info}, AccIn) ->
+get_active_connections(Refs) ->
+    RanchInfo = get_ranch_info(),
+    % we need to filter Refs, that doens't exist
+    FilterFun = fun({Ref, _} = Info, AccIn) ->
+        case lists:member(Ref, Refs) of
+            true ->  [Info | AccIn];
+            false -> AccIn
+        end
+    end,
+    Filtered = lists:foldr(FilterFun, [], RanchInfo),
+    F = fun({Ref, Info}, AccIn) ->
         Nconns = case lists:keyfind(active_connections, 1, Info) of
             false -> 0;
             {_, N} -> N
         end,
-        [{Id, Nconns} | AccIn]
+        [{Ref, Nconns} | AccIn]
     end,
-    lists:foldl(F, [], get_ranch_info()).
-        
+    lists:foldl(F, [], Filtered).
 
 -spec gauge(metric_key(), metric_value()) ->
     metric().
