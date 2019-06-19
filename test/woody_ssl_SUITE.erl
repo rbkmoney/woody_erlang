@@ -96,7 +96,6 @@ client_wo_cert_test(C) ->
     catch
         error:{woody_error, {internal, result_unexpected, Reason}} ->
             {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]handshake[ _]failure.*$">>, [])
-
     end.
 
 -spec valid_client_cert_test(config()) -> _.
@@ -115,7 +114,6 @@ invalid_client_cert_test(C) ->
     catch
         error:{woody_error, {internal, result_unexpected, Reason}} ->
             {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]unknown[ _]ca.*$">>, [])
-
     end.
 
 %%%
