@@ -41,6 +41,7 @@ lint: compile
 
 clean:
 	$(REBAR) clean
+	$(REBAR) as test clean
 
 distclean:
 	$(REBAR) clean -a
