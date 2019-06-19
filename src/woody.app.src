@@ -12,7 +12,8 @@
         thrift,
         rfc3339,
         gproc,
-        cache
+        cache,
+        how_are_you
     ]},
     {env, [
         {enable_debug, false}
