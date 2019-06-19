@@ -42,9 +42,12 @@ lint: compile
 clean:
 	$(REBAR) clean
 	$(REBAR) as test clean
+	$(REBAR) as prod clean
 
 distclean:
 	$(REBAR) clean -a
+	$(REBAR) as test clean -a
+	$(REBAR) as prod clean -a
 	rm -rfv _build _builds _cache _steps _temp
 
 dialyze:
