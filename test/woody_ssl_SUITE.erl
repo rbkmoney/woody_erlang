@@ -90,11 +90,14 @@ end_per_suite(C) ->
 
 client_wo_cert_test(C) ->
     SSLOptions = [{cacertfile, ?ca_cert(C)}],
-    ?assertException(
-        error,
-        {woody_error, {internal, result_unexpected, <<"{tls_alert,\"handshake failure\"}">>}},
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions)
-    ).
+    try
+        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        error(unreachable)
+    catch
+        error:{woody_error, {internal, result_unexpected, Reason}} ->
+            {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]handshake[ _]failure.*$">>, [])
+
+    end.
 
 -spec valid_client_cert_test(config()) -> _.
 
@@ -106,11 +109,14 @@ valid_client_cert_test(C) ->
 
 invalid_client_cert_test(C) ->
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?invalid_client_cert(C)}],
-    ?assertException(
-        error,
-        {woody_error, {internal, result_unexpected, <<"{tls_alert,\"unknown ca\"}">>}},
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions)
-    ).
+    try
+        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        error(unreachable)
+    catch
+        error:{woody_error, {internal, result_unexpected, Reason}} ->
+            {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]unknown[ _]ca.*$">>, [])
+
+    end.
 
 %%%
 %%% woody_event_handler callback
