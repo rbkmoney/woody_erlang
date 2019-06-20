@@ -11,3 +11,4 @@ erl_crash.dump
 .rebar3/
 ebin/
 docker-compose.yml
+test/woody_test_thrift.*
