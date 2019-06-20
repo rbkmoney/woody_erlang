@@ -8,12 +8,12 @@
         snowflake,
         genlib,
         cowboy,
+        how_are_you,
         hackney,
         thrift,
         rfc3339,
         gproc,
-        cache,
-        how_are_you
+        cache
     ]},
     {env, [
         {enable_debug, false}
