@@ -31,7 +31,8 @@
 -type ctx() :: #{
     rpc_id     := woody:rpc_id(),
     deadline   := woody:deadline(),
-    meta       => meta()
+    meta       => meta(),
+    cert       => binary() | undefined
 }.
 
 -type cert() :: binary() | undefined.
