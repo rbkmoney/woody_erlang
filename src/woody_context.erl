@@ -32,7 +32,7 @@
     rpc_id     := woody:rpc_id(),
     deadline   := woody:deadline(),
     meta       => meta(),
-    cert       => binary() | undefined
+    cert       => cert()
 }.
 
 -type cert() :: binary() | undefined.
