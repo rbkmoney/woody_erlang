@@ -142,7 +142,12 @@ handle_event(Event, RpcId, Meta, _) ->
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
     {ok, woody:result()}.
 
-handle_function(get_weapon, [Name, _Data], _Context, _Opts) ->
+handle_function(get_weapon, [Name, _Data], #{cert := Cert} = _Context, _Opts) ->
+    true = public_key:pkix_verify_hostname(
+        Cert,
+        [{dns_id, "Valid Test Client"}],
+        [{match_fun, fun(A, {cn, B}) -> A == B end}]
+    ),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
 
 %%%

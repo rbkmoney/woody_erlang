@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3]).
+-export([new/0, new/1, new/2, new/3, new/4]).
 
 -export([get_rpc_id/1, get_rpc_id/2]).
 
@@ -33,6 +33,8 @@
     deadline   := woody:deadline(),
     meta       => meta()
 }.
+
+-type cert() :: binary() | undefined.
 
 -type meta_value() :: binary().
 -type meta_key()   :: binary().
@@ -62,7 +64,12 @@ new(Id, Meta) ->
 -spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline()) ->
     ctx().
 new(Id, Meta, Deadline) ->
-    make_ctx(expand_rpc_id(Id), Meta, Deadline).
+    new(Id, Meta, Deadline, undefined).
+
+-spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline(), cert()) ->
+    ctx().
+new(Id, Meta, Deadline, Cert) ->
+    make_ctx(expand_rpc_id(Id), Meta, Deadline, Cert).
 
 -spec new_child(ctx()) ->
     ctx().
@@ -147,13 +154,13 @@ expand_rpc_id(RpcId = #{}) ->
 expand_rpc_id(TraceId) ->
     new_rpc_id(TraceId).
 
--spec make_ctx(woody:rpc_id(), meta() | undefined, woody:deadline()) ->
+-spec make_ctx(woody:rpc_id(), meta() | undefined, woody:deadline(), cert()) ->
     ctx() | no_return().
-make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline) ->
+make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline, Cert) ->
     _ = genlib_map:foreach(fun check_req_id_limit/2, RpcId),
-    init_meta(#{rpc_id => RpcId, deadline => Deadline}, Meta);
-make_ctx(RpcId, Meta, Deadline) ->
-    error(badarg, [RpcId, Meta, Deadline]).
+    init_meta(#{rpc_id => RpcId, deadline => Deadline, cert => Cert}, Meta);
+make_ctx(RpcId, Meta, Deadline, Cert) ->
+    error(badarg, [RpcId, Meta, Deadline, Cert]).
 
 check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 32 ->
     ok;
