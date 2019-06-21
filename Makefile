@@ -7,7 +7,7 @@ UTILS_PATH := build_utils
 # with handling of the varriable in build_utils is fixed
 TEMPLATES_PATH := .
 SERVICE_NAME := woody
-BUILD_IMAGE_TAG := 7267e019e3c75e8e5ae5c9f2004960341733f829
+BUILD_IMAGE_TAG := cd38c35976f3684fe7552533b6175a4c3460e88b
 
 CALL_W_CONTAINER := all submodules rebar-update compile xref lint test dialyze clean distclean
 
@@ -41,9 +41,13 @@ lint: compile
 
 clean:
 	$(REBAR) clean
+	$(REBAR) as test clean
+	$(REBAR) as prod clean
 
 distclean:
 	$(REBAR) clean -a
+	$(REBAR) as test clean -a
+	$(REBAR) as prod clean -a
 	rm -rfv _build _builds _cache _steps _temp
 
 dialyze:
