@@ -483,7 +483,7 @@ set_rpc_id(RpcId, WoodyState) ->
 -spec set_cert(cowboy_req:req(), woody_state:st()) ->
     woody_state:st().
 set_cert(Req, WoodyState) ->
-    Cert = cowboy_req:cert(Req),
+    Cert = woody_cert:from_req(Req),
     Context = woody_state:get_context(WoodyState),
     woody_state:update_context(woody_context:set_cert(Cert, Context), WoodyState).
 

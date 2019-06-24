@@ -27,7 +27,8 @@
 -export_type([deadline/0, millisec/0]).
 
 -type cert() :: woody_cert:cert().
--export_type([cert/0]).
+-type common_name() :: woody_cert:common_name().
+-export_type([cert/0, common_name/0]).
 
 %% Thrift
 -type service_name() :: atom().

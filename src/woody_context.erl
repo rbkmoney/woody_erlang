@@ -142,27 +142,22 @@ set_deadline(Deadline, Context) ->
 get_deadline(#{deadline := Deadline}) ->
     Deadline.
 
--spec set_cert(woody:cert() | undefined, ctx()) ->
+-spec set_cert(woody:cert(), ctx()) ->
     ctx().
 set_cert(Cert, Context) ->
     Context#{cert => Cert}.
 
 -spec get_cert(ctx()) ->
-    woody:cert() | undefined.
+    woody:cert().
 get_cert(#{cert := Cert}) ->
     Cert;
 get_cert(_) ->
     undefined.
 
 -spec get_common_name(ctx()) ->
-    {ok, woody_cert:common_name()} | {error, not_found}.
+    woody:common_name() | undefined.
 get_common_name(Ctx) ->
-    case get_cert(Ctx) of
-        undefined ->
-            {error, not_found};
-        Cert ->
-            woody_cert:get_common_name(Cert)
-    end.
+    woody_cert:get_common_name(get_cert(Ctx)).
 
 %%
 %% Internal functions

@@ -189,7 +189,7 @@ get_weapon(Id, Gun, SSLOptions) ->
         transport_opts => #{
             ssl_options => [
                 {server_name_indication, "Test Server"},
-                {verify,     verify_peer} |
+                {verify, verify_peer} |
                 SSLOptions
             ]
         }
@@ -208,5 +208,5 @@ to_binary(Binary) when is_binary(Binary) ->
     Binary.
 
 assert_common_name(CNs, Context) ->
-    {ok, CN} = woody_context:get_common_name(Context),
+    CN = woody_context:get_common_name(Context),
     true = lists:member(CN, CNs).
