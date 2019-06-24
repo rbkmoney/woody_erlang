@@ -156,10 +156,13 @@ get_cert(_) ->
 
 -spec get_common_name(ctx()) ->
     {ok, woody_cert:common_name()} | {error, not_found}.
-get_common_name(#{cert := Cert}) ->
-    woody_cert:get_common_name(Cert);
-get_common_name(_) ->
-    {error, not_found}.
+get_common_name(Ctx) ->
+    case get_cert(Ctx) of
+        undefined ->
+            {error, not_found};
+        Cert ->
+            woody_cert:get_common_name(Cert)
+    end.
 
 %%
 %% Internal functions
