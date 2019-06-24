@@ -378,19 +378,20 @@ check_accept(BadAccept, Req1, State) ->
 
 -spec check_woody_headers(cowboy_req:req(), state()) ->
     check_result().
-check_woody_headers(Req, State = #{woody_state := WoodyState}) ->
+check_woody_headers(Req, State = #{woody_state := WoodyState0}) ->
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
         {ok, RpcId, Req1} ->
+            WoodyState1 = set_rpc_id(RpcId, WoodyState0),
             check_deadline_header(
                 cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
                 Req1,
                 Mode,
-                State#{woody_state => set_rpc_id(RpcId, WoodyState, Req1)}
+                State#{woody_state => set_cert(Req1, WoodyState1)}
             );
         {error, BadRpcId, Req1} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
-                Req1, State#{woody_state => set_rpc_id(BadRpcId, WoodyState)}
+                Req1, State#{woody_state => set_rpc_id(BadRpcId, WoodyState0)}
             )
     end.
 
@@ -479,11 +480,12 @@ find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
 set_rpc_id(RpcId, WoodyState) ->
     woody_state:update_context(woody_context:new(RpcId), WoodyState).
 
--spec set_rpc_id(woody:rpc_id(), woody_state:st(), cowboy_req:req()) ->
+-spec set_cert(cowboy_req:req(), woody_state:st()) ->
     woody_state:st().
-set_rpc_id(RpcId, WoodyState, Req) ->
-    Context = woody_context:new(RpcId, undefined, undefined, cowboy_req:cert(Req)),
-    woody_state:update_context(Context, WoodyState).
+set_cert(Req, WoodyState) ->
+    Cert = cowboy_req:cert(Req),
+    Context = woody_state:get_context(WoodyState),
+    woody_state:update_context(woody_context:set_cert(Cert, Context), WoodyState).
 
 -spec set_deadline(woody:deadline(), woody_state:st()) ->
     woody_state:st().

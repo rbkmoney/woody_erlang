@@ -4,7 +4,7 @@
 
 -export([get_common_names/1]).
 
--type cert() :: binary() | #'OTPCertificate'{}.
+-type cert() :: public_key:der_encoded() | #'OTPCertificate'{}.
 
 -spec get_common_names(cert()) -> [string()].
 

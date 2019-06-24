@@ -6,7 +6,7 @@
 -include("woody_defs.hrl").
 
 %% API
--export([new/0, new/1, new/2, new/3, new/4]).
+-export([new/0, new/1, new/2, new/3]).
 
 -export([get_rpc_id/1, get_rpc_id/2]).
 
@@ -15,6 +15,9 @@
 
 -export([set_deadline/2]).
 -export([get_deadline/1]).
+
+-export([set_cert/2]).
+-export([get_cert/1]).
 
 -export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
@@ -35,7 +38,7 @@
     cert       => cert()
 }.
 
--type cert() :: binary() | undefined.
+-type cert() :: public_key:der_encoded() | undefined.
 
 -type meta_value() :: binary().
 -type meta_key()   :: binary().
@@ -65,12 +68,7 @@ new(Id, Meta) ->
 -spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline()) ->
     ctx().
 new(Id, Meta, Deadline) ->
-    new(Id, Meta, Deadline, undefined).
-
--spec new(woody:rpc_id() | woody:trace_id(),  meta() | undefined, woody:deadline(), cert()) ->
-    ctx().
-new(Id, Meta, Deadline, Cert) ->
-    make_ctx(expand_rpc_id(Id), Meta, Deadline, Cert).
+    make_ctx(expand_rpc_id(Id), Meta, Deadline).
 
 -spec new_child(ctx()) ->
     ctx().
@@ -145,6 +143,16 @@ set_deadline(Deadline, Context) ->
 get_deadline(#{deadline := Deadline}) ->
     Deadline.
 
+-spec set_cert(cert(), ctx()) ->
+    ctx().
+set_cert(Cert, Context) ->
+    Context#{cert => Cert}.
+
+-spec get_cert(ctx()) ->
+    cert().
+get_cert(#{cert := Cert}) ->
+    Cert.
+
 %%
 %% Internal functions
 %%
@@ -155,13 +163,13 @@ expand_rpc_id(RpcId = #{}) ->
 expand_rpc_id(TraceId) ->
     new_rpc_id(TraceId).
 
--spec make_ctx(woody:rpc_id(), meta() | undefined, woody:deadline(), cert()) ->
+-spec make_ctx(woody:rpc_id(), meta() | undefined, woody:deadline()) ->
     ctx() | no_return().
-make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline, Cert) ->
+make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline) ->
     _ = genlib_map:foreach(fun check_req_id_limit/2, RpcId),
-    init_meta(#{rpc_id => RpcId, deadline => Deadline, cert => Cert}, Meta);
-make_ctx(RpcId, Meta, Deadline, Cert) ->
-    error(badarg, [RpcId, Meta, Deadline, Cert]).
+    init_meta(#{rpc_id => RpcId, deadline => Deadline}, Meta);
+make_ctx(RpcId, Meta, Deadline) ->
+    error(badarg, [RpcId, Meta, Deadline]).
 
 check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 32 ->
     ok;
