@@ -142,7 +142,8 @@ handle_event(Event, RpcId, Meta, _) ->
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
     {ok, woody:result()}.
 
-handle_function(get_weapon, [Name, _Data], _Context, _Opts) ->
+handle_function(get_weapon, [Name, _Data], Context, _Opts) ->
+    _ = assert_common_name([<<"Valid Test Client">>], Context),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
 
 %%%
@@ -188,7 +189,7 @@ get_weapon(Id, Gun, SSLOptions) ->
         transport_opts => #{
             ssl_options => [
                 {server_name_indication, "Test Server"},
-                {verify,     verify_peer} |
+                {verify, verify_peer} |
                 SSLOptions
             ]
         }
@@ -205,3 +206,7 @@ to_binary(Atom) when is_atom(Atom) ->
     erlang:atom_to_binary(Atom, utf8);
 to_binary(Binary) when is_binary(Binary) ->
     Binary.
+
+assert_common_name(CNs, Context) ->
+    CN = woody_context:get_common_name(Context),
+    true = lists:member(CN, CNs).
