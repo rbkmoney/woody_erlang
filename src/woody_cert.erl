@@ -17,7 +17,7 @@ get_common_name(Cert) when is_binary(Cert) ->
     get_common_name(public_key:pkix_decode_cert(Cert, otp));
 get_common_name(#'OTPCertificate'{tbsCertificate = TbsCert}) ->
     case get_cn_from_rdn(TbsCert#'OTPTBSCertificate'.subject) of
-        [CN | _] ->
+        [CN] ->
             {ok, CN};
         _ ->
             {error, not_found}
