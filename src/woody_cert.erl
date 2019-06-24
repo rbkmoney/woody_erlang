@@ -19,7 +19,7 @@ get_common_name(#'OTPCertificate'{tbsCertificate = TbsCert}) ->
     case get_cn_from_rdn(TbsCert#'OTPTBSCertificate'.subject) of
         [CN] ->
             {ok, CN};
-        _ ->
+        [] ->
             {error, not_found}
     end.
 
