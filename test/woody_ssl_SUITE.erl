@@ -143,7 +143,7 @@ handle_event(Event, RpcId, Meta, _) ->
     {ok, woody:result()}.
 
 handle_function(get_weapon, [Name, _Data], Context, _Opts) ->
-    _ = assert_common_names(["Valid Test Client"], woody_context:get_cert(Context)),
+    _ = assert_common_name([<<"Valid Test Client">>], Context),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
 
 %%%
@@ -207,10 +207,6 @@ to_binary(Atom) when is_atom(Atom) ->
 to_binary(Binary) when is_binary(Binary) ->
     Binary.
 
-assert_common_names(CNs, Cert) ->
-    true = lists:any(
-        fun(CN) ->
-            lists:member(CN, CNs)
-        end,
-        woody_cert:get_common_names(Cert)
-    ).
+assert_common_name(CNs, Context) ->
+    {ok, CN} = woody_context:get_common_name(Context),
+    true = lists:member(CN, CNs).

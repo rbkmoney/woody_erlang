@@ -18,6 +18,7 @@
 
 -export([set_cert/2]).
 -export([get_cert/1]).
+-export([get_common_name/1]).
 
 -export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
@@ -35,10 +36,8 @@
     rpc_id     := woody:rpc_id(),
     deadline   := woody:deadline(),
     meta       => meta(),
-    cert       => cert()
+    cert       => woody:cert()
 }.
-
--type cert() :: public_key:der_encoded() | undefined.
 
 -type meta_value() :: binary().
 -type meta_key()   :: binary().
@@ -143,15 +142,24 @@ set_deadline(Deadline, Context) ->
 get_deadline(#{deadline := Deadline}) ->
     Deadline.
 
--spec set_cert(cert(), ctx()) ->
+-spec set_cert(woody:cert() | undefined, ctx()) ->
     ctx().
 set_cert(Cert, Context) ->
     Context#{cert => Cert}.
 
 -spec get_cert(ctx()) ->
-    cert().
+    woody:cert() | undefined.
 get_cert(#{cert := Cert}) ->
-    Cert.
+    Cert;
+get_cert(_) ->
+    undefined.
+
+-spec get_common_name(ctx()) ->
+    {ok, woody_cert:common_name()} | {error, not_found}.
+get_common_name(#{cert := Cert}) ->
+    woody_cert:get_common_name(Cert);
+get_common_name(_) ->
+    {error, not_found}.
 
 %%
 %% Internal functions

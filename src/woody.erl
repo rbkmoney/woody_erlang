@@ -26,6 +26,9 @@
 -type deadline() :: woody_deadline:deadline().
 -export_type([deadline/0, millisec/0]).
 
+-type cert() :: woody_cert:cert().
+-export_type([cert/0]).
+
 %% Thrift
 -type service_name() :: atom().
 -type service()      :: {module(), service_name()}.
