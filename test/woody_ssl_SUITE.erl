@@ -143,11 +143,7 @@ handle_event(Event, RpcId, Meta, _) ->
     {ok, woody:result()}.
 
 handle_function(get_weapon, [Name, _Data], #{cert := Cert} = _Context, _Opts) ->
-    true = public_key:pkix_verify_hostname(
-        Cert,
-        [{dns_id, "Valid Test Client"}],
-        [{match_fun, fun(A, {cn, B}) -> A == B end}]
-    ),
+    _ = assert_common_names(["Valid Test Client"], Cert),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
 
 %%%
@@ -210,3 +206,11 @@ to_binary(Atom) when is_atom(Atom) ->
     erlang:atom_to_binary(Atom, utf8);
 to_binary(Binary) when is_binary(Binary) ->
     Binary.
+
+assert_common_names(CNs, Cert) ->
+    true = lists:any(
+        fun(CN) ->
+            lists:member(CN, CNs)
+        end,
+        woody_cert:get_common_names(Cert)
+    ).
