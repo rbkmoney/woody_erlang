@@ -13,7 +13,8 @@ get_common_names(Cert) when is_binary(Cert) ->
 get_common_names(#'OTPCertificate'{tbsCertificate = TbsCert}) ->
     case TbsCert#'OTPTBSCertificate'.subject of
         {rdnSequence, RDNSeq} ->
-            [to_string(V) || ATVs <- RDNSeq, #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs];
+            [to_string(V) ||
+             ATVs <- RDNSeq, #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs];
         _ ->
             []
     end.
