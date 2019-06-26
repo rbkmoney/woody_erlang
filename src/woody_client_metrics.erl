@@ -32,12 +32,8 @@ increment_counter([hackney, _Host, _], _) ->
 increment_counter([hackney, nb_requests], Value) ->
     increment_counter([hackney, requests_in_process], Value);
 increment_counter(Key, Value) ->
-    case validate_metric(Key) of
-        true ->
-            hay_metrics:push(hay_metrics:construct(counter, tag_key(Key), Value));
-        false ->
-            {error, not_allowed}
-    end.
+    update_metric(counter, Key, Value).
+
 
 -spec decrement_counter(any()) -> ok | {error, term()}.
 decrement_counter(Key) ->
@@ -48,25 +44,31 @@ decrement_counter(Key, Value) ->
     increment_counter(Key, -Value).
 
 -spec update_histogram(any(), number() | function()) -> ok | {error, term()}.
-update_histogram(_, Func)  when is_function(Func) ->
-    {error, not_allowed};
 update_histogram(Key, Value) ->
-    update_gauge(Key, Value).
+    update_metric(histogram, Key, Value).
 
 -spec update_gauge(any(), number()) -> ok | {error, term()}.
 update_gauge(Key, Value) ->
+   update_metric(gauge, Key, Value).
+
+-spec update_meter(any(), number()) -> ok | {error, term()}.
+update_meter(Key, Value) ->
+    update_metric(meter, Key, Value).
+
+%% internals
+update_metric(meter, _, _) ->
+    {error, not_allowed};
+update_metric(histogram, _, Value) when is_function(Value) ->
+    {error, not_allowed};
+update_metric(histogram, Key, Value) ->
+    update_metric(gauge, Key, Value);
+update_metric(Type, Key, Value) ->
     case validate_metric(Key) of
         true ->
-            hay_metrics:push(hay_metrics:construct(gauge, tag_key(Key), Value));
+            hay_metrics:push(hay_metrics:construct(Type, tag_key(Key), Value));
         false ->
             {error, not_allowed}
     end.
-
--spec update_meter(any(), number()) -> ok | {error, term()}.
-update_meter(_, _) ->
-    {error, not_allowed}.
-
-%% internals
 
 tag_key(Key) when is_list(Key) ->
     [woody, client | Key].
