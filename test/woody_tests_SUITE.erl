@@ -310,6 +310,17 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({woody_joint_workers, '_', '_'}, x),
     %%Apps = genlib_app:start_application_with(woody, [{trace_http_server, true}]),
+    application:set_env(hackney, mod_metrics, woody_client_metrics),
+    application:set_env(woody, woody_client_metrics_options, #{
+        allowed_metrics => [
+            total_requests,
+            in_use_count,
+            queue_counter,
+            free_count,
+            finished_requests,
+            processed_requests
+        ]
+    }),
     {ok, Apps} = application:ensure_all_started(woody),
     [{apps, Apps}|C].
 
