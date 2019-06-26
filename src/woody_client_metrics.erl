@@ -69,9 +69,7 @@ update_meter(_, _) ->
 %% internals
 
 tag_key(Key) when is_list(Key) ->
-    [woody, client | Key];
-tag_key(Key) ->
-    [woody, client, Key].
+    [woody, client | Key].
 
 validate_metric(Key) ->
     is_allowed_metric(lists:last(Key)).
