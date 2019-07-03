@@ -32,8 +32,8 @@ build('woody_erlang', 'docker-host', finalHook) {
       sh 'make wc_xref'
     }
     runStage('dialyze') {
-      withWsCache("_build/default/rebar3_21.3.8.4_plt") {
-        withGithubPrivkey {
+      withGithubPrivkey {
+        withWsCache("_build/default/rebar3_21.3.8.4_plt") {
           sh 'make wc_dialyze'
         }
       }
