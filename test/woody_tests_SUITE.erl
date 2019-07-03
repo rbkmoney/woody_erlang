@@ -321,10 +321,12 @@ init_per_suite(C) ->
             processed_requests
         ]
     }),
+    {ok, HayApps} = application:ensure_all_started(how_are_you),
     {ok, Apps} = application:ensure_all_started(woody),
-    [{apps, Apps}|C].
+    [{apps, HayApps ++ Apps}|C].
 
 end_per_suite(C) ->
+    application:unset_env(hackney, mod_metrics), % unset so it won't report metrics next suite
     [application_stop(App) || App <- proplists:get_value(apps, C)].
 
 application_stop(App=sasl) ->
