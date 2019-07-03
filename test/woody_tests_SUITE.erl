@@ -313,13 +313,16 @@ init_per_suite(C) ->
     application:set_env(hackney, mod_metrics, woody_client_metrics),
     application:set_env(woody, woody_client_metrics_options, #{
         allowed_metrics => [
-            total_requests,
+            [hackney, total_requests],
             in_use_count,
             queue_counter,
-            free_count,
+            [hackney_pool, default, free_count],
             finished_requests,
             processed_requests
-        ]
+        ],
+        metric_key_mapping => #{
+            [hackney, total_requests] => [test_total_requests]
+        }
     }),
     {ok, HayApps} = application:ensure_all_started(how_are_you),
     {ok, Apps} = application:ensure_all_started(woody),

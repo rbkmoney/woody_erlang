@@ -29,8 +29,6 @@ increment_counter(Key) ->
 -spec increment_counter(any(), number()) -> ok | {error, term()}.
 increment_counter([hackney, _Host, _], _) ->
     ok; % we don't need per host metrics
-increment_counter([hackney, nb_requests], Value) ->
-    increment_counter([hackney, requests_in_process], Value);
 increment_counter(Key, Value) ->
     update_metric(counter, Key, Value).
 
@@ -62,9 +60,10 @@ update_metric(histogram, _, Value) when is_function(Value) ->
     {error, not_allowed};
 update_metric(histogram, Key, Value) ->
     update_metric(gauge, Key, Value);
-update_metric(Type, Key, Value) ->
-    case validate_metric(Key) of
+update_metric(Type, Key0, Value) ->
+    case is_allowed_metric(Key0) of
         true ->
+            Key = map_key(Key0),
             hay_metrics:push(hay_metrics:construct(Type, tag_key(Key), Value));
         false ->
             {error, not_allowed}
@@ -73,13 +72,21 @@ update_metric(Type, Key, Value) ->
 tag_key(Key) when is_list(Key) ->
     [woody, client | Key].
 
-validate_metric(Key) ->
-    is_allowed_metric(lists:last(Key)).
-
 is_allowed_metric(Key) ->
     lists:member(Key, get_allowed_metrics()).
 
+map_key(Key) ->
+    case maps:get(Key, get_key_mapping(), undefined) of
+        undefined ->
+            Key;
+        MappedKey ->
+            MappedKey
+    end.
+
 % gets
+
+get_key_mapping() ->
+    maps:get(metric_key_mapping, get_options(), #{}).
 
 get_allowed_metrics() ->
     maps:get(allowed_metrics, get_options(), []).
