@@ -16,6 +16,10 @@
 -export([set_deadline/2]).
 -export([get_deadline/1]).
 
+-export([set_cert/2]).
+-export([get_cert/1]).
+-export([get_common_name/1]).
+
 -export([new_rpc_id/1, new_rpc_id/3]).
 -export([new_req_id/0]).
 -export([new_unique_int/0]).
@@ -31,7 +35,8 @@
 -type ctx() :: #{
     rpc_id     := woody:rpc_id(),
     deadline   := woody:deadline(),
-    meta       => meta()
+    meta       => meta(),
+    cert       => woody:cert()
 }.
 
 -type meta_value() :: binary().
@@ -136,6 +141,23 @@ set_deadline(Deadline, Context) ->
     woody:deadline().
 get_deadline(#{deadline := Deadline}) ->
     Deadline.
+
+-spec set_cert(woody:cert(), ctx()) ->
+    ctx().
+set_cert(Cert, Context) ->
+    Context#{cert => Cert}.
+
+-spec get_cert(ctx()) ->
+    woody:cert().
+get_cert(#{cert := Cert}) ->
+    Cert;
+get_cert(_) ->
+    undefined.
+
+-spec get_common_name(ctx()) ->
+    woody:common_name() | undefined.
+get_common_name(Ctx) ->
+    woody_cert:get_common_name(get_cert(Ctx)).
 
 %%
 %% Internal functions
