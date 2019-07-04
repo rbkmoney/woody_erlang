@@ -312,16 +312,8 @@ init_per_suite(C) ->
     %%Apps = genlib_app:start_application_with(woody, [{trace_http_server, true}]),
     application:set_env(hackney, mod_metrics, woody_client_metrics),
     application:set_env(woody, woody_client_metrics_options, #{
-        allowed_metrics => [
-            [hackney, total_requests],
-            in_use_count,
-            queue_counter,
-            [hackney_pool, default, free_count],
-            finished_requests,
-            processed_requests
-        ],
         metric_key_mapping => #{
-            [hackney, total_requests] => [test_total_requests]
+            [hackney, nb_requests] => [hackney, requests_in_process]
         }
     }),
     {ok, HayApps} = application:ensure_all_started(how_are_you),

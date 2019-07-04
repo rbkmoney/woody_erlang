@@ -16,7 +16,7 @@
 
 -spec new(metric(), any()) -> ok | {error, term()}.
 new(_, _) ->
-    ok. % we can omit it
+    ok.
 
 -spec delete(any()) -> ok.
 delete(_) ->
@@ -72,8 +72,11 @@ update_metric(Type, Key0, Value) ->
 tag_key(Key) when is_list(Key) ->
     [woody, client | Key].
 
+
+is_allowed_metric([hackney_pool, _, Metric]) ->
+    lists:member(Metric, get_allowed_pool_metrics());
 is_allowed_metric(Key) ->
-    lists:member(Key, get_allowed_metrics()).
+    lists:member(Key, get_allowed_request_metrics()).
 
 map_key(Key) ->
     case maps:get(Key, get_key_mapping(), undefined) of
@@ -88,8 +91,15 @@ map_key(Key) ->
 get_key_mapping() ->
     maps:get(metric_key_mapping, get_options(), #{}).
 
-get_allowed_metrics() ->
-    maps:get(allowed_metrics, get_options(), []).
+get_allowed_request_metrics() ->
+    [
+        [hackney, total_requests],
+        [hackney, finished_requests],
+        [hackney, nb_requests]
+    ].
+
+get_allowed_pool_metrics() ->
+    [free_count, no_socket, in_use_count, queue_counter].
 
 get_options() ->
     genlib_app:env(woody, woody_client_metrics_options, #{}).
