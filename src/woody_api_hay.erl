@@ -25,7 +25,6 @@
 %% Types
 
 -type options() :: #{
-    refs := [ranch:ref()],
     interval := timeout()
 }.
 
@@ -34,10 +33,7 @@
 %% Internal types
 
 
--type state() :: #{
-    refs => [ranch:ref()],
-    interval := timeout()
-}.
+-type state() :: options().
 -type metric() :: how_are_you:metric().
 -type metric_key() :: how_are_you:metric_key().
 -type metric_value() :: how_are_you:metric_value().
@@ -48,8 +44,7 @@
 -spec init(options()) -> {ok, state()}.
 init(Options) ->
     {ok, #{
-        refs => maps:get(refs, Options, undefined),
-        interval   => maps:get(interval, Options, 10 * 1000)
+        interval => maps:get(interval, Options, 10 * 1000)
     }}.
 
 -spec get_interval(state()) -> timeout().
@@ -57,10 +52,8 @@ get_interval(#{interval := Interval}) ->
     Interval.
 
 -spec gather_metrics(state()) -> [hay_metrics:metric()].
-gather_metrics(#{refs := undefined}) ->
-    [];
-gather_metrics(#{refs := Refs}) ->
-    lists:map(fun create_server_metrics/1, get_active_connections(Refs)).
+gather_metrics(_) ->
+    lists:map(fun create_server_metrics/1, get_active_connections()).
 
 %% Internals
 
@@ -72,24 +65,15 @@ create_server_metrics({Ref, Nconns}) ->
 get_ranch_info() ->
     ranch:info().
 
-get_active_connections(Refs) ->
-    RanchInfo = get_ranch_info(),
-    % we need to filter Refs, that doens't exist
-    FilterFun = fun({Ref, _} = Info, AccIn) ->
-        case lists:member(Ref, Refs) of
-            true ->  [Info | AccIn];
-            false -> AccIn
-        end
-    end,
-    Filtered = lists:foldr(FilterFun, [], RanchInfo),
-    F = fun({Ref, Info}, AccIn) ->
+get_active_connections() ->
+    F = fun({Ref, Info}) ->
         Nconns = case lists:keyfind(active_connections, 1, Info) of
             false -> 0;
             {_, N} -> N
         end,
-        [{Ref, Nconns} | AccIn]
+        {Ref, Nconns}
     end,
-    lists:foldl(F, [], Filtered).
+    lists:map(F, get_ranch_info()).
 
 -spec gauge(metric_key(), metric_value()) ->
     metric().

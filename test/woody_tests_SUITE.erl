@@ -316,8 +316,13 @@ init_per_suite(C) ->
             [hackney, nb_requests] => [hackney, requests_in_process]
         }
     }),
-    {ok, HayApps} = application:ensure_all_started(how_are_you),
+    application:set_env(how_are_you, metrics_handlers, [
+        {woody_api_hay, #{
+            interval => 1000
+        }}
+    ]),
     {ok, Apps} = application:ensure_all_started(woody),
+    {ok, HayApps} = application:ensure_all_started(how_are_you),
     [{apps, HayApps ++ Apps}|C].
 
 end_per_suite(C) ->
