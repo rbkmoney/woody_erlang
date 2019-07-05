@@ -310,10 +310,23 @@ init_per_suite(C) ->
     % dbg:tracer(), dbg:p(all, c),
     % dbg:tpl({woody_joint_workers, '_', '_'}, x),
     %%Apps = genlib_app:start_application_with(woody, [{trace_http_server, true}]),
+    application:set_env(hackney, mod_metrics, woody_client_metrics),
+    application:set_env(woody, woody_client_metrics_options, #{
+        metric_key_mapping => #{
+            [hackney, nb_requests] => [hackney, requests_in_process]
+        }
+    }),
+    application:set_env(how_are_you, metrics_handlers, [
+        {woody_api_hay, #{
+            interval => 1000
+        }}
+    ]),
     {ok, Apps} = application:ensure_all_started(woody),
-    [{apps, Apps}|C].
+    {ok, HayApps} = application:ensure_all_started(how_are_you),
+    [{apps, HayApps ++ Apps}|C].
 
 end_per_suite(C) ->
+    application:unset_env(hackney, mod_metrics), % unset so it won't report metrics next suite
     [application_stop(App) || App <- proplists:get_value(apps, C)].
 
 application_stop(App=sasl) ->

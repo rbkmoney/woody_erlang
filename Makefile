@@ -51,5 +51,5 @@ distclean:
 	rm -rfv _build _builds _cache _steps _temp
 
 dialyze:
-	$(REBAR) dialyzer
+	$(REBAR) as test dialyzer
 
