@@ -331,8 +331,8 @@ create_dummy_state(EvHandler) ->
     ok.
 terminate(normal, _Req, _Status) ->
     ok;
-terminate(Reason, _Req, #{ev_handler := EvHandler} = State) ->
-    WoodyState = maps:get(woody_state, State, create_dummy_state(EvHandler)),
+terminate(Reason, _Req, #{ev_handler := EvHandler} = Opts) ->
+    WoodyState = maps:get(woody_state, Opts, create_dummy_state(EvHandler)),
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
             error  => <<"http handler terminated abnormally">>,
             reason => woody_error:format_details(Reason),
