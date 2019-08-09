@@ -261,12 +261,7 @@ trace_resp(_, Req, _, _, _, _) ->
 init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
-    DummyRpcID = #{
-        span_id   => ?DUMMY_REQ_ID,
-        trace_id  => ?DUMMY_REQ_ID,
-        parent_id => ?DUMMY_REQ_ID
-    },
-    WoodyState = woody_state:new(server, woody_context:new(DummyRpcID), EvHandler),
+    WoodyState = create_dummy_state(EvHandler),
     case have_resources_to_continue(Limits) of
         true ->
             Opts1 = Opts#{url => Url, woody_state => WoodyState},
@@ -324,11 +319,20 @@ handle(Req, State = #{
     end,
     {ok, Req2, undefined}.
 
+create_dummy_state(EvHandler) ->
+    DummyRpcID = #{
+        span_id   => ?DUMMY_REQ_ID,
+        trace_id  => ?DUMMY_REQ_ID,
+        parent_id => ?DUMMY_REQ_ID
+    },
+    woody_state:new(server, woody_context:new(DummyRpcID), EvHandler).
+
 -spec terminate(_Reason, _Req, state() | _) ->
     ok.
 terminate(normal, _Req, _Status) ->
     ok;
-terminate(Reason, _Req, #{woody_state := WoodyState}) ->
+terminate(Reason, _Req, #{ev_handler := EvHandler} = Opts) ->
+    WoodyState = maps:get(woody_state, Opts, create_dummy_state(EvHandler)),
     _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
             error  => <<"http handler terminated abnormally">>,
             reason => woody_error:format_details(Reason),
