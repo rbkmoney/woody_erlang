@@ -848,7 +848,8 @@ result_test_() -> [
 %%            "settlement = 7, guarantee = 6, payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, ",
 %%            "wallets = #{}, revision = 6}"
 %%        ]),
-%%        format_meta(
+%%        format_msg(
+%%            format_service_reply(
 %%            #{args =>
 %%            [{payproc_UserInfo,<<"1CSWG2vduGe">>,
 %%                {external_user,{payproc_ExternalUser}}},
@@ -902,80 +903,65 @@ result_test_() -> [
 %%                role => server,service => 'PartyManagement',
 %%                service_schema => {dmsl_payment_processing_thrift,'PartyManagement'},
 %%                status => ok,type => call}
+%%            )
 %%        )
-%%    ),
-%%    ?_assertEqual(
-%%        lists:flatten([
-%%            "SignalResult{change = MachineStateChange{aux_state = Content{data = #{}}, ",
-%%            "events = [Content{data = [[2, #{'change' => 'created', ",
-%%            "'contact_info' => #{'email' => 'create_customer'}, ",
-%%            "'created_at' => '2019-08-13T11:19:03.714218Z', 'customer_id' => '1CSWGJ3N8Ns', ",
-%%            "'metadata' => Null, 'owner_id' => '1CSWG2vduGe', 'shop_id' => '1CSWG8j04wM'}]]}]}, ",
-%%            "action = ComplexAction{}}"
-%%        ]),
-%%        format_meta(
-%%            #{args =>
-%%            [{mg_stateproc_SignalArgs,
-%%                {init,
-%%                    {mg_stateproc_InitSignal,
-%%                        {bin,
-%%                            <<131,109,0,0,0,71,11,0,1,0,0,0,11,49,67,83,87,71,50,118,100,117,71,
-%%                                101,11,0,2,0,0,0,11,49,67,83,87,71,56,106,48,52,119,77,12,0,3,11,
-%%                                0,2,0,0,0,15,99,114,101,97,116,101,95,99,117,115,116,111,109,101,
-%%                                114,0,12,0,4,12,0,1,0,0,0>>}}},
-%%                {mg_stateproc_Machine,<<"customer">>,<<"1CSWGJ3N8Ns">>,[],
-%%                    {mg_stateproc_HistoryRange,undefined,undefined,forward},
-%%                    {mg_stateproc_Content,undefined,{bin,<<>>}},
-%%                    undefined,
-%%                    {bin,<<>>}}}],
-%%                deadline => {{{2019,8,13},{11,19,33}},606},
-%%                execution_start_time => 1565695143707,function => 'ProcessSignal',
-%%                metadata =>
-%%                #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
-%%                    <<"user-identity.realm">> => <<"external">>},
-%%                result =>
-%%                {ok,
-%%                    {mg_stateproc_SignalResult,
-%%                        {mg_stateproc_MachineStateChange,
-%%                            {mg_stateproc_Content,undefined,{obj,#{}}},
-%%                            [{mg_stateproc_Content,undefined,
-%%                                {arr,
-%%                                    [{arr,
-%%                                        [{i,2},
-%%                                            {obj,
-%%                                                #{{str,<<"change">>} => {str,<<"created">>},
-%%                                                    {str,<<"contact_info">>} =>
-%%                                                    {obj,#{{str,<<"email">>} => {str,<<"create_customer">>}}},
-%%                                                    {str,<<"created_at">>} =>
-%%                                                    {str,<<"2019-08-13T11:19:03.714218Z">>},
-%%                                                    {str,<<"customer_id">>} => {str,<<"1CSWGJ3N8Ns">>},
-%%                                                    {str,<<"metadata">>} => {nl,{mg_msgpack_Nil}},
-%%                                                    {str,<<"owner_id">>} => {str,<<"1CSWG2vduGe">>},
-%%                                                    {str,<<"shop_id">>} => {str,<<"1CSWG8j04wM">>}}}]}]}}],
-%%                            undefined,undefined},
-%%                        {mg_stateproc_ComplexAction,undefined,undefined,undefined,undefined}}},
-%%                role => server,service => 'Processor',
-%%                service_schema => {mg_proto_state_processing_thrift,'Processor'},
-%%                status => ok,type => call}
-%%        )
-%%%%    ),
-%%%%    ?_assertEqual(
-%%%%        "InvalidUser{}",
-%%%%        format_meta(
-%%%%            #{args =>
-%%%%            [{payproc_CustomerParams,<<"1CSWGACOup6">>,<<"1CSWGACOup7">>,
-%%%%                {domain_ContactInfo,undefined,<<"invalid_user">>},
-%%%%                {nl,{json_Null}}}],
-%%%%                class => business,deadline => undefined,
-%%%%                execution_start_time => 1565695141702,function => 'Create',ignore => false,
-%%%%                metadata =>
-%%%%                #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
-%%%%                    <<"user-identity.realm">> => <<"external">>},
-%%%%                result => {payproc_InvalidUser},
-%%%%                role => server,service => 'CustomerManagement',
-%%%%                service_schema => {dmsl_payment_processing_thrift,'CustomerManagement'},
-%%%%                status => error,type => call}
-%%%%        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "SignalResult{change = MachineStateChange{aux_state = Content{data = #{}}, ",
+            "events = [Content{data = [[2, #{'change' => 'created', ",
+            "'contact_info' => #{'email' => 'create_customer'}, ",
+            "'created_at' => '2019-08-13T11:19:03.714218Z', 'customer_id' => '1CSWGJ3N8Ns', ",
+            "'metadata' => Null, 'owner_id' => '1CSWG2vduGe', 'shop_id' => '1CSWG8j04wM'}]]}]}, ",
+            "action = ComplexAction{}}"
+        ]),
+        format_msg(
+            format_service_reply(
+                #{args =>
+                [{mg_stateproc_SignalArgs,
+                    {init,
+                        {mg_stateproc_InitSignal,
+                            {bin,
+                                <<131,109,0,0,0,71,11,0,1,0,0,0,11,49,67,83,87,71,50,118,100,117,71,
+                                    101,11,0,2,0,0,0,11,49,67,83,87,71,56,106,48,52,119,77,12,0,3,11,
+                                    0,2,0,0,0,15,99,114,101,97,116,101,95,99,117,115,116,111,109,101,
+                                    114,0,12,0,4,12,0,1,0,0,0>>}}},
+                    {mg_stateproc_Machine,<<"customer">>,<<"1CSWGJ3N8Ns">>,[],
+                        {mg_stateproc_HistoryRange,undefined,undefined,forward},
+                        {mg_stateproc_Content,undefined,{bin,<<>>}},
+                        undefined,
+                        {bin,<<>>}}}],
+                    deadline => {{{2019,8,13},{11,19,33}},606},
+                    execution_start_time => 1565695143707,function => 'ProcessSignal',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result =>
+                    {ok,
+                        {mg_stateproc_SignalResult,
+                            {mg_stateproc_MachineStateChange,
+                                {mg_stateproc_Content,undefined,{obj,#{}}},
+                                [{mg_stateproc_Content,undefined,
+                                    {arr,
+                                        [{arr,
+                                            [{i,2},
+                                                {obj,
+                                                    #{{str,<<"change">>} => {str,<<"created">>},
+                                                        {str,<<"contact_info">>} =>
+                                                        {obj,#{{str,<<"email">>} => {str,<<"create_customer">>}}},
+                                                        {str,<<"created_at">>} =>
+                                                        {str,<<"2019-08-13T11:19:03.714218Z">>},
+                                                        {str,<<"customer_id">>} => {str,<<"1CSWGJ3N8Ns">>},
+                                                        {str,<<"metadata">>} => {nl,{mg_msgpack_Nil}},
+                                                        {str,<<"owner_id">>} => {str,<<"1CSWG2vduGe">>},
+                                                        {str,<<"shop_id">>} => {str,<<"1CSWG8j04wM">>}}}]}]}}],
+                                undefined,undefined},
+                            {mg_stateproc_ComplexAction,undefined,undefined,undefined,undefined}}},
+                    role => server,service => 'Processor',
+                    service_schema => {mg_proto_state_processing_thrift,'Processor'},
+                    status => ok,type => call}
+            )
+        )
     )
 ].
 
