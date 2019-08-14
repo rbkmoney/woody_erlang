@@ -36,13 +36,13 @@ format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Defa
             end, {[], []}, ValueList),
     {"~s = [" ++ string:join(UnionFormat, ", ") ++ "]", [Name] ++ UnionParam};
 format_({_Fid, _Required, {list, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    FormattedValueList =
+    {StructFormat, StructParam} =
         lists:foldr(
-            fun(Value, FormattedAcc) ->
-                [format_struct(Module, Struct, Value) | FormattedAcc]
-            end, [], ValueList),
-    FormattedValue = string:join(FormattedValueList, ", "),
-    {"~s = [~s]", [Name, FormattedValue]};
+            fun(Value, {FmtAcc, ParamAcc}) ->
+                {Fmt, Params} = format_struct(Module, Struct, Value),
+                {[Fmt | FmtAcc], Params ++ ParamAcc}
+            end, {[], []}, ValueList),
+    {"~s = [" ++ string:join(StructFormat, ", ") ++ "]", [Name] ++ StructParam};
 format_({_Fid, _Required, {map, string, {struct, struct,{Module,Struct}}}, Name, _Default}, ValueMap) ->
     MapData = maps:to_list(ValueMap),
     Result =
