@@ -28,13 +28,13 @@ format_({_Fid, _Required, {struct, union, {Module, Struct}}, Name, _Default}, Va
 format_({_Fid, _Required, {struct, enum, {Module, Struct}}, Name, _Default}, Value) ->
     {"~s = ~s", [Name, format_enum(Module, Struct, Value)]};
 format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    FormattedValueList =
+    {UnionFormat, UnionParam} =
         lists:foldr(
-            fun(Value, FormattedAcc) ->
-                [format_union(Module, Struct, Value) | FormattedAcc]
-            end, [], ValueList),
-    FormattedValue = string:join(FormattedValueList, ", "),
-    {"~s = [~s]", [Name, FormattedValue]};
+            fun(Value, {FmtAcc, ParamAcc}) ->
+                {Fmt, Params} = format_union(Module, Struct, Value),
+                {[Fmt | FmtAcc], Params ++ ParamAcc}
+            end, {[], []}, ValueList),
+    {"~s = [" ++ string:join(UnionFormat, ", ") ++ "]", [Name] ++ UnionParam};
 format_({_Fid, _Required, {list, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueList) ->
     FormattedValueList =
         lists:foldr(
