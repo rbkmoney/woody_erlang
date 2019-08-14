@@ -23,7 +23,8 @@ format_({_Fid, _Required, {struct, struct, {Module, Struct}}, Name, _Default}, V
     {StructFormat, StructParam} = format_struct(Module, Struct, Value),
     {"~s = " ++ StructFormat, [Name] ++ StructParam};
 format_({_Fid, _Required, {struct, union, {Module, Struct}}, Name, _Default}, Value) ->
-    {"~s = ~s", [Name, format_union(Module, Struct, Value)]};
+    {UnionFormat, UnionParam} = format_union(Module, Struct, Value),
+    {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
 format_({_Fid, _Required, {struct, enum, {Module, Struct}}, Name, _Default}, Value) ->
     {"~s = ~s", [Name, format_enum(Module, Struct, Value)]};
 format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Default}, ValueList) ->
@@ -89,28 +90,28 @@ format_union(Module, Struct, {Type, UnionValue}) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     case lists:keysearch(Type, 4, StructMeta) of
         {value, {_, _, {struct, struct, {M, S}}, _, _}} ->
-            ValueList = tl(tuple_to_list(UnionValue)), %% Remove record name
-            case M:struct_info(S) of
-                {struct, struct, []} -> atom_to_list(S);
-                {struct, struct, UnionMeta} ->
-                    FormattedArgs = format_(UnionMeta, ValueList),
-                    lists:flatten([atom_to_list(S), "{", string:join(lists:reverse(FormattedArgs), ", "), "}"])
-            end;
+            format_struct(M, S, UnionValue);
+%%            case M:struct_info(S) of
+%%                {struct, struct, []} -> atom_to_list(S);
+%%                {struct, struct, UnionMeta} ->
+%%                    ValueList = tl(tuple_to_list(UnionValue)), %% Remove record name
+%%                    FormattedArgs = format_(UnionMeta, ValueList),
+%%                    lists:flatten([atom_to_list(S), "{", string:join(lists:reverse(FormattedArgs), ", "), "}"])
+%%            end;
         {value, {_, _, {list, {struct, union, {M, S}}}, Name, _}} ->
-            FormattedValueList =
+            {FormatParams, FormatValues} =
                 lists:foldr(
-                    fun(Value, FormattedAcc) ->
-                        FormattedUnion = format_union(M, S, Value),
-                        [io_lib:format("~s{~s = '~s'}", [Struct, Name, FormattedUnion])| FormattedAcc]
-                    end, [], UnionValue),
-            FormattedValue = string:join(FormattedValueList, ", "),
-            io_lib:format("~s = [~s]", [Name, FormattedValue]);
+                    fun(Value, {AF, AP}) ->
+                        {F, P} = format_union(M, S, Value),
+                        {[F | AF], P ++ AP}
+                    end, {[],[]}, UnionValue),
+            {"~s = [" ++ string:join(FormatParams, ", ") ++ "]", [Name, FormatValues]};
         {value, {_, _, {struct, union, {M, S}}, _, _}} ->
             format_union(M, S, UnionValue);
         {value, {_, _, string, Name, _}} when is_binary(UnionValue) ->
-            io_lib:format("~s{~s = '~s'}", [Struct, Name, UnionValue]);
+            {"~s{~s = '~s'}", [Struct, Name, UnionValue]};
         {value, {_, _, _Type, Name, _}} ->
-            io_lib:format("~s{~s = ~p}", [Struct, Name, UnionValue])
+            {"~s{~s = ~p}", [Struct, Name, UnionValue]}
     end.
 
 format_enum(Module, Struct, {Type, EnumValue}) ->
@@ -120,25 +121,35 @@ format_enum(Module, Struct, {Type, EnumValue}) ->
     {value, {Value, _}} = lists:keysearch(EnumValue, 2, EnumInfo),
     io_lib:format("~s{~s = ~s}",[Struct,Name,Value]).
 
-format_value({nl, _Null}) -> 'Null';
-format_value({bin, Bin}) when size(Bin) =< ?MAX_BIN_LENGTH -> io_lib:format("~p", [Bin]);
-format_value({bin, _Bin}) -> "<<...>>";
-format_value({i, N}) -> integer_to_list(N);
-format_value({str, S}) -> io_lib:format("'~s'", [S]);
+format_value({nl, _Null}) ->
+    {"~s", ['Null']};
+format_value({bin, Bin}) when size(Bin) =< ?MAX_BIN_LENGTH ->
+    {"~p", [Bin]};
+format_value({bin, _Bin}) ->
+    {"~s", ["<<...>>"]};
+format_value({i, N}) ->
+    {"~p", [N]};
+format_value({str, S}) ->
+    {"'~s'", [S]};
 format_value({obj, S}) ->
     ObjData = maps:to_list(S),
-    Result =
+    {Params, Values} =
         lists:foldr(
-            fun({K, V}, Acc) ->
-                [ lists:flatten(io_lib:format("~s => ~s", [format_value(K), format_value(V)])) | Acc]
+            fun({K, V}, {FmtAcc, ParamAcc}) ->
+                {KeyFmt, KeyParam} = format_value(K),
+                {ValueFmt, ValueParam} = format_value(V),
+                {[KeyFmt ++ " => " ++ ValueFmt | FmtAcc], KeyParam ++ ValueParam ++ ParamAcc}
             end,
-            [], ObjData
+            {[], []}, ObjData
         ),
-    lists:flatten(["#{",string:join(Result, ", "), "}"]);
-format_value({arr, S}) ->
-    Result = lists:map(
-        fun
-            (Entry) ->
-                format_value(Entry)
-        end, S),
-    lists:flatten(["[",string:join(Result, ", "), "]"]).
+    {"#{" ++ string:join(Params, ", ") ++ "}", Values};
+format_value({arr, List}) ->
+    {Params, Values} =
+        lists:foldr(
+            fun(Entry, {FmtAcc, ParamAcc}) ->
+                {Fmt, Param} = format_value(Entry),
+                {[Fmt | FmtAcc], Param ++ ParamAcc}
+            end,
+            {[], []}, List
+        ),
+    {"[" ++ string:join(Params, ", ") ++ "]", Values}.

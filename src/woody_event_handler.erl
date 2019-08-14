@@ -520,37 +520,65 @@ format_service_request_test_() -> [
                     type => call}
             )
         )
-%%    ),
-%%    ?_assertEqual(
-%%        lists:flatten([
-%%            "Processor:ProcessSignal(a = SignalArgs{signal = InitSignal{arg = <<...>>}, machine = Machine{ns = 'party', ",
-%%            "id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{direction = forward}, aux_state = Content{data = <<>>}, ",
-%%            "aux_state_legacy = <<>>}})"
-%%        ]),
-%%        format_msg(
-%%            format_service_request(
-%%                #{args =>
-%%                [{mg_stateproc_SignalArgs,
-%%                    {init,
-%%                        {mg_stateproc_InitSignal,
-%%                            {bin,
-%%                                <<131,109,0,0,0,24,12,0,1,11,0,1,0,0,0,12,104,103,95,
-%%                                    99,116,95,104,101,108,112,101,114,0,0>>}}},
-%%                    {mg_stateproc_Machine,<<"party">>,<<"1CQxZsCgLJY">>,[],
-%%                        {mg_stateproc_HistoryRange,undefined,undefined,forward},
-%%                        {mg_stateproc_Content,undefined,{bin,<<>>}},
-%%                        undefined,
-%%                        {bin,<<>>}}}],
-%%                    deadline => {{{2019,8,12},{12,46,36}},433},
-%%                    execution_start_time => 1565613966542,function => 'ProcessSignal',
-%%                    metadata =>
-%%                    #{<<"user-identity.id">> => <<"1CQxZsCgLJY">>,
-%%                        <<"user-identity.realm">> => <<"external">>},
-%%                    role => server,service => 'Processor',
-%%                    service_schema => {mg_proto_state_processing_thrift,'Processor'},
-%%                    type => call}
-%%            )
-%%        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessSignal(a = SignalArgs{signal = InitSignal{arg = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{direction = forward}, aux_state = Content{data = <<>>}, ",
+            "aux_state_legacy = <<>>}})"
+        ]),
+        format_msg(
+            format_service_request(
+                #{args =>
+                [{mg_stateproc_SignalArgs,
+                    {init,
+                        {mg_stateproc_InitSignal,
+                            {bin,
+                                <<131,109,0,0,0,24,12,0,1,11,0,1,0,0,0,12,104,103,95,
+                                    99,116,95,104,101,108,112,101,114,0,0>>}}},
+                    {mg_stateproc_Machine,<<"party">>,<<"1CQxZsCgLJY">>,[],
+                        {mg_stateproc_HistoryRange,undefined,undefined,forward},
+                        {mg_stateproc_Content,undefined,{bin,<<>>}},
+                        undefined,
+                        {bin,<<>>}}}],
+                    deadline => {{{2019,8,12},{12,46,36}},433},
+                    execution_start_time => 1565613966542,function => 'ProcessSignal',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CQxZsCgLJY">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    role => server,service => 'Processor',
+                    service_schema => {mg_proto_state_processing_thrift,'Processor'},
+                    type => call}
+            )
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 %%    ),
 %%    ?_assertEqual(
 %%        lists:flatten([
