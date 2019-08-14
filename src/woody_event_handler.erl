@@ -312,13 +312,33 @@ format_event(UnknownEventType, Meta) ->
 -spec format_service_request(map()) ->
     msg().
 format_service_request(#{service_schema := {Module, Service}, service:=Service, function:=Function, args:=Args}) ->
+    case Module:function_info(Service, Function, params_type) of
+        {struct, struct, ArgTypes} ->
+            {ArgsFormat, ArgsArgs} = format_args(ArgTypes, Args),
+            {"~s:~s(" ++ ArgsFormat ++ ")", [Service, Function] ++ ArgsArgs};
+        _Other ->
+            {"~s:~s(~p)", [Service, Function, Args]}
+    end.
+
+-spec format_service_reply(map()) ->
+    msg().
+format_service_reply(#{service_schema := {Module, Service}, service:=Service, function:=Function, result:={ok, Result}}) ->
     _ = dbg:tracer(),
     _ = dbg:p(all, c),
     _ = dbg:tpl({woody_event_formatter, '_', '_'}, x),
 
-    {struct, struct, ArgTypes} = Module:function_info(Service, Function, params_type),
-    {ArgsFormat, ArgsArgs} = format_args(ArgTypes, Args),
-    {"~s:~s(" ++ ArgsFormat ++ ")", [Service, Function] ++ ArgsArgs}.
+    case Module:function_info(Service, Function, reply_type) of
+        {struct, struct, []} ->
+            {"", []};
+        {struct, struct, {ReplyModule, ReplyType}} ->
+            woody_event_formatter:format_struct(ReplyModule, ReplyType, Result);
+        {list, Type} ->
+            woody_event_formatter:format_list(Type, Result);
+        _ ->
+            {"~p", [Result]}
+    end;
+format_service_reply(#{result:=Result}) ->
+    {"~p", [Result]}.
 
 -spec format_exception(msg(), woody_error:stack()) ->
     msg().
@@ -730,77 +750,79 @@ format_service_request_test_() -> [
         )
     )
 ].
-%%
-%%-spec result_test_() -> _.
-%%result_test_() -> [
-%%    ?_assertEqual(
-%%        lists:flatten([
-%%            "CallResult{response = <<131,100,0,2,111,107>>, change = MachineStateChange{aux_state = Content{",
-%%            "data = #{'aux_state' => <<...>>, 'ct' => 'application/x-erlang-binary'}}, ",
-%%            "events = [Content{data = [#{'ct' => 'application/x-erlang-binary', 'vsn' => 6}, <<...>>]}]}, ",
-%%            "action = ComplexAction{}}"
-%%        ]),
-%%        format_meta(
-%%            #{
-%%                deadline => {{{2019,8,13},{11,19,32}},986},
-%%                execution_start_time => 1565695142994,function => 'ProcessCall',
-%%                metadata =>
-%%                #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
-%%                    <<"user-identity.realm">> => <<"external">>},
-%%                result =>
-%%                {ok,{mg_stateproc_CallResult,
-%%                    {bin,<<131,100,0,2,111,107>>},
-%%                    {mg_stateproc_MachineStateChange,
-%%                        {mg_stateproc_Content,undefined,
-%%                            {obj,
-%%                                #{{str,<<"aux_state">>} =>
-%%                                {bin,
-%%                                    <<131,116,0,0,0,2,100,0,20,112,97,114,116,
-%%                                        121,95,114,101,118,105,115,105,111,110,
-%%                                        95,105,110,100,101,120,116,0,0,0,7,97,0,
-%%                                        104,2,97,1,97,1,97,1,104,2,97,2,97,2,97,
-%%                                        2,104,2,97,3,97,3,97,3,104,2,97,4,97,4,
-%%                                        97,4,104,2,97,5,97,5,97,5,104,2,97,6,97,
-%%                                        6,97,6,104,2,97,7,97,7,100,0,14,115,110,
-%%                                        97,112,115,104,111,116,95,105,110,100,
-%%                                        101,120,106>>},
-%%                                    {str,<<"ct">>} =>
-%%                                    {str,<<"application/x-erlang-binary">>}}}},
-%%                        [{mg_stateproc_Content,undefined,
-%%                            {arr,
-%%                                [{obj,
-%%                                    #{{str,<<"ct">>} =>
-%%                                    {str,<<"application/x-erlang-binary">>},
-%%                                        {str,<<"vsn">>} => {i,6}}},
-%%                                    {bin,
-%%                                        <<131,104,2,100,0,13,112,97,114,116,121,
-%%                                            95,99,104,97,110,103,101,115,108,0,0,0,
-%%                                            2,104,2,100,0,13,115,104,111,112,95,98,
-%%                                            108,111,99,107,105,110,103,104,3,100,0,
-%%                                            20,112,97,121,112,114,111,99,95,83,104,
-%%                                            111,112,66,108,111,99,107,105,110,103,
-%%                                            109,0,0,0,11,49,67,83,87,71,56,106,48,
-%%                                            52,119,77,104,2,100,0,7,98,108,111,99,
-%%                                            107,101,100,104,3,100,0,14,100,111,109,
-%%                                            97,105,110,95,66,108,111,99,107,101,100,
-%%                                            109,0,0,0,0,109,0,0,0,27,50,48,49,57,45,
-%%                                            48,56,45,49,51,84,49,49,58,49,57,58,48,
-%%                                            51,46,48,49,53,50,50,50,90,104,2,100,0,
-%%                                            16,114,101,118,105,115,105,111,110,95,
-%%                                            99,104,97,110,103,101,100,104,3,100,0,
-%%                                            28,112,97,121,112,114,111,99,95,80,97,
-%%                                            114,116,121,82,101,118,105,115,105,111,
-%%                                            110,67,104,97,110,103,101,100,109,0,0,0,
-%%                                            27,50,48,49,57,45,48,56,45,49,51,84,49,
-%%                                            49,58,49,57,58,48,51,46,48,49,53,50,50,
-%%                                            50,90,97,6,106>>}]}}],
-%%                        undefined,undefined},
-%%                    {mg_stateproc_ComplexAction,undefined,undefined,undefined,
-%%                        undefined}}},
-%%                role => server,service => 'Processor',
-%%                service_schema => {mg_proto_state_processing_thrift,'Processor'},
-%%                status => ok,type => call}
-%%        )
+
+-spec result_test_() -> _.
+result_test_() -> [
+    ?_assertEqual(
+        lists:flatten([
+            "CallResult{response = <<131,100,0,2,111,107>>, change = MachineStateChange{aux_state = Content{",
+            "data = #{'aux_state' => <<...>>, 'ct' => 'application/x-erlang-binary'}}, ",
+            "events = [Content{data = [#{'ct' => 'application/x-erlang-binary', 'vsn' => 6}, <<...>>]}]}, ",
+            "action = ComplexAction{}}"
+        ]),
+        format_msg(
+            format_service_reply(
+                #{
+                    deadline => {{{2019,8,13},{11,19,32}},986},
+                    execution_start_time => 1565695142994,function => 'ProcessCall',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result =>
+                    {ok,{mg_stateproc_CallResult,
+                        {bin,<<131,100,0,2,111,107>>},
+                        {mg_stateproc_MachineStateChange,
+                            {mg_stateproc_Content,undefined,
+                                {obj,
+                                    #{{str,<<"aux_state">>} =>
+                                    {bin,
+                                        <<131,116,0,0,0,2,100,0,20,112,97,114,116,
+                                            121,95,114,101,118,105,115,105,111,110,
+                                            95,105,110,100,101,120,116,0,0,0,7,97,0,
+                                            104,2,97,1,97,1,97,1,104,2,97,2,97,2,97,
+                                            2,104,2,97,3,97,3,97,3,104,2,97,4,97,4,
+                                            97,4,104,2,97,5,97,5,97,5,104,2,97,6,97,
+                                            6,97,6,104,2,97,7,97,7,100,0,14,115,110,
+                                            97,112,115,104,111,116,95,105,110,100,
+                                            101,120,106>>},
+                                        {str,<<"ct">>} =>
+                                        {str,<<"application/x-erlang-binary">>}}}},
+                            [{mg_stateproc_Content,undefined,
+                                {arr,
+                                    [{obj,
+                                        #{{str,<<"ct">>} =>
+                                        {str,<<"application/x-erlang-binary">>},
+                                            {str,<<"vsn">>} => {i,6}}},
+                                        {bin,
+                                            <<131,104,2,100,0,13,112,97,114,116,121,
+                                                95,99,104,97,110,103,101,115,108,0,0,0,
+                                                2,104,2,100,0,13,115,104,111,112,95,98,
+                                                108,111,99,107,105,110,103,104,3,100,0,
+                                                20,112,97,121,112,114,111,99,95,83,104,
+                                                111,112,66,108,111,99,107,105,110,103,
+                                                109,0,0,0,11,49,67,83,87,71,56,106,48,
+                                                52,119,77,104,2,100,0,7,98,108,111,99,
+                                                107,101,100,104,3,100,0,14,100,111,109,
+                                                97,105,110,95,66,108,111,99,107,101,100,
+                                                109,0,0,0,0,109,0,0,0,27,50,48,49,57,45,
+                                                48,56,45,49,51,84,49,49,58,49,57,58,48,
+                                                51,46,48,49,53,50,50,50,90,104,2,100,0,
+                                                16,114,101,118,105,115,105,111,110,95,
+                                                99,104,97,110,103,101,100,104,3,100,0,
+                                                28,112,97,121,112,114,111,99,95,80,97,
+                                                114,116,121,82,101,118,105,115,105,111,
+                                                110,67,104,97,110,103,101,100,109,0,0,0,
+                                                27,50,48,49,57,45,48,56,45,49,51,84,49,
+                                                49,58,49,57,58,48,51,46,48,49,53,50,50,
+                                                50,90,97,6,106>>}]}}],
+                            undefined,undefined},
+                        {mg_stateproc_ComplexAction,undefined,undefined,undefined,
+                            undefined}}},
+                    role => server,service => 'Processor',
+                    service_schema => {mg_proto_state_processing_thrift,'Processor'},
+                    status => ok,type => call}
+            )
+        )
 %%    ),
 %%    ?_assertEqual(
 %%        lists:flatten([
@@ -954,7 +976,7 @@ format_service_request_test_() -> [
 %%%%                service_schema => {dmsl_payment_processing_thrift,'CustomerManagement'},
 %%%%                status => error,type => call}
 %%%%        )
-%%    )
-%%].
+    )
+].
 
 -endif.

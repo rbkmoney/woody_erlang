@@ -1,7 +1,10 @@
 -module(woody_event_formatter).
 
 -export([
-    format_arg/2
+    format_arg/2,
+    format_struct/3,
+    format_union/3,
+    format_list/2
 ]).
 
 %% Binaries under size below will log as-is.
@@ -9,7 +12,6 @@
 
 -spec format_arg(term(), term()) ->
     woody_event_handler:msg().
-
 format_arg(ArgType, Arg) ->
     format_(ArgType, Arg).
 
@@ -28,32 +30,22 @@ format_({_Fid, _Required, {struct, union, {Module, Struct}}, Name, _Default}, Va
 format_({_Fid, _Required, {struct, enum, {Module, Struct}}, Name, _Default}, Value) ->
     {"~s = ~s", [Name, format_enum(Module, Struct, Value)]};
 format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    {UnionFormat, UnionParam} =
-        lists:foldr(
-            fun(Value, {FmtAcc, ParamAcc}) ->
-                {Fmt, Params} = format_union(Module, Struct, Value),
-                {[Fmt | FmtAcc], Params ++ ParamAcc}
-            end, {[], []}, ValueList),
-    {"~s = [" ++ string:join(UnionFormat, ", ") ++ "]", [Name] ++ UnionParam};
+    {UnionFormat, UnionParam} = format_list_(Module, Struct, ValueList, fun format_union/3),
+    {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
 format_({_Fid, _Required, {list, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    {StructFormat, StructParam} =
-        lists:foldr(
-            fun(Value, {FmtAcc, ParamAcc}) ->
-                {Fmt, Params} = format_struct(Module, Struct, Value),
-                {[Fmt | FmtAcc], Params ++ ParamAcc}
-            end, {[], []}, ValueList),
-    {"~s = [" ++ string:join(StructFormat, ", ") ++ "]", [Name] ++ StructParam};
+    {StructFormat, StructParam} = format_list_(Module, Struct, ValueList, fun format_struct/3),
+    {"~s = " ++ StructFormat, [Name] ++ StructParam};
 format_({_Fid, _Required, {map, string, {struct, struct,{Module,Struct}}}, Name, _Default}, ValueMap) ->
     MapData = maps:to_list(ValueMap),
-    Result =
+    {Params, Values} =
         lists:foldr(
-            fun({K, V}, Acc1) ->
-                [io_lib:format("~s => ~s", [K, format_struct(Module, Struct, V)]) | Acc1]
+            fun({K, V}, {FmtAcc, ParamAcc}) ->
+                {Fmt, Param} = format_struct(Module, Struct, V),
+                {["~s => " ++ Fmt | FmtAcc], [K] ++ Param ++ ParamAcc}
             end,
-            [], MapData
+            {[], []}, MapData
         ),
-    FormattedResult = lists:flatten("#{",[string:join(Result, ", "), "}"]),
-    {"~s = ~s", [Name, FormattedResult]};
+    {"~s = #{" ++ string:join(Params, ", ") ++ "}", [Name, Values]};
 format_({_Fid, _Required, _Type, Name, _Default}, Value) ->
     %% All other types such as i32, i64, bool, etc.
     {"~s = ~p", [Name, Value]};
@@ -61,6 +53,8 @@ format_(_Type, Value) ->
     %% All unknown types
     {"~p", [Value]}.
 
+-spec format_struct(atom(), atom(), term()) ->
+    woody_event_handler:msg().
 format_struct(Module, Struct, StructValue) ->
     {struct, struct, StructMeta} = Module:struct_info(Struct),
     case StructMeta of
@@ -82,6 +76,8 @@ format_struct(Module, Struct, StructValue) ->
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}
     end.
 
+-spec format_union(atom(), atom(), term()) ->
+    woody_event_handler:msg().
 %% Filter and map Values direct to its value
 format_union(_Module, 'Value', Value) ->
     format_value(Value);
@@ -91,13 +87,6 @@ format_union(Module, Struct, {Type, UnionValue}) ->
     case lists:keysearch(Type, 4, StructMeta) of
         {value, {_, _, {struct, struct, {M, S}}, _, _}} ->
             format_struct(M, S, UnionValue);
-%%            case M:struct_info(S) of
-%%                {struct, struct, []} -> atom_to_list(S);
-%%                {struct, struct, UnionMeta} ->
-%%                    ValueList = tl(tuple_to_list(UnionValue)), %% Remove record name
-%%                    FormattedArgs = format_(UnionMeta, ValueList),
-%%                    lists:flatten([atom_to_list(S), "{", string:join(lists:reverse(FormattedArgs), ", "), "}"])
-%%            end;
         {value, {_, _, {list, {struct, union, {M, S}}}, Name, _}} ->
             {FormatParams, FormatValues} =
                 lists:foldr(
@@ -120,6 +109,24 @@ format_enum(Module, Struct, {Type, EnumValue}) ->
     {enum, EnumInfo} = M:enum_info(S),
     {value, {Value, _}} = lists:keysearch(EnumValue, 2, EnumInfo),
     io_lib:format("~s{~s = ~s}",[Struct,Name,Value]).
+
+-spec format_list(term(), [term()]) ->
+    woody_event_handler:msg().
+format_list(_, []) ->
+    {"", []};
+format_list({struct, struct, {Module, Struct}}, ValueList) ->
+    format_list_(Module, Struct, ValueList, fun format_struct/3);
+format_list({struct, union, {Module, Struct}}, ValueList) ->
+    format_list_(Module, Struct, ValueList, fun format_union/3).
+
+format_list_(Module, Struct, ValueList, FormatStructFun) ->
+    {StructFormat, StructParam} =
+        lists:foldr(
+            fun(Value, {FmtAcc, ParamAcc}) ->
+                {Fmt, Params} = FormatStructFun(Module, Struct, Value),
+                {[Fmt | FmtAcc], Params ++ ParamAcc}
+            end, {[], []}, ValueList),
+    {"[" ++ string:join(StructFormat, ", ") ++ "]", StructParam}.
 
 format_value({nl, _Null}) ->
     {"~s", ['Null']};
