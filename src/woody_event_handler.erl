@@ -246,7 +246,7 @@ format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack})
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
 format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
-    {info, {"[client] request handled successfully ~p", [Result]}};
+    {info, append_msg({"[client] request handled successfully ", []}, format_service_reply(Result))};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
@@ -274,7 +274,7 @@ format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result}) ->
-    {info, {"[server] handling result: ~p", [Result]}};
+    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Result))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}) ->
     {info, {"[server] handling result business error: ~p", [Error]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
@@ -823,88 +823,88 @@ result_test_() -> [
                     status => ok,type => call}
             )
         )
-%%    ),
-%%    ?_assertEqual(
-%%        lists:flatten([
-%%            "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
-%%            "created_at = '2019-08-13T11:19:01.249440Z', blocking = Unblocked{reason = '', ",
-%%            "since = '2019-08-13T11:19:02.655869Z'}, suspension = Active{since = '2019-08-13T11:19:02.891892Z'}, ",
-%%            "contractors = #{}, contracts = #{1CSWG8j04wK => Contract{id = '1CSWG8j04wK', ",
-%%            "payment_institution = PaymentInstitutionRef{id = 1}, created_at = '2019-08-13T11:19:01.387269Z', ",
-%%            "status = ContractActive, terms = TermSetHierarchyRef{id = 1}, adjustments = [], ",
-%%            "payout_tools = [PayoutTool{id = '1CSWG8j04wL', created_at = '2019-08-13T11:19:01.387269Z', ",
-%%            "currency = CurrencyRef{symbolic_code = 'RUB'}, payout_tool_info = RussianBankAccount{",
-%%            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-%%            "bank_bik = '66642666'}}], contractor = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-%%            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-%%            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', representative_full_name = ",
-%%            "'Someone', representative_document = '100$ banknote', russian_bank_account = RussianBankAccount{",
-%%            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-%%            "bank_bik = '66642666'}}}}, shops = #{1CSWG8j04wM => Shop{id = '1CSWG8j04wM', ",
-%%            "created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocked{reason = '', ",
-%%            "since = '2019-08-13T11:19:03.015222Z'}, suspension = Active{since = '2019-08-13T11:19:01.387269Z'}, ",
-%%            "details = ShopDetails{name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, ",
-%%            "category = CategoryRef{id = 1}, account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, ",
-%%            "settlement = 7, guarantee = 6, payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, ",
-%%            "wallets = #{}, revision = 6}"
-%%        ]),
-%%        format_msg(
-%%            format_service_reply(
-%%            #{args =>
-%%            [{payproc_UserInfo,<<"1CSWG2vduGe">>,
-%%                {external_user,{payproc_ExternalUser}}},
-%%                <<"1CSWG2vduGe">>,
-%%                {revision,6}],
-%%                deadline => {{{2019,8,13},{11,19,33}},42},
-%%                execution_start_time => 1565695143068,function => 'Checkout',
-%%                metadata =>
-%%                #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
-%%                    <<"user-identity.realm">> => <<"external">>},
-%%                result =>
-%%                {ok,
-%%                    {domain_Party,<<"1CSWG2vduGe">>,
-%%                        {domain_PartyContactInfo,<<"hg_ct_helper">>},
-%%                        <<"2019-08-13T11:19:01.249440Z">>,
-%%                        {unblocked,{domain_Unblocked,<<>>,<<"2019-08-13T11:19:02.655869Z">>}},
-%%                        {active,{domain_Active,<<"2019-08-13T11:19:02.891892Z">>}},
-%%                        #{},
-%%                        #{<<"1CSWG8j04wK">> =>
-%%                        {domain_Contract,<<"1CSWG8j04wK">>,undefined,
-%%                            {domain_PaymentInstitutionRef,1},
-%%                            <<"2019-08-13T11:19:01.387269Z">>,undefined,undefined,
-%%                            {active,{domain_ContractActive}},
-%%                            {domain_TermSetHierarchyRef,1},
-%%                            [],
-%%                            [{domain_PayoutTool,<<"1CSWG8j04wL">>,
-%%                                <<"2019-08-13T11:19:01.387269Z">>,
-%%                                {domain_CurrencyRef,<<"RUB">>},
-%%                                {russian_bank_account,
-%%                                    {domain_RussianBankAccount,<<"4276300010908312893">>,
-%%                                        <<"SomeBank">>,<<"123129876">>,<<"66642666">>}}}],
-%%                            undefined,undefined,
-%%                            {legal_entity,
-%%                                {russian_legal_entity,
-%%                                    {domain_RussianLegalEntity,<<"Hoofs & Horns OJSC">>,
-%%                                        <<"1234509876">>,<<"1213456789012">>,
-%%                                        <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>,<<"NaN">>,
-%%                                        <<"Director">>,<<"Someone">>,<<"100$ banknote">>,
-%%                                        {domain_RussianBankAccount,<<"4276300010908312893">>,
-%%                                            <<"SomeBank">>,<<"123129876">>,<<"66642666">>}}}}}},
-%%                        #{<<"1CSWG8j04wM">> =>
-%%                        {domain_Shop,<<"1CSWG8j04wM">>,<<"2019-08-13T11:19:01.387269Z">>,
-%%                            {blocked,{domain_Blocked,<<>>,<<"2019-08-13T11:19:03.015222Z">>}},
-%%                            {active,{domain_Active,<<"2019-08-13T11:19:01.387269Z">>}},
-%%                            {domain_ShopDetails,<<"Battle Ready Shop">>,undefined},
-%%                            {url,<<>>},
-%%                            {domain_CategoryRef,1},
-%%                            {domain_ShopAccount,{domain_CurrencyRef,<<"RUB">>},7,6,8},
-%%                            <<"1CSWG8j04wK">>,<<"1CSWG8j04wL">>,undefined}},
-%%                        #{},6}},
-%%                role => server,service => 'PartyManagement',
-%%                service_schema => {dmsl_payment_processing_thrift,'PartyManagement'},
-%%                status => ok,type => call}
-%%            )
-%%        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
+            "created_at = '2019-08-13T11:19:01.249440Z', blocking = Unblocked{reason = '', ",
+            "since = '2019-08-13T11:19:02.655869Z'}, suspension = Active{since = '2019-08-13T11:19:02.891892Z'}, ",
+            "contractors = #{}, contracts = #{1CSWG8j04wK => Contract{id = '1CSWG8j04wK', ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, created_at = '2019-08-13T11:19:01.387269Z', ",
+            "status = ContractActive, terms = TermSetHierarchyRef{id = 1}, adjustments = [], ",
+            "payout_tools = [PayoutTool{id = '1CSWG8j04wL', created_at = '2019-08-13T11:19:01.387269Z', ",
+            "currency = CurrencyRef{symbolic_code = 'RUB'}, payout_tool_info = RussianBankAccount{",
+            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
+            "bank_bik = '66642666'}}], contractor = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', representative_full_name = ",
+            "'Someone', representative_document = '100$ banknote', russian_bank_account = RussianBankAccount{",
+            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
+            "bank_bik = '66642666'}}}}, shops = #{1CSWG8j04wM => Shop{id = '1CSWG8j04wM', ",
+            "created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocked{reason = '', ",
+            "since = '2019-08-13T11:19:03.015222Z'}, suspension = Active{since = '2019-08-13T11:19:01.387269Z'}, ",
+            "details = ShopDetails{name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, ",
+            "category = CategoryRef{id = 1}, account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, ",
+            "settlement = 7, guarantee = 6, payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, ",
+            "wallets = #{}, revision = 6}"
+        ]),
+        format_msg(
+            format_service_reply(
+            #{args =>
+            [{payproc_UserInfo,<<"1CSWG2vduGe">>,
+                {external_user,{payproc_ExternalUser}}},
+                <<"1CSWG2vduGe">>,
+                {revision,6}],
+                deadline => {{{2019,8,13},{11,19,33}},42},
+                execution_start_time => 1565695143068,function => 'Checkout',
+                metadata =>
+                #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
+                    <<"user-identity.realm">> => <<"external">>},
+                result =>
+                {ok,
+                    {domain_Party,<<"1CSWG2vduGe">>,
+                        {domain_PartyContactInfo,<<"hg_ct_helper">>},
+                        <<"2019-08-13T11:19:01.249440Z">>,
+                        {unblocked,{domain_Unblocked,<<>>,<<"2019-08-13T11:19:02.655869Z">>}},
+                        {active,{domain_Active,<<"2019-08-13T11:19:02.891892Z">>}},
+                        #{},
+                        #{<<"1CSWG8j04wK">> =>
+                        {domain_Contract,<<"1CSWG8j04wK">>,undefined,
+                            {domain_PaymentInstitutionRef,1},
+                            <<"2019-08-13T11:19:01.387269Z">>,undefined,undefined,
+                            {active,{domain_ContractActive}},
+                            {domain_TermSetHierarchyRef,1},
+                            [],
+                            [{domain_PayoutTool,<<"1CSWG8j04wL">>,
+                                <<"2019-08-13T11:19:01.387269Z">>,
+                                {domain_CurrencyRef,<<"RUB">>},
+                                {russian_bank_account,
+                                    {domain_RussianBankAccount,<<"4276300010908312893">>,
+                                        <<"SomeBank">>,<<"123129876">>,<<"66642666">>}}}],
+                            undefined,undefined,
+                            {legal_entity,
+                                {russian_legal_entity,
+                                    {domain_RussianLegalEntity,<<"Hoofs & Horns OJSC">>,
+                                        <<"1234509876">>,<<"1213456789012">>,
+                                        <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>,<<"NaN">>,
+                                        <<"Director">>,<<"Someone">>,<<"100$ banknote">>,
+                                        {domain_RussianBankAccount,<<"4276300010908312893">>,
+                                            <<"SomeBank">>,<<"123129876">>,<<"66642666">>}}}}}},
+                        #{<<"1CSWG8j04wM">> =>
+                        {domain_Shop,<<"1CSWG8j04wM">>,<<"2019-08-13T11:19:01.387269Z">>,
+                            {blocked,{domain_Blocked,<<>>,<<"2019-08-13T11:19:03.015222Z">>}},
+                            {active,{domain_Active,<<"2019-08-13T11:19:01.387269Z">>}},
+                            {domain_ShopDetails,<<"Battle Ready Shop">>,undefined},
+                            {url,<<>>},
+                            {domain_CategoryRef,1},
+                            {domain_ShopAccount,{domain_CurrencyRef,<<"RUB">>},7,6,8},
+                            <<"1CSWG8j04wK">>,<<"1CSWG8j04wL">>,undefined}},
+                        #{},6}},
+                role => server,service => 'PartyManagement',
+                service_schema => {dmsl_payment_processing_thrift,'PartyManagement'},
+                status => ok,type => call}
+            )
+        )
     ),
     ?_assertEqual(
         lists:flatten([
