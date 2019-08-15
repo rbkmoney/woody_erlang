@@ -35,7 +35,7 @@ format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Defa
 format_({_Fid, _Required, {list, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueList) ->
     {StructFormat, StructParam} = format_list_(Module, Struct, ValueList, fun format_struct/3),
     {"~s = " ++ StructFormat, [Name] ++ StructParam};
-format_({_Fid, _Required, {map, string, {struct, struct,{Module,Struct}}}, Name, _Default}, ValueMap) ->
+format_({_Fid, _Required, {map, string, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueMap) ->
     MapData = maps:to_list(ValueMap),
     {Params, Values} =
         lists:foldr(
@@ -62,18 +62,19 @@ format_struct(Module, Struct, StructValue) ->
         StructMeta ->
             ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
             {Params, Values} = lists:foldr(
-                fun({Type, Value}, {FAcc, PAcc} = Acc) ->
-                    case format_(Type, Value) of
-                        {"", []} ->
-                            Acc;
-                        {F, P} ->
-                            {[F | FAcc], P ++ PAcc}
-                    end
-                end,
-                {[],[]},
+                fun format_struct_/2,
+                {[], []},
                 lists:zip(StructMeta, ValueList)
             ),
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}
+    end.
+
+format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
+    case format_(Type, Value) of
+        {"", []} ->
+            Acc;
+        {F, P} ->
+            {[F | FAcc], P ++ PAcc}
     end.
 
 -spec format_union(atom(), atom(), term()) ->
@@ -93,7 +94,7 @@ format_union(Module, Struct, {Type, UnionValue}) ->
                     fun(Value, {AF, AP}) ->
                         {F, P} = format_union(M, S, Value),
                         {[F | AF], P ++ AP}
-                    end, {[],[]}, UnionValue),
+                    end, {[], []}, UnionValue),
             {"~s = [" ++ string:join(FormatParams, ", ") ++ "]", [Name, FormatValues]};
         {value, {_, _, {struct, union, {M, S}}, _, _}} ->
             format_union(M, S, UnionValue);
@@ -108,7 +109,7 @@ format_enum(Module, Struct, {Type, EnumValue}) ->
     {value, {_, _, {struct, struct, {M, S}}, Name, _}} = lists:keysearch(Type, 4, StructMeta),
     {enum, EnumInfo} = M:enum_info(S),
     {value, {Value, _}} = lists:keysearch(EnumValue, 2, EnumInfo),
-    io_lib:format("~s{~s = ~s}",[Struct,Name,Value]).
+    io_lib:format("~s{~s = ~s}", [Struct, Name, Value]).
 
 -spec format_list(term(), [term()]) ->
     woody_event_handler:msg().
