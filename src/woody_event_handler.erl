@@ -246,7 +246,7 @@ format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack})
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
 format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta) ->
-    {info, append_msg({"[client] request handled successfully ", []}, format_service_reply(Meta))};
+    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta))};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
@@ -291,10 +291,10 @@ format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
-format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result}) ->
-    {debug, {"[client] request to '~s' cache update: '~p'", [URL, Result]}};
-format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := Result}) ->
-    {debug, {"[client] request to '~s' cache result: '~p'", [URL, Result]}};
+format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta) ->
+    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta))};
+format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta) ->
+    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta))};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
@@ -322,13 +322,14 @@ format_service_request(#{service_schema := {Module, Service}, service:=Service, 
 
 -spec format_service_reply(map()) ->
     msg().
-format_service_reply(
-    #{
-        service_schema := {Module, Service},
-        service:=Service,
-        function:=Function,
-        result:={ok, Result}
-    }) ->
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={Kind, Result}}) ->
+    format_service_reply(Module, Service, Function, Kind, Result);
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result}) ->
+    format_service_reply(Module, Service, Function, ok, Result);
+format_service_reply(Result) ->
+    {"~p", [Result]}.
+
+format_service_reply(Module, Service, Function, ok, Result) ->
     case Module:function_info(Service, Function, reply_type) of
         {struct, struct, []} ->
             {"", []};
@@ -339,8 +340,9 @@ format_service_reply(
         _ ->
             {"~p", [Result]}
     end;
-format_service_reply(#{result:=Result}) ->
-    {"~p", [Result]}.
+%% TODO Format exception below
+format_service_reply(_Module, _Service, _Function, Kind, Result) ->
+    {"~p", [{Kind, Result}]}.
 
 -spec format_exception(msg(), woody_error:stack()) ->
     msg().
