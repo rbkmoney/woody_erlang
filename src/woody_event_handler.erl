@@ -245,8 +245,8 @@ format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack})
     {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
-format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result}) ->
-    {info, append_msg({"[client] request handled successfully ", []}, format_service_reply(Result))};
+format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta) ->
+    {info, append_msg({"[client] request handled successfully ", []}, format_service_reply(Meta))};
 format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
@@ -273,8 +273,8 @@ format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
     {warning, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result}) ->
-    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Result))};
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta) ->
+    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}) ->
     {info, {"[server] handling result business error: ~p", [Error]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
@@ -304,7 +304,7 @@ format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, bod
 format_event(?EV_TRACE, #{event:=Event, role:=Role}) ->
     {debug, {"[~p] trace ~ts", [Role, Event]}};
 format_event(UnknownEventType, Meta) ->
-    {warning, {"unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
+    {warning, {" unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
 
 %%
 %% Internal functions
@@ -323,9 +323,9 @@ format_service_request(#{service_schema := {Module, Service}, service:=Service, 
 -spec format_service_reply(map()) ->
     msg().
 format_service_reply(#{service_schema := {Module, Service}, service:=Service, function:=Function, result:={ok, Result}}) ->
-    _ = dbg:tracer(),
-    _ = dbg:p(all, c),
-    _ = dbg:tpl({woody_event_formatter, '_', '_'}, x),
+%%    _ = dbg:tracer(),
+%%    _ = dbg:p(all, c),
+%%    _ = dbg:tpl({woody_event_formatter, '_', '_'}, x),
 
     case Module:function_info(Service, Function, reply_type) of
         {struct, struct, []} ->
