@@ -130,12 +130,16 @@ format_list_(Module, Struct, ValueList, FormatStructFun) ->
 
 format_value({nl, _Null}) ->
     {"~s", ['Null']};
+format_value({b, Boolean}) ->
+    {"~s", [Boolean]};
 format_value({bin, Bin}) when size(Bin) =< ?MAX_BIN_LENGTH ->
     {"~p", [Bin]};
 format_value({bin, _Bin}) ->
     {"~s", ["<<...>>"]};
 format_value({i, N}) ->
     {"~p", [N]};
+format_value({flt, F}) ->
+    {"~p", [F]};
 format_value({str, S}) ->
     {"'~s'", [S]};
 format_value({obj, S}) ->
