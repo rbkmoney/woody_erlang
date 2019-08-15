@@ -45,7 +45,7 @@ format_({_Fid, _Required, {map, string, {struct, struct,{Module,Struct}}}, Name,
             end,
             {[], []}, MapData
         ),
-    {"~s = #{" ++ string:join(Params, ", ") ++ "}", [Name, Values]};
+    {"~s = #{" ++ string:join(Params, ", ") ++ "}", [Name] ++ Values};
 format_({_Fid, _Required, _Type, Name, _Default}, Value) ->
     %% All other types such as i32, i64, bool, etc.
     {"~s = ~p", [Name, Value]};
