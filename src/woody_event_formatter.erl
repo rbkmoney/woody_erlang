@@ -109,7 +109,7 @@ format_enum(Module, Struct, {Type, EnumValue}) ->
     {value, {_, _, {struct, struct, {M, S}}, Name, _}} = lists:keysearch(Type, 4, StructMeta),
     {enum, EnumInfo} = M:enum_info(S),
     {value, {Value, _}} = lists:keysearch(EnumValue, 2, EnumInfo),
-    io_lib:format("~s{~s = ~s}", [Struct, Name, Value]).
+    {"~s{~s = ~s}", [Struct, Name, Value]}.
 
 -spec format_list(term(), [term()]) ->
     woody_event_handler:msg().
