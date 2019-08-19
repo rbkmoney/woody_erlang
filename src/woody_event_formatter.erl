@@ -27,8 +27,8 @@ format_({_Fid, _Required, {struct, struct, {Module, Struct}}, Name, _Default}, V
 format_({_Fid, _Required, {struct, union, {Module, Struct}}, Name, _Default}, Value) ->
     {UnionFormat, UnionParam} = format_union(Module, Struct, Value),
     {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
-format_({_Fid, _Required, {struct, enum, {Module, Struct}}, Name, _Default}, Value) ->
-    {"~s = ~s", [Name, format_enum(Module, Struct, Value)]};
+format_({_Fid, _Required, {enum, {_Module, _Struct}}, Name, _Default}, Value) ->
+    {"~s = ~s", [Name, Value]};
 format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Default}, ValueList) ->
     {UnionFormat, UnionParam} = format_list_(Module, Struct, ValueList, fun format_union/3),
     {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
@@ -103,13 +103,6 @@ format_union(Module, Struct, {Type, UnionValue}) ->
         {value, {_, _, _Type, Name, _}} ->
             {"~s{~s = ~p}", [Struct, Name, UnionValue]}
     end.
-
-format_enum(Module, Struct, {Type, EnumValue}) ->
-    {struct, enum, StructMeta} = Module:struct_info(Struct),
-    {value, {_, _, {struct, struct, {M, S}}, Name, _}} = lists:keysearch(Type, 4, StructMeta),
-    {enum, EnumInfo} = M:enum_info(S),
-    {value, {Value, _}} = lists:keysearch(EnumValue, 2, EnumInfo),
-    {"~s{~s = ~s}", [Struct, Name, Value]}.
 
 -spec format_list(term(), [term()]) ->
     woody_event_handler:msg().
