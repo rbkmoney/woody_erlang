@@ -2,6 +2,7 @@
 
 -export([
     format_call/4,
+    format_reply/5,
     format_struct/3,
     format_union/3,
     format_list/2,
@@ -43,6 +44,16 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value) ->
 format_argument(_Type, Value) ->
     %% All unknown types
     {"~w", [Value]}.
+
+-spec format_reply(atom(), atom(), atom(), atom(), term()) ->
+    woody_event_handler:msg().
+format_reply(Module, Service, Function, ok, Arguments) ->
+    ReplyType = Module:function_info(Service, Function, reply_type),
+    format_thrift_value(ReplyType, Arguments);
+format_reply(_Module, _Service, _Function, exception, Result) ->
+    {"~w", [Result]};
+format_reply(_Module, _Service, _Function, Kind, Result) ->
+    {"~w", [{Kind, Result}]}.
 
 -spec format_thrift_value(dmsl_domain_thrift:field_type(), term()) ->
     woody_event_handler:msg().

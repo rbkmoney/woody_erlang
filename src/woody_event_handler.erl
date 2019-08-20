@@ -317,26 +317,11 @@ format_service_request(#{service_schema := {Module, Service}, function:=Function
 -spec format_service_reply(map()) ->
     msg().
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={Kind, Result}}) ->
-    format_service_reply(Module, Service, Function, Kind, Result);
+    woody_event_formatter:format_reply(Module, Service, Function, Kind, Result);
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result}) ->
-    format_service_reply(Module, Service, Function, ok, Result);
+    woody_event_formatter:format_reply(Module, Service, Function, ok, Result);
 format_service_reply(Result) ->
     {"~w", [Result]}.
-
-format_service_reply(Module, Service, Function, ok, Result) ->
-    case Module:function_info(Service, Function, reply_type) of
-        {struct, struct, []} ->
-            {"", []};
-        {struct, struct, {ReplyModule, ReplyType}} ->
-            woody_event_formatter:format_struct(ReplyModule, ReplyType, Result);
-        {list, Type} ->
-            woody_event_formatter:format_list(Type, Result);
-        _ ->
-            {"~w", [Result]}
-    end;
-%% TODO Format exception below
-format_service_reply(_Module, _Service, _Function, Kind, Result) ->
-    {"~w", [{Kind, Result}]}.
 
 -spec format_exception(msg(), woody_error:stack()) ->
     msg().
