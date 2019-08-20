@@ -15,18 +15,19 @@ format_call(Module, Service, Function, Arguments) ->
         {struct, struct, ArgTypes} ->
             {ArgsFormat, ArgsArgs} =
                 lists:foldr(
-                    fun({Type, Argument}, {AccFmt, AccParam}) ->
-                        case format_argument(Type, Argument) of
-                            {"", []} -> {AccFmt, AccParam};
-                            {Fmt, Param} -> {[Fmt | AccFmt], Param ++ AccParam}
-                        end
-                    end,
+                    fun format_call_/2,
                     {[], []},
                     lists:zip(ArgTypes, Arguments)
                 ),
             {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
         _Other ->
             {"~s:~s(~w)", [Service, Function, Arguments]}
+    end.
+
+format_call_({Type, Argument}, {AccFmt, AccParam}) ->
+    case format_argument(Type, Argument) of
+        {"", []} -> {AccFmt, AccParam};
+        {Fmt, Param} -> {[Fmt | AccFmt], Param ++ AccParam}
     end.
 
 format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
@@ -70,7 +71,7 @@ format_thrift_value({list, Type}, ValueList) ->
                 {F, P} = format_thrift_value(Type, Entry),
                 {[F | FA], P ++ FP}
             end,
-            {[],[]},
+            {[], []},
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
@@ -81,7 +82,7 @@ format_thrift_value({set, Type}, SetofValues) ->
                 {Fmt, Param} = format_thrift_value(Type, Element),
                 {[Fmt | AccFmt], Param ++ AccParams}
             end,
-            {[],[]},
+            {[], []},
             SetofValues
         ),
     {"{" ++ Format ++ "}", Params};
@@ -92,7 +93,8 @@ format_thrift_value({map, KeyType, ValueType}, Map) ->
             fun({Key, Value}, {AccFmt, AccParam}) ->
                 {KeyFmt, KeyParam} = format_thrift_value(KeyType, Key),
                 {ValueFmt, ValueParam} = format_thrift_value(ValueType, Value),
-                {[KeyFmt ++ " => " ++ ValueFmt | AccFmt], KeyParam ++ ValueParam ++ AccParam}
+                EntryFormat = KeyFmt ++ " => " ++ ValueFmt,
+                {[EntryFormat | AccFmt], KeyParam ++ ValueParam ++ AccParam}
             end,
             {[], []}, MapData
         ),
