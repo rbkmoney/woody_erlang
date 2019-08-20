@@ -57,17 +57,13 @@ format_(_Type, Value) ->
     woody_event_handler:msg().
 format_struct(Module, Struct, StructValue) ->
     {struct, struct, StructMeta} = Module:struct_info(Struct),
-    case StructMeta of
-        [] -> {"~s", [Struct]};
-        StructMeta ->
-            ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
-            {Params, Values} = lists:foldr(
-                fun format_struct_/2,
-                {[], []},
-                lists:zip(StructMeta, ValueList)
-            ),
-            {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}
-    end.
+    ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
+    {Params, Values} = lists:foldr(
+        fun format_struct_/2,
+        {[], []},
+        lists:zip(StructMeta, ValueList)
+    ),
+    {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}.
 
 format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
     case format_(Type, Value) of
@@ -85,24 +81,26 @@ format_union(_Module, 'Value', Value) ->
 
 format_union(Module, Struct, {Type, UnionValue}) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
-    case lists:keysearch(Type, 4, StructMeta) of
-        {value, {_, _, {struct, struct, {M, S}}, _, _}} ->
-            format_struct(M, S, UnionValue);
-        {value, {_, _, {list, {struct, union, {M, S}}}, Name, _}} ->
-            {FormatParams, FormatValues} =
-                lists:foldr(
-                    fun(Value, {AF, AP}) ->
-                        {F, P} = format_union(M, S, Value),
-                        {[F | AF], P ++ AP}
-                    end, {[], []}, UnionValue),
-            {"~s = [" ++ string:join(FormatParams, ", ") ++ "]", [Name, FormatValues]};
-        {value, {_, _, {struct, union, {M, S}}, _, _}} ->
-            format_union(M, S, UnionValue);
-        {value, {_, _, string, Name, _}} when is_binary(UnionValue) ->
-            {"~s{~s = '~s'}", [Struct, Name, UnionValue]};
-        {value, {_, _, _Type, Name, _}} ->
-            {"~s{~s = ~p}", [Struct, Name, UnionValue]}
-    end.
+    {Format, Parameters} =
+        case lists:keysearch(Type, 4, StructMeta) of
+            {value, {_, _, {struct, struct, {M, S}}, _, _}} ->
+                format_struct(M, S, UnionValue);
+            {value, {_, _, {list, {struct, union, {M, S}}}, Name, _}} ->
+                {FormatParams, FormatValues} =
+                    lists:foldr(
+                        fun(Value, {AF, AP}) ->
+                            {F, P} = format_union(M, S, Value),
+                            {[F | AF], P ++ AP}
+                        end, {[], []}, UnionValue),
+                {"~s = [" ++ string:join(FormatParams, ", ") ++ "]", [Name, FormatValues]};
+            {value, {_, _, {struct, union, {M, S}}, _, _}} ->
+                format_union(M, S, UnionValue);
+            {value, {_, _, string, Name, _}} when is_binary(UnionValue) ->
+                {"~s{~s = '~s'}", [Struct, Name, UnionValue]};
+            {value, {_, _, _Type, Name, _}} ->
+                {"~s{~s = ~p}", [Struct, Name, UnionValue]}
+        end,
+    {"~s(" ++ Format ++ ")", [Type] ++ Parameters}.
 
 -spec format_list(term(), [term()]) ->
     woody_event_handler:msg().

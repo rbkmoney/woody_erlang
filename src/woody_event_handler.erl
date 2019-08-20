@@ -425,7 +425,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = ExternalUser}, ",
+            "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = external_user(ExternalUser{})}, ",
             "params = PartyParams{contact_info = PartyContactInfo{email = 'hg_ct_helper'}})"
             ]),
         format_msg(
@@ -486,8 +486,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten(
-            "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = ExternalUser}, ",
-            "party_id = '1CQdDqPROyW')"
+            "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', ",
+            "type = external_user(ExternalUser{})}, party_id = '1CQdDqPROyW')"
         ),
         format_msg(
             format_service_request(
@@ -508,8 +508,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten(
-            "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = ExternalUser}, ",
-            "party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})"
+            "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = external_user(ExternalUser{})}, ",
+            "party_id = '1CQdDqPROyW', revision = revision(PartyRevisionParam{revision = 1}))"
         ),
         format_msg(
             format_service_request(
@@ -568,11 +568,9 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "Processor:ProcessSignal(a = SignalArgs{signal = InitSignal{arg = <<...>>}, ",
-            "machine = Machine{ns = 'party', ",
-            "id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{direction = forward}, ",
-            "aux_state = Content{data = <<>>}, ",
-            "aux_state_legacy = <<>>}})"
+            "Processor:ProcessSignal(a = SignalArgs{signal = init(InitSignal{arg = <<...>>}), machine = ",
+            "Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{direction = ",
+            "forward}, aux_state = Content{data = <<>>}, aux_state_legacy = <<>>}})"
         ]),
         format_msg(
             format_service_request(
@@ -603,29 +601,25 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = ",
-            "[ContractModificationUnit{id = '1CR1Y2ZcrA0', ",
-            "modification = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, ",
-            "contractor = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', ",
-            "inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO', ",
-            "post_address = 'NaN', ",
-            "representative_position = 'Director', representative_full_name = 'Someone', ",
-            "representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}, ContractModificationUnit{id = '1CR1Y2ZcrA0', ",
-            "modification = PayoutToolModificationUnit{payout_tool_id = '1CR1Y2ZcrA1', ",
-            "modification = PayoutToolParams{",
-            "currency = CurrencyRef{symbolic_code = 'RUB'}, tool_info = RussianBankAccount{",
-            "account = '4276300010908312893', ",
-            "bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}, ",
-            "ShopModificationUnit{id = '1CR1Y2ZcrA2', ",
-            "modification = ShopParams{category = CategoryRef{id = 1}, location = ShopLocation{url = ''}, ",
-            "details = ShopDetails{",
-            "name = 'Battle Ready Shop'}, contract_id = '1CR1Y2ZcrA0', ",
-            "payout_tool_id = '1CR1Y2ZcrA1'}}, ShopModificationUnit{",
-            "id = '1CR1Y2ZcrA2', modification = ShopAccountParams{currency = CurrencyRef{symbolic_code = 'RUB'}}}])"
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [contract_modification(",
+            "ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = creation(ContractParams{template = ",
+            "ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, contractor = ",
+            "legal_entity(russian_legal_entity(RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = ",
+            "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}))})}), ",
+            "contract_modification(ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "payout_tool_modification(PayoutToolModificationUnit{payout_tool_id = '1CR1Y2ZcrA1', ",
+            "modification = creation(PayoutToolParams{currency = CurrencyRef{symbolic_code = 'RUB'}, ",
+            "tool_info = russian_bank_account(RussianBankAccount{account = '4276300010908312893', ",
+            "bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'})})})}), ",
+            "shop_modification(ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = creation(",
+            "ShopParams{category = CategoryRef{id = 1}, location = url(ShopLocation{url = ''}), details = ",
+            "ShopDetails{name = 'Battle Ready Shop'}, contract_id = '1CR1Y2ZcrA0', payout_tool_id = ",
+            "'1CR1Y2ZcrA1'})}), shop_modification(ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "shop_account_creation(ShopAccountParams{currency = CurrencyRef{symbolic_code = 'RUB'}})})])"
         ]),
         format_msg(
             format_service_request(
@@ -875,28 +869,27 @@ result_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
-            "created_at = '2019-08-13T11:19:01.249440Z', blocking = Unblocked{reason = '', ",
-            "since = '2019-08-13T11:19:02.655869Z'}, suspension = Active{since = '2019-08-13T11:19:02.891892Z'}, ",
-            "contractors = #{}, contracts = #{1CSWG8j04wK => Contract{id = '1CSWG8j04wK', ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, created_at = '2019-08-13T11:19:01.387269Z', ",
-            "status = ContractActive, terms = TermSetHierarchyRef{id = 1}, adjustments = [], ",
-            "payout_tools = [PayoutTool{id = '1CSWG8j04wL', created_at = '2019-08-13T11:19:01.387269Z', ",
-            "currency = CurrencyRef{symbolic_code = 'RUB'}, payout_tool_info = RussianBankAccount{",
-            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-            "bank_bik = '66642666'}}], contractor = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "created_at = '2019-08-13T11:19:01.249440Z', blocking = unblocked(Unblocked{reason = '', ",
+            "since = '2019-08-13T11:19:02.655869Z'}), suspension = active(Active{",
+            "since = '2019-08-13T11:19:02.891892Z'}), contractors = #{}, contracts = #{1CSWG8j04wK => ",
+            "Contract{id = '1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, created_at = ",
+            "'2019-08-13T11:19:01.387269Z', status = active(ContractActive{}), terms = TermSetHierarchyRef{",
+            "id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', created_at = ",
+            "'2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, payout_tool_info = ",
+            "russian_bank_account(RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'})}], contractor = legal_entity(",
+            "russian_legal_entity(RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', registered_number = ",
+            "'1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
             "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = ",
-            "'Someone', representative_document = '100$ banknote', russian_bank_account = RussianBankAccount{",
-            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-            "bank_bik = '66642666'}}}}, shops = #{1CSWG8j04wM => Shop{id = '1CSWG8j04wM', ",
-            "created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocked{reason = '', ",
-            "since = '2019-08-13T11:19:03.015222Z'}, suspension = Active{since = '2019-08-13T11:19:01.387269Z'}, ",
-            "details = ShopDetails{name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, ",
-            "category = CategoryRef{id = 1}, account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, ",
-            "settlement = 7, guarantee = 6, payout = 8}, contract_id = '1CSWG8j04wK', ",
-            "payout_tool_id = '1CSWG8j04wL'}}, ",
-            "wallets = #{}, revision = 6}"
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}))}}, shops = #{1CSWG8j04wM => Shop{",
+            "id = '1CSWG8j04wM', created_at = '2019-08-13T11:19:01.387269Z', blocking = blocked(Blocked{reason = '', ",
+            "since = '2019-08-13T11:19:03.015222Z'}), suspension = active(Active{since = ",
+            "'2019-08-13T11:19:01.387269Z'}), details = ShopDetails{name = 'Battle Ready Shop'}, location = ",
+            "url(ShopLocation{url = ''}), category = CategoryRef{id = 1}, account = ShopAccount{currency = ",
+            "CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, payout = 8}, contract_id = ",
+            "'1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}"
         ]),
         format_msg(
             format_service_reply(
