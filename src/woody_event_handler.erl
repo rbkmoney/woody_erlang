@@ -874,7 +874,7 @@ result_test_() -> [
             "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
             "created_at = '2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', ",
             "since = '2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{",
-            "since = '2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{1CSWG8j04wK => ",
+            "since = '2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => ",
             "Contract{id = '1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, ",
             "created_at = '2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, ",
             "terms = TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', ",
@@ -887,13 +887,14 @@ result_test_() -> [
             "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
             "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
             "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}, shops = #{1CSWG8j04wM => ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}, shops = #{'1CSWG8j04wM' => ",
             "Shop{id = '1CSWG8j04wM', created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocking{blocked = ",
             "Blocked{reason = '', since = '2019-08-13T11:19:03.015222Z'}}, suspension = Suspension{",
             "active = Active{since = '2019-08-13T11:19:01.387269Z'}}, details = ShopDetails{",
             "name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, category = CategoryRef{id = 1}, ",
             "account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, ",
             "payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}"
+
         ]),
         format_msg(
             format_service_reply(

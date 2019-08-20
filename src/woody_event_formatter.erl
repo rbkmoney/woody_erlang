@@ -17,41 +17,58 @@ format_arg(ArgType, Arg) ->
 
 format_({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
     {"", []};
-format_({_Fid, _Required, _Type, Name, Default}, undefined) ->
-    {"~s = ~w", [Name, Default]};
-format_({_Fid, _Required, string, Name, _Default}, Value) ->
-    {"~s = '~s'", [Name, Value]};
-format_({_Fid, _Required, {struct, struct, {Module, Struct}}, Name, _Default}, Value) ->
-    {StructFormat, StructParam} = format_struct(Module, Struct, Value),
-    {"~s = " ++ StructFormat, [Name] ++ StructParam};
-format_({_Fid, _Required, {struct, union, {Module, Struct}}, Name, _Default}, Value) ->
-    {UnionFormat, UnionParam} = format_union(Module, Struct, Value),
-    {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
-format_({_Fid, _Required, {enum, {_Module, _Struct}}, Name, _Default}, Value) ->
-    {"~s = ~s", [Name, Value]};
-format_({_Fid, _Required, {list, {struct, union, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    {UnionFormat, UnionParam} = format_list_(Module, Struct, ValueList, fun format_union/3),
-    {"~s = " ++ UnionFormat, [Name] ++ UnionParam};
-format_({_Fid, _Required, {list, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueList) ->
-    {StructFormat, StructParam} = format_list_(Module, Struct, ValueList, fun format_struct/3),
-    {"~s = " ++ StructFormat, [Name] ++ StructParam};
-format_({_Fid, _Required, {map, string, {struct, struct, {Module, Struct}}}, Name, _Default}, ValueMap) ->
-    MapData = maps:to_list(ValueMap),
-    {Params, Values} =
-        lists:foldr(
-            fun({K, V}, {FmtAcc, ParamAcc}) ->
-                {Fmt, Param} = format_struct(Module, Struct, V),
-                {["~s => " ++ Fmt | FmtAcc], [K] ++ Param ++ ParamAcc}
-            end,
-            {[], []}, MapData
-        ),
-    {"~s = #{" ++ string:join(Params, ", ") ++ "}", [Name] ++ Values};
-format_({_Fid, _Required, _Type, Name, _Default}, Value) ->
-    %% All other types such as i32, i64, bool, etc.
-    {"~s = ~w", [Name, Value]};
+format_({_Fid, _Required, Type, Name, Default}, undefined) ->
+    {Format, Params} = format_typed_value(Type, Default),
+    {"~s = " ++ Format, [Name] ++ Params};
+format_({_Fid, _Required, Type, Name, _Default}, Value) ->
+    {Format, Params} = format_typed_value(Type, Value),
+    {"~s = " ++ Format, [Name] ++ Params};
 format_(_Type, Value) ->
     %% All unknown types
     {"~w", [Value]}.
+
+format_typed_value({struct, struct, {Module, Struct}}, Value) ->
+    format_struct(Module, Struct, Value);
+format_typed_value({struct, union, {Module, Struct}}, Value) ->
+    format_union(Module, Struct, Value);
+format_typed_value({struct, exception, {Module, Struct}}, Value) ->
+    format_exception(Module, Struct, Value);
+format_typed_value({enum, {_Module, _Struct}}, Value) ->
+    {"~s", [Value]};
+format_typed_value(string, Value) ->
+    {"'~s'", [Value]};
+format_typed_value({list, Type}, ValueList) ->
+    {Format, Params} =
+        lists:foldr(
+            fun(Entry, {FA, FP}) ->
+                {F, P} = format_typed_value(Type, Entry),
+                {[F | FA], P ++ FP}
+            end,
+            {[],[]},
+            ValueList
+        ),
+    {"[" ++ string:join(Format, ", ") ++ "]", Params};
+format_typed_value({set, _Type}, _SetofValues) ->
+    %% TODO format set
+    {"", []};
+format_typed_value({map, KeyType, ValueType}, Map) ->
+    MapData = maps:to_list(Map),
+    {Params, Values} =
+        lists:foldr(
+            fun({Key, Value}, {AccFmt, AccParam}) ->
+                {KeyFmt, KeyParam} = format_typed_value(KeyType, Key),
+                {ValueFmt, ValueParam} = format_typed_value(ValueType, Value),
+                {[KeyFmt ++ " => " ++ ValueFmt | AccFmt], KeyParam ++ ValueParam ++ AccParam}
+            end,
+            {[], []}, MapData
+        ),
+    {"#{" ++ string:join(Params, ", ") ++ "}", Values};
+format_typed_value(_Type, Value) ->
+    %% bool, double, i8, i16, i32, i64 formats here
+    {"~w", [Value]}.
+
+format_exception(_Module, _Exception, _Value) ->
+    error(unimplemented).
 
 -spec format_struct(atom(), atom(), term()) ->
     woody_event_handler:msg().
