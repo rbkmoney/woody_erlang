@@ -2,11 +2,7 @@
 
 -export([
     format_call/4,
-    format_reply/5,
-    format_struct/3,
-    format_union/3,
-    format_list/2,
-    format_thrift_value/2
+    format_reply/5
 ]).
 
 %% Binaries under size below will log as-is.
@@ -139,24 +135,6 @@ format_union(Module, Struct, {Type, UnionValue}) ->
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
     {Format, Parameters} = format_argument(UnionMeta, UnionValue),
     {"~s{" ++ Format ++ "}", [Struct] ++ Parameters}.
-
--spec format_list(term(), [term()]) ->
-    woody_event_handler:msg().
-format_list(_, []) ->
-    {"", []};
-format_list({struct, struct, {Module, Struct}}, ValueList) ->
-    format_list_(Module, Struct, ValueList, fun format_struct/3);
-format_list({struct, union, {Module, Struct}}, ValueList) ->
-    format_list_(Module, Struct, ValueList, fun format_union/3).
-
-format_list_(Module, Struct, ValueList, FormatStructFun) ->
-    {StructFormat, StructParam} =
-        lists:foldr(
-            fun(Value, {FmtAcc, ParamAcc}) ->
-                {Fmt, Params} = FormatStructFun(Module, Struct, Value),
-                {[Fmt | FmtAcc], Params ++ ParamAcc}
-            end, {[], []}, ValueList),
-    {"[" ++ string:join(StructFormat, ", ") ++ "]", StructParam}.
 
 format_value({nl, _Null}) ->
     {"~s", ['Null']};
