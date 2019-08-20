@@ -18,7 +18,7 @@ format_arg(ArgType, Arg) ->
 format_({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
     {"", []};
 format_({_Fid, _Required, _Type, Name, Default}, undefined) ->
-    {"~s = ~p", [Name, Default]};
+    {"~s = ~w", [Name, Default]};
 format_({_Fid, _Required, string, Name, _Default}, Value) ->
     {"~s = '~s'", [Name, Value]};
 format_({_Fid, _Required, {struct, struct, {Module, Struct}}, Name, _Default}, Value) ->
@@ -48,10 +48,10 @@ format_({_Fid, _Required, {map, string, {struct, struct, {Module, Struct}}}, Nam
     {"~s = #{" ++ string:join(Params, ", ") ++ "}", [Name] ++ Values};
 format_({_Fid, _Required, _Type, Name, _Default}, Value) ->
     %% All other types such as i32, i64, bool, etc.
-    {"~s = ~p", [Name, Value]};
+    {"~s = ~w", [Name, Value]};
 format_(_Type, Value) ->
     %% All unknown types
-    {"~p", [Value]}.
+    {"~w", [Value]}.
 
 -spec format_struct(atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -108,13 +108,13 @@ format_value({nl, _Null}) ->
 format_value({b, Boolean}) ->
     {"~s", [Boolean]};
 format_value({bin, Bin}) when size(Bin) =< ?MAX_BIN_LENGTH ->
-    {"~p", [Bin]};
+    {"~w", [Bin]};
 format_value({bin, _Bin}) ->
     {"~s", ["<<...>>"]};
 format_value({i, N}) ->
-    {"~p", [N]};
+    {"~w", [N]};
 format_value({flt, F}) ->
-    {"~p", [F]};
+    {"~w", [F]};
 format_value({str, S}) ->
     {"'~s'", [S]};
 format_value({obj, S}) ->
