@@ -311,14 +311,8 @@ format_event(UnknownEventType, Meta) ->
 %%
 -spec format_service_request(map()) ->
     msg().
-format_service_request(#{service_schema := {Module, Service}, service:=Service, function:=Function, args:=Args}) ->
-    case Module:function_info(Service, Function, params_type) of
-        {struct, struct, ArgTypes} ->
-            {ArgsFormat, ArgsArgs} = format_args(ArgTypes, Args),
-            {"~s:~s(" ++ ArgsFormat ++ ")", [Service, Function] ++ ArgsArgs};
-        _Other ->
-            {"~s:~s(~w)", [Service, Function, Args]}
-    end.
+format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}) ->
+    woody_event_formatter:format_call(Module, Service, Function, Args).
 
 -spec format_service_reply(map()) ->
     msg().
@@ -348,22 +342,6 @@ format_service_reply(_Module, _Service, _Function, Kind, Result) ->
     msg().
 format_exception(BaseMsg, Stack) ->
     append_msg(BaseMsg, {"~n~s", [genlib_format:format_stacktrace(Stack, [newlines])]}).
-
--spec format_args(list(), list()) ->
-    msg().
-format_args(_, []) ->
-    {"", []};
-format_args(ArgTypes, Args) ->
-    lists:foldl(
-        fun ({Type, Arg}, AccMsg) ->
-            case woody_event_formatter:format_arg(Type, Arg) of
-                {"", []} -> AccMsg;
-                NewParams ->  append_msg(append_msg(AccMsg, {", ", []}), NewParams)
-            end
-        end,
-        {"", []},
-        lists:zip(ArgTypes, Args)
-    ).
 
 -spec append_msg(msg(), msg()) ->
     msg().
@@ -894,7 +872,6 @@ result_test_() -> [
             "name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, category = CategoryRef{id = 1}, ",
             "account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, ",
             "payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}"
-
         ]),
         format_msg(
             format_service_reply(

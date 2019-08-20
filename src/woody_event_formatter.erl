@@ -1,77 +1,96 @@
 -module(woody_event_formatter).
 
 -export([
-    format_arg/2,
+    format_call/4,
     format_struct/3,
     format_union/3,
-    format_list/2
+    format_list/2,
+    format_thrift_value/2
 ]).
 
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_LENGTH, 10).
 
--spec format_arg(term(), term()) ->
+-spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
-format_arg(ArgType, Arg) ->
-    format_(ArgType, Arg).
+format_call(Module, Service, Function, Arguments) ->
+    case Module:function_info(Service, Function, params_type) of
+        {struct, struct, ArgTypes} ->
+            {ArgsFormat, ArgsArgs} =
+                lists:foldr(
+                    fun({Type, Argument}, {AccFmt, AccParam}) ->
+                        case format_argument(Type, Argument) of
+                            {"", []} -> {AccFmt, AccParam};
+                            {Fmt, Param} -> {[Fmt | AccFmt], Param ++ AccParam}
+                        end
+                    end,
+                    {[], []},
+                    lists:zip(ArgTypes, Arguments)
+                ),
+            {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
+        _Other ->
+            {"~s:~s(~w)", [Service, Function, Arguments]}
+    end.
 
-format_({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
+format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
     {"", []};
-format_({_Fid, _Required, Type, Name, Default}, undefined) ->
-    {Format, Params} = format_typed_value(Type, Default),
+format_argument({_Fid, _Required, Type, Name, Default}, undefined) ->
+    {Format, Params} = format_thrift_value(Type, Default),
     {"~s = " ++ Format, [Name] ++ Params};
-format_({_Fid, _Required, Type, Name, _Default}, Value) ->
-    {Format, Params} = format_typed_value(Type, Value),
+format_argument({_Fid, _Required, Type, Name, _Default}, Value) ->
+    {Format, Params} = format_thrift_value(Type, Value),
     {"~s = " ++ Format, [Name] ++ Params};
-format_(_Type, Value) ->
+format_argument(_Type, Value) ->
     %% All unknown types
     {"~w", [Value]}.
 
-format_typed_value({struct, struct, {Module, Struct}}, Value) ->
+-spec format_thrift_value(dmsl_domain_thrift:field_type(), term()) ->
+    woody_event_handler:msg().
+format_thrift_value({struct, struct, {Module, Struct}}, Value) ->
     format_struct(Module, Struct, Value);
-format_typed_value({struct, union, {Module, Struct}}, Value) ->
+format_thrift_value({struct, union, {Module, Struct}}, Value) ->
     format_union(Module, Struct, Value);
-format_typed_value({struct, exception, {Module, Struct}}, Value) ->
+format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
     format_exception(Module, Struct, Value);
-format_typed_value({enum, {_Module, _Struct}}, Value) ->
+format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
-format_typed_value(string, Value) ->
+format_thrift_value(string, Value) ->
     {"'~s'", [Value]};
-format_typed_value({list, Type}, ValueList) ->
+format_thrift_value({list, Type}, ValueList) ->
     {Format, Params} =
         lists:foldr(
             fun(Entry, {FA, FP}) ->
-                {F, P} = format_typed_value(Type, Entry),
+                {F, P} = format_thrift_value(Type, Entry),
                 {[F | FA], P ++ FP}
             end,
             {[],[]},
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
-format_typed_value({set, Type}, SetofValues) ->
+format_thrift_value({set, Type}, SetofValues) ->
     {Format, Params} =
         ordsets:fold(
             fun(Element, {AccFmt, AccParams}) ->
-                {Fmt, Param} = format_typed_value(Type, Element),
+                {Fmt, Param} = format_thrift_value(Type, Element),
                 {[Fmt | AccFmt], Param ++ AccParams}
             end,
             {[],[]},
             SetofValues
         ),
     {"{" ++ Format ++ "}", Params};
-format_typed_value({map, KeyType, ValueType}, Map) ->
+format_thrift_value({map, KeyType, ValueType}, Map) ->
     MapData = maps:to_list(Map),
     {Params, Values} =
         lists:foldr(
             fun({Key, Value}, {AccFmt, AccParam}) ->
-                {KeyFmt, KeyParam} = format_typed_value(KeyType, Key),
-                {ValueFmt, ValueParam} = format_typed_value(ValueType, Value),
+                {KeyFmt, KeyParam} = format_thrift_value(KeyType, Key),
+                {ValueFmt, ValueParam} = format_thrift_value(ValueType, Value),
                 {[KeyFmt ++ " => " ++ ValueFmt | AccFmt], KeyParam ++ ValueParam ++ AccParam}
             end,
             {[], []}, MapData
         ),
     {"#{" ++ string:join(Params, ", ") ++ "}", Values};
-format_typed_value(_Type, Value) ->
+format_thrift_value(_Type, Value) ->
     %% bool, double, i8, i16, i32, i64 formats here
     {"~w", [Value]}.
 
@@ -91,7 +110,7 @@ format_struct(Module, Struct, StructValue) ->
     {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}.
 
 format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
-    case format_(Type, Value) of
+    case format_argument(Type, Value) of
         {"", []} ->
             Acc;
         {F, P} ->
@@ -107,7 +126,7 @@ format_union(_Module, 'Value', Value) ->
 format_union(Module, Struct, {Type, UnionValue}) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
-    {Format, Parameters} = format_(UnionMeta, UnionValue),
+    {Format, Parameters} = format_argument(UnionMeta, UnionValue),
     {"~s{" ++ Format ++ "}", [Struct] ++ Parameters}.
 
 -spec format_list(term(), [term()]) ->
