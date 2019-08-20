@@ -330,8 +330,6 @@ format_exception(BaseMsg, Stack) ->
 
 -spec append_msg(msg(), msg()) ->
     msg().
-append_msg({"", []}, {", ", []}) ->
-    {"", []};
 append_msg({F1, A1}, {F2, A2}) ->
     {F1 ++ F2, A1 ++ A2}.
 

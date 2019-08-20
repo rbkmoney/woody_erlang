@@ -52,7 +52,7 @@ format_reply(_Module, _Service, _Function, exception, Result) ->
 format_reply(_Module, _Service, _Function, Kind, Result) ->
     {"~w", [{Kind, Result}]}.
 
--spec format_thrift_value(dmsl_domain_thrift:field_type(), term()) ->
+-spec format_thrift_value(term(), term()) ->
     woody_event_handler:msg().
 format_thrift_value({struct, struct, {Module, Struct}}, Value) ->
     format_struct(Module, Struct, Value);
