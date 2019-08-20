@@ -48,9 +48,17 @@ format_typed_value({list, Type}, ValueList) ->
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
-format_typed_value({set, _Type}, _SetofValues) ->
-    %% TODO format set
-    {"", []};
+format_typed_value({set, Type}, SetofValues) ->
+    {Format, Params} =
+        ordsets:fold(
+            fun(Element, {AccFmt, AccParams}) ->
+                {Fmt, Param} = format_typed_value(Type, Element),
+                {[Fmt | AccFmt], Param ++ AccParams}
+            end,
+            {[],[]},
+            SetofValues
+        ),
+    {"{" ++ Format ++ "}", Params};
 format_typed_value({map, KeyType, ValueType}, Map) ->
     MapData = maps:to_list(Map),
     {Params, Values} =
