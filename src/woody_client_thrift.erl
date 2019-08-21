@@ -101,7 +101,7 @@ get_server_violation_error() ->
     >>}.
 
 log_result({error, {business, ThriftExcept}}, WoodyState) ->
-    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => ok, result => ThriftExcept});
+    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => ok, format_as_exception => true, result => ThriftExcept});
 log_result({Status, Result}, WoodyState) ->
     log_event(?EV_SERVICE_RESULT, WoodyState, #{status => Status, result => Result}).
 

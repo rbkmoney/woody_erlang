@@ -316,10 +316,12 @@ format_service_request(#{service_schema := {Module, Service}, function:=Function
 
 -spec format_service_reply(map()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={Kind, Result}}) ->
-    woody_event_formatter:format_reply(Module, Service, Function, Kind, Result);
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result}) ->
-    woody_event_formatter:format_reply(Module, Service, Function, ok, Result);
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={_, Result}} = Meta) ->
+    FormatasException =  maps:get(format_as_exception, Meta, false),
+    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, status := ok, result:=Result} = Meta) ->
+    FormatasException =  maps:get(format_as_exception, Meta, false),
+    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
 format_service_reply(Result) ->
     {"~w", [Result]}.
 
@@ -979,4 +981,55 @@ result_test_() -> [
     )
 ].
 
+
+-spec exception_test_() -> _.
+exception_test_() -> [
+    ?_assertEqual(
+        "CustomerNotFound{}",
+        format_msg(
+            format_service_reply(
+                #{args => [<<"1Cfo5OJzx6O">>],
+                    deadline => undefined,
+                    execution_start_time => 1566386841317,
+                    format_as_exception => true,
+                    function => 'Get',
+                    metadata => #{
+                        <<"user-identity.id">> => <<"1Cfo5EMKo40">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result => {payproc_CustomerNotFound},
+                    role => client,
+                    service => 'CustomerManagement',
+                    service_schema => {dmsl_payment_processing_thrift, 'CustomerManagement'},
+                    status => ok,
+                    type => call}
+            )
+        )
+    ),
+    ?_assertEqual(
+        "OperationNotPermitted{}",
+        format_msg(
+            format_service_reply(
+                #{args => [
+                    undefined,
+                    <<"1Cfo9igJRS4">>,
+                    {payproc_InvoicePaymentParams, {payment_resource, {payproc_PaymentResourcePayerParams,
+                        {domain_DisposablePaymentResource, {bank_card, {domain_BankCard, <<"no_preauth">>,
+                            visa, <<"424242">>, <<"4242">>, undefined, undefined, undefined, undefined, undefined}},
+                            <<"SESSION42">>, {domain_ClientInfo, undefined, undefined}},
+                        {domain_ContactInfo, undefined, undefined}}},
+                        {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined, undefined}],
+                    deadline => undefined, execution_start_time => 1566386899959,
+                    format_as_exception => true,
+                    function => 'StartPayment',
+                    metadata => #{
+                        <<"user-identity.id">> => <<"1Cfo8k9mLtA">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result => {payproc_OperationNotPermitted}, role => client, service => 'Invoicing',
+                    service_schema => {dmsl_payment_processing_thrift, 'Invoicing'},
+                    status => ok, type => call}
+            )
+        )
+    )
+
+].
 -endif.

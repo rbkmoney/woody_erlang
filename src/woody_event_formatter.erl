@@ -44,11 +44,22 @@ format_argument(_Type, Value) ->
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
-format_reply(Module, Service, Function, ok, Arguments) ->
-    ReplyType = Module:function_info(Service, Function, reply_type),
-    format_thrift_value(ReplyType, Arguments);
-format_reply(_Module, _Service, _Function, exception, Result) ->
-    {"~w", [Result]};
+format_reply(Module, Service, Function, Value, FormatAsException) when is_tuple(Value) ->
+    try
+        case FormatAsException of
+            false ->
+                ReplyType = Module:function_info(Service, Function, reply_type),
+                format_thrift_value(ReplyType, Value);
+            true ->
+                {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
+                Exception = element(1, Value),
+                ExceptionType = get_exception_type(Exception, ExceptionTypeList),
+                format_thrift_value(ExceptionType, Value)
+        end
+    catch
+        _:_ ->
+            {"~w", [Value]}
+    end;
 format_reply(_Module, _Service, _Function, Kind, Result) ->
     {"~w", [{Kind, Result}]}.
 
@@ -59,7 +70,7 @@ format_thrift_value({struct, struct, {Module, Struct}}, Value) ->
 format_thrift_value({struct, union, {Module, Struct}}, Value) ->
     format_union(Module, Struct, Value);
 format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
-    format_exception(Module, Struct, Value);
+    format_struct(Module, Struct, Value);
 format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
 format_thrift_value(string, Value) ->
@@ -103,20 +114,36 @@ format_thrift_value(_Type, Value) ->
     %% bool, double, i8, i16, i32, i64 formats here
     {"~w", [Value]}.
 
-format_exception(_Module, _Exception, _Value) ->
-    error(unimplemented).
+get_exception_type(ExceptionRecord, ExceptionTypeList) ->
+    [ExceptionType] =
+        lists:filtermap(
+            fun ({_, _, Type = {struct, exception, {Module, Exception}}, _, _}) ->
+                case Module:record_name(Exception) of
+                    ExceptionRecord -> {true, Type};
+                    _ -> false
+                end
+            end,
+            ExceptionTypeList
+        ),
+    ExceptionType.
 
 -spec format_struct(atom(), atom(), term()) ->
     woody_event_handler:msg().
 format_struct(Module, Struct, StructValue) ->
-    {struct, struct, StructMeta} = Module:struct_info(Struct),
+    %% struct and exception have same structure
+    {struct, _, StructMeta} = Module:struct_info(Struct),
     ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
-    {Params, Values} = lists:foldr(
-        fun format_struct_/2,
-        {[], []},
-        lists:zip(StructMeta, ValueList)
-    ),
-    {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]}.
+    case length(StructMeta) == length(ValueList) of
+        true ->
+            {Params, Values} = lists:foldr(
+                fun format_struct_/2,
+                {[], []},
+                lists:zip(StructMeta, ValueList)
+            ),
+            {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
+        false ->
+            {"~s{~w}", [ValueList]}
+    end.
 
 format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
     case format_argument(Type, Value) of
@@ -173,4 +200,6 @@ format_value({arr, List}) ->
             end,
             {[], []}, List
         ),
-    {"[" ++ string:join(Params, ", ") ++ "]", Values}.
+    {"[" ++ string:join(Params, ", ") ++ "]", Values};
+format_value(O) ->
+    {"~w", [O]}.
