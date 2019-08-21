@@ -6,7 +6,7 @@
 ]).
 
 %% Binaries under size below will log as-is.
--define(MAX_BIN_LENGTH, 10).
+-define(MAX_BIN_SIZE, 10).
 
 -spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -21,7 +21,7 @@ format_call(Module, Service, Function, Arguments) ->
                 ),
             {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
         _Other ->
-            {"~s:~s(~w)", [Service, Function, Arguments]}
+            {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
 
 format_call_({Type, Argument}, {AccFmt, AccParam}) ->
@@ -40,7 +40,7 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value) ->
     {"~s = " ++ Format, [Name] ++ Params};
 format_argument(_Type, Value) ->
     %% All unknown types
-    {"~w", [Value]}.
+    {"~p", [Value]}.
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -58,10 +58,10 @@ format_reply(Module, Service, Function, Value, FormatAsException) when is_tuple(
         end
     catch
         _:_ ->
-            {"~w", [Value]}
+            {"~p", [Value]}
     end;
 format_reply(_Module, _Service, _Function, Kind, Result) ->
-    {"~w", [{Kind, Result}]}.
+    {"~p", [{Kind, Result}]}.
 
 -spec format_thrift_value(term(), term()) ->
     woody_event_handler:msg().
@@ -73,6 +73,14 @@ format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
     format_struct(Module, Struct, Value);
 format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
+format_thrift_value(string, << 131, _/binary >> = Value) ->
+    %% BERT always starts from 131 following by tag byte
+    case size(Value) =< ?MAX_BIN_SIZE of
+        true ->
+            {"~w", [Value]};
+        false ->
+            {"~s", ["<<...>>"]}
+    end;
 format_thrift_value(string, Value) ->
     {"'~s'", [Value]};
 format_thrift_value({list, Type}, ValueList) ->
@@ -112,7 +120,7 @@ format_thrift_value({map, KeyType, ValueType}, Map) ->
     {"#{" ++ string:join(Params, ", ") ++ "}", Values};
 format_thrift_value(_Type, Value) ->
     %% bool, double, i8, i16, i32, i64 formats here
-    {"~w", [Value]}.
+    {"~p", [Value]}.
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     [ExceptionType] =
@@ -142,7 +150,7 @@ format_struct(Module, Struct, StructValue) ->
             ),
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
         false ->
-            {"~s{~w}", [ValueList]}
+            {"~s{~p}", [ValueList]}
     end.
 
 format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
@@ -155,51 +163,8 @@ format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
 
 -spec format_union(atom(), atom(), term()) ->
     woody_event_handler:msg().
-%% Filter and map Values direct to its value
-format_union(_Module, 'Value', Value) ->
-    format_value(Value);
-
 format_union(Module, Struct, {Type, UnionValue}) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
     {Format, Parameters} = format_argument(UnionMeta, UnionValue),
     {"~s{" ++ Format ++ "}", [Struct] ++ Parameters}.
-
-format_value({nl, _Null}) ->
-    {"~s", ['Null']};
-format_value({b, Boolean}) ->
-    {"~s", [Boolean]};
-format_value({bin, Bin}) when size(Bin) =< ?MAX_BIN_LENGTH ->
-    {"~w", [Bin]};
-format_value({bin, _Bin}) ->
-    {"~s", ["<<...>>"]};
-format_value({i, N}) ->
-    {"~w", [N]};
-format_value({flt, F}) ->
-    {"~w", [F]};
-format_value({str, S}) ->
-    {"'~s'", [S]};
-format_value({obj, S}) ->
-    ObjData = maps:to_list(S),
-    {Params, Values} =
-        lists:foldr(
-            fun({K, V}, {FmtAcc, ParamAcc}) ->
-                {KeyFmt, KeyParam} = format_value(K),
-                {ValueFmt, ValueParam} = format_value(V),
-                {[KeyFmt ++ " => " ++ ValueFmt | FmtAcc], KeyParam ++ ValueParam ++ ParamAcc}
-            end,
-            {[], []}, ObjData
-        ),
-    {"#{" ++ string:join(Params, ", ") ++ "}", Values};
-format_value({arr, List}) ->
-    {Params, Values} =
-        lists:foldr(
-            fun(Entry, {FmtAcc, ParamAcc}) ->
-                {Fmt, Param} = format_value(Entry),
-                {[Fmt | FmtAcc], Param ++ ParamAcc}
-            end,
-            {[], []}, List
-        ),
-    {"[" ++ string:join(Params, ", ") ++ "]", Values};
-format_value(O) ->
-    {"~w", [O]}.

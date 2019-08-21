@@ -427,8 +427,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten(
-            "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', ",
-            "shop_id = '1CQdDwgt3R3', contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Null})"
+            "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', ",
+            "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})"
         ),
         format_msg(
             format_service_request(
@@ -532,9 +532,9 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = <<...>>}}, ",
+            "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, ",
             "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{",
-            "direction = forward}, aux_state = Content{data = <<>>}, aux_state_legacy = <<>>}})"
+            "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})"
         ]),
         format_msg(
             format_service_request(
@@ -641,15 +641,14 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = <<...>>, machine = ",
-            "Machine{ns = 'party', id = '1CSHThTEJ84', ",
-            "history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = [#{'ct' => 'application/x-erlang-binary', ",
-            "'vsn' => 6}, <<...>>]}], history_range = HistoryRange{limit = 10, direction = backward}, ",
-            "aux_state = Content{data = #{",
-            "'aux_state' => <<...>>, 'ct' => 'application/x-erlang-binary'}}, ",
-            "aux_state_legacy = #{'aux_state' => <<...>>, ",
-            "'ct' => 'application/x-erlang-binary'}}})"
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
+            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
+            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{",
+            "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} ",
+            "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
+            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
+            "=> Value{str = 'application/x-erlang-binary'}}}}})"
         ]),
         format_msg(
             format_service_request(
@@ -760,10 +759,11 @@ format_service_request_test_() -> [
 result_test_() -> [
     ?_assertEqual(
         lists:flatten([
-            "CallResult{response = <<131,100,0,2,111,107>>, change = MachineStateChange{aux_state = Content{",
-            "data = #{'aux_state' => <<...>>, 'ct' => 'application/x-erlang-binary'}}, ",
-            "events = [Content{data = [#{'ct' => 'application/x-erlang-binary', 'vsn' => 6}, <<...>>]}]}, ",
-            "action = ComplexAction{}}"
+            "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{",
+            "aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, ",
+            "Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{",
+            "arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
+            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}]}, action = ComplexAction{}}"
         ]),
         format_msg(
             format_service_reply(
@@ -921,12 +921,13 @@ result_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "SignalResult{change = MachineStateChange{aux_state = Content{data = #{}}, ",
-            "events = [Content{data = [[2, #{'change' => 'created', ",
-            "'contact_info' => #{'email' => 'create_customer'}, ",
-            "'created_at' => '2019-08-13T11:19:03.714218Z', 'customer_id' => '1CSWGJ3N8Ns', ",
-            "'metadata' => Null, 'owner_id' => '1CSWG2vduGe', 'shop_id' => '1CSWG8j04wM'}]]}]}, ",
-            "action = ComplexAction{}}"
+            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
+            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
+            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{",
+            "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
+            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
+            "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
+            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
         ]),
         format_msg(
             format_service_reply(
