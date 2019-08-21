@@ -75,11 +75,13 @@ format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
 format_thrift_value(string, << 131, _/binary >> = Value) ->
     %% BERT always starts from 131 following by tag byte
-    case size(Value) =< ?MAX_BIN_SIZE of
+    print_non_printable_string(Value);
+format_thrift_value(string, Value) when is_binary(Value) ->
+    case is_printable(Value) of
         true ->
-            {"~w", [Value]};
+            {"'~s'", [Value]};
         false ->
-            {"~s", ["<<...>>"]}
+            print_non_printable_string(Value)
     end;
 format_thrift_value(string, Value) ->
     {"'~s'", [Value]};
@@ -168,3 +170,26 @@ format_union(Module, Struct, {Type, UnionValue}) ->
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
     {Format, Parameters} = format_argument(UnionMeta, UnionValue),
     {"~s{" ++ Format ++ "}", [Struct] ++ Parameters}.
+
+print_non_printable_string(Value) ->
+    case size(Value) =< ?MAX_BIN_SIZE of
+        true ->
+            {"~w", [Value]};
+        false ->
+            {"~s", ["<<...>>"]}
+    end.
+
+is_printable(Value) ->
+    ValuePart =
+        case size(Value)=< ?MAX_BIN_SIZE of
+            true ->
+                Value;
+            false ->
+                binary:part(Value, 0, ?MAX_BIN_SIZE)
+        end,
+    lists:all(
+        fun(Byte) ->
+            Byte > 31
+        end,
+        binary:bin_to_list(ValuePart)
+    ).
