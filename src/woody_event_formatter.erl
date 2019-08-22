@@ -75,7 +75,7 @@ format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
 format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
 format_thrift_value(string, << 131, _/binary >> = Value) ->
-    %% BERT data always starts from 131
+    %% BERT data always starts with 131
     %% so we can print'em as bytes safely
     format_non_printable_string(Value);
 format_thrift_value(string, Value) when is_binary(Value) ->
