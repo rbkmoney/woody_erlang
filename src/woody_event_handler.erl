@@ -566,26 +566,18 @@ format_service_request_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ",
-            "modification = ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{",
-            "legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns ",
-            "OJSC', registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl ",
-            "109 Piso 8, Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
             "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
             "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ",
-            "modification = ContractModification{payout_tool_modification = PayoutToolModificationUnit{",
-            "payout_tool_id = '1CR1Y2ZcrA1', modification = PayoutToolModification{creation = PayoutToolParams{",
-            "currency = CurrencyRef{symbolic_code = 'RUB'}, tool_info = PayoutToolInfo{russian_bank_account = ",
-            "RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = ",
-            "'123129876', bank_bik = '66642666'}}}}}}}}, PartyModification{shop_modification = ShopModificationUnit{",
-            "id = '1CR1Y2ZcrA2', modification = ShopModification{creation = ShopParams{category = CategoryRef{",
-            "id = 1}, location = ShopLocation{url = ''}, details = ShopDetails{name = 'Battle Ready Shop'}, ",
-            "contract_id = '1CR1Y2ZcrA0', payout_tool_id = '1CR1Y2ZcrA1'}}}}, PartyModification{",
-            "shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{",
-            "shop_account_creation = ShopAccountParams{currency = CurrencyRef{symbolic_code = 'RUB'}}}}}])"
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
         ]),
         format_msg(
             format_service_request(

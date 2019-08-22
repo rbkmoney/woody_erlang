@@ -5,6 +5,7 @@
     format_reply/5
 ]).
 
+-define(MAX_PRINTABLE_LIST_LENGTH, 3).
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 10).
 
@@ -86,7 +87,7 @@ format_thrift_value(string, Value) when is_binary(Value) ->
     end;
 format_thrift_value(string, Value) ->
     {"'~s'", [Value]};
-format_thrift_value({list, Type}, ValueList) ->
+format_thrift_value({list, Type}, ValueList) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {Format, Params} =
         lists:foldr(
             fun(Entry, {FA, FP}) ->
@@ -97,6 +98,16 @@ format_thrift_value({list, Type}, ValueList) ->
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
+format_thrift_value({list, Type}, ValueList) ->
+    FirstEntry = hd(ValueList),
+    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry),
+    LastEntry = hd(lists:reverse(ValueList)),
+    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry),
+    SkippedLength = length(ValueList) - 2,
+    {
+            "[" ++ FirstFormat ++ ", ...skipped ~p entry(-ies)..., " ++ LastFormat ++ "]",
+            FirstParams ++ [SkippedLength] ++ LastParams
+    };
 format_thrift_value({set, Type}, SetofValues) ->
     {Format, Params} =
         ordsets:fold(
