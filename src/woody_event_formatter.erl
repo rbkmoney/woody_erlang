@@ -188,13 +188,6 @@ format_non_printable_string(Value) ->
     end.
 
 is_printable(Value) ->
-    ValuePart =
-        case size(Value)=< ?MAX_BIN_SIZE of
-            true ->
-                Value;
-            false ->
-                binary:part(Value, 0, ?MAX_BIN_SIZE)
-        end,
     io_lib:printable_list(
-        binary:bin_to_list(ValuePart)
+        binary:bin_to_list(Value)
     ).
