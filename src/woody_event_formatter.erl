@@ -74,10 +74,6 @@ format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
     format_struct(Module, Struct, Value);
 format_thrift_value({enum, {_Module, _Struct}}, Value) ->
     {"~s", [Value]};
-format_thrift_value(string, << 131, _/binary >> = Value) ->
-    %% BERT data always starts with 131
-    %% so we can print'em as bytes safely
-    format_non_printable_string(Value);
 format_thrift_value(string, Value) when is_binary(Value) ->
     case is_printable(Value) of
         true ->
@@ -199,9 +195,6 @@ is_printable(Value) ->
             false ->
                 binary:part(Value, 0, ?MAX_BIN_SIZE)
         end,
-    lists:all(
-        fun(Byte) ->
-            Byte > 31
-        end,
+    io_lib:printable_list(
         binary:bin_to_list(ValuePart)
     ).
