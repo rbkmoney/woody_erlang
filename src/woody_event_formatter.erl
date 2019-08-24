@@ -77,7 +77,7 @@ format_thrift_value({enum, {_Module, _Struct}}, Value) ->
 format_thrift_value(string, Value) when is_binary(Value) ->
     case is_printable(Value) of
         true ->
-            {"'~s'", [Value]};
+            {"'~ts'", [Value]};
         false ->
             format_non_printable_string(Value)
     end;
@@ -187,7 +187,8 @@ format_non_printable_string(Value) ->
             {"~s", ["<<...>>"]}
     end.
 
+is_printable(<<>>) ->
+    true;
 is_printable(Value) ->
-    io_lib:printable_list(
-        binary:bin_to_list(Value)
-    ).
+    %% Empty result means non-printable Value
+    <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE).
