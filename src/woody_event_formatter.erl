@@ -190,5 +190,7 @@ format_non_printable_string(Value) ->
 is_printable(<<>>) ->
     true;
 is_printable(Value) ->
-    %% Empty result means non-printable Value
+    %% Try to get slice of first ?MAX_BIN_SIZE from Value,
+    %% assuming success means Value is printable string
+    %% NOTE: Empty result means non-printable Value
     <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE).
