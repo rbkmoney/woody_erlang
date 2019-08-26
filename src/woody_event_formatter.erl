@@ -101,7 +101,7 @@ format_thrift_value({list, Type}, ValueList) ->
     {LastFormat, LastParams} = format_thrift_value(Type, LastEntry),
     SkippedLength = length(ValueList) - 2,
     {
-            "[" ++ FirstFormat ++ ", ...skipped ~p entry(-ies)..., " ++ LastFormat ++ "]",
+            "[" ++ FirstFormat ++ ", ...skipped ~b entry(-ies)..., " ++ LastFormat ++ "]",
             FirstParams ++ [SkippedLength] ++ LastParams
     };
 format_thrift_value({set, Type}, SetofValues) ->
