@@ -197,7 +197,7 @@ handle_event(Handler, Event, RpcId, Meta) ->
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
-    {"[~s ~s ~s]", [Trace, Parent, Span]};
+    {"[" ++ id_to_string(Trace) ++ " " ++ id_to_string(Parent) ++ " " ++ id_to_string(Span) ++ "]", []};
 format_rpc_id(undefined) ->
     {"~p", [undefined]}.
 
@@ -352,6 +352,15 @@ maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = Woody
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
 
+%% NOTE: Must match to supported types for `~s`
+id_to_string(Value) when is_list(Value) ->
+    Value;
+id_to_string(Value) when is_binary(Value) ->
+    binary_to_list(Value);
+id_to_string(Value) when is_atom(Value) ->
+    atom_to_list(Value);
+id_to_string(_) ->
+    error(badarg).
 
 -ifdef(TEST).
 
