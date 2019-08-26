@@ -1022,7 +1022,8 @@ result_test_() -> [
                                                         {str, <<"created_at">>} =>
                                                         {str, <<"2019-08-13T11:19:03.714218Z">>},
                                                         {str, <<"customer_id">>} => {str, <<"1CSWGJ3N8Ns">>},
-                                                        {str, <<"metadata">>} => {str, <<208,174,208,189,208,208,186,208,190,208,180>>},
+                                                        {str, <<"metadata">>} => {str, <<208, 174, 208, 189, 208, 208,
+                                                            186, 208, 190, 208, 180>>},
                                                         {str, <<"owner_id">>} => {str, <<"1CSWG2vduGe">>},
                                                         {str, <<"shop_id">>} => {str, <<"1CSWG8j04wM">>}}}]}]}}],
                                 undefined, undefined},
