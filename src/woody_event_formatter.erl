@@ -193,4 +193,11 @@ is_printable(Value) ->
     %% Try to get slice of first ?MAX_BIN_SIZE from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
-    <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE).
+    try
+        <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE)
+    catch
+        _:_ ->
+            %% Completely wrong binary data drives to crash in string internals,
+            %% mark such data as non-printable instead
+            false
+    end.

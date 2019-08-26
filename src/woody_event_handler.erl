@@ -971,6 +971,67 @@ result_test_() -> [
                     status => ok, type => call}
             )
         )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
+            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
+            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{",
+            "Value{str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
+            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
+            "Value{str = 'metadata'} => Value{str = <<...>>}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
+            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
+        ]),
+        format_msg(
+            format_service_reply(
+                #{args =>
+                [{mg_stateproc_SignalArgs,
+                    {init,
+                        {mg_stateproc_InitSignal,
+                            {bin,
+                                <<131, 109, 0, 0, 0, 71, 11, 0, 1, 0, 0, 0, 11,
+                                    49, 67, 83, 87, 71, 50, 118, 100, 117, 71,
+                                    101, 11, 0, 2, 0, 0, 0, 11, 49, 67, 83, 87,
+                                    71, 56, 106, 48, 52, 119, 77, 12, 0, 3, 11,
+                                    0, 2, 0, 0, 0, 15, 99, 114, 101, 97, 116,
+                                    101, 95, 99, 117, 115, 116, 111, 109, 101,
+                                    114, 0, 12, 0, 4, 12, 0, 1, 0, 0, 0>>}}},
+                    {mg_stateproc_Machine, <<"customer">>, <<"1CSWGJ3N8Ns">>, [],
+                        {mg_stateproc_HistoryRange, undefined, undefined, forward},
+                        {mg_stateproc_Content, undefined, {bin, <<>>}},
+                        undefined,
+                        {bin, <<>>}}}],
+                    deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
+                    execution_start_time => 1565695143707, function => 'ProcessSignal',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CSWG2vduGe">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result =>
+                    {ok,
+                        {mg_stateproc_SignalResult,
+                            {mg_stateproc_MachineStateChange,
+                                {mg_stateproc_Content, undefined, {obj, #{}}},
+                                [{mg_stateproc_Content, undefined,
+                                    {arr,
+                                        [{arr,
+                                            [{i, 2},
+                                                {obj,
+                                                    #{{str, <<"change">>} => {str, <<"created">>},
+                                                        {str, <<"contact_info">>} =>
+                                                        {obj, #{{str, <<"email">>} => {str, <<"create_customer">>}}},
+                                                        {str, <<"created_at">>} =>
+                                                        {str, <<"2019-08-13T11:19:03.714218Z">>},
+                                                        {str, <<"customer_id">>} => {str, <<"1CSWGJ3N8Ns">>},
+                                                        {str, <<"metadata">>} => {str, <<208,174,208,189,208,208,186,208,190,208,180>>},
+                                                        {str, <<"owner_id">>} => {str, <<"1CSWG2vduGe">>},
+                                                        {str, <<"shop_id">>} => {str, <<"1CSWG8j04wM">>}}}]}]}}],
+                                undefined, undefined},
+                            {mg_stateproc_ComplexAction, undefined, undefined, undefined, undefined}}},
+                    role => server, service => 'Processor',
+                    service_schema => {mg_proto_state_processing_thrift, 'Processor'},
+                    status => ok, type => call}
+            )
+        )
     )
 ].
 
