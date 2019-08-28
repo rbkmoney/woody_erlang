@@ -372,6 +372,11 @@ format_msg({Fmt, Params}) ->
         io_lib:format(Fmt, Params)
     ).
 
+format_event_msg({_Severity, {Fmt, Params}}) ->
+    lists:flatten(
+        io_lib:format(Fmt, Params, [{chars_limit ,1024}])
+    ).
+
 -spec format_service_request_test_() -> _.
 format_service_request_test_() -> [
     ?_assertEqual(
@@ -755,6 +760,81 @@ format_service_request_test_() -> [
         )
     )
 ].
+
+-spec format_service_request_with_limit_test_() -> _.
+format_service_request_with_limit_test_() -> [
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
+        ]),
+        format_event_msg(
+            format_event(
+                ?EV_CALL_SERVICE,
+                #{args =>
+                [undefined, <<"1CR1Xziml7o">>,
+                    [{contract_modification,
+                        {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+                            {creation,
+                                {payproc_ContractParams, undefined,
+                                    {domain_ContractTemplateRef, 1},
+                                    {domain_PaymentInstitutionRef, 1},
+                                    {legal_entity,
+                                        {russian_legal_entity,
+                                            {domain_RussianLegalEntity, <<"Hoofs & Horns OJSC">>,
+                                                <<"1234509876">>, <<"1213456789012">>,
+                                                <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>, <<"NaN">>,
+                                                <<"Director">>, <<"Someone">>, <<"100$ banknote">>,
+                                                {domain_RussianBankAccount, <<"4276300010908312893">>,
+                                                    <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+                        {contract_modification,
+                            {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+                                {payout_tool_modification,
+                                    {payproc_PayoutToolModificationUnit, <<"1CR1Y2ZcrA1">>,
+                                        {creation,
+                                            {payproc_PayoutToolParams,
+                                                {domain_CurrencyRef, <<"RUB">>},
+                                                {russian_bank_account,
+                                                    {domain_RussianBankAccount, <<"4276300010908312893">>,
+                                                        <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+                        {shop_modification,
+                            {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+                                {creation,
+                                    {payproc_ShopParams,
+                                        {domain_CategoryRef, 1},
+                                        {url, <<>>},
+                                        {domain_ShopDetails, <<"Battle Ready Shop">>, undefined},
+                                        <<"1CR1Y2ZcrA0">>, <<"1CR1Y2ZcrA1">>}}}},
+                        {shop_modification,
+                            {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+                                {shop_account_creation,
+                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]],
+                    deadline => undefined,
+                    execution_start_time => 1565617299263,
+                    function => 'CreateClaim',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CR1Xziml7o">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    role => server, service => 'PartyManagement',
+                    service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
+                    type => call},
+                #{span_id => "1012689088534282240", trace_id => "1012689088739803136", parent_id => "1012689108264288256"}
+            )
+        )
+    )
+].
+
 
 -spec result_test_() -> _.
 result_test_() -> [
