@@ -160,7 +160,7 @@ format_struct(Module, Struct, StructValue) ->
             ),
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
         false ->
-            {"~s{~p}", [ValueList]}
+            {"~p", [StructValue]}
     end.
 
 format_struct_({Type, Value}, {FAcc, PAcc} = Acc) ->
