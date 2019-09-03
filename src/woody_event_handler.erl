@@ -197,9 +197,13 @@ handle_event(Handler, Event, RpcId, Meta) ->
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
-    {"[" ++ id_to_string(Trace) ++ " " ++ id_to_string(Parent) ++ " " ++ id_to_string(Span) ++ "]", []};
+    {"[" ++
+        woody_event_formatter:to_string(Trace) ++ " " ++
+        woody_event_formatter:to_string(Parent) ++ " " ++
+        woody_event_formatter:to_string(Span) ++
+     "]", []};
 format_rpc_id(undefined) ->
-    {"~p", [undefined]}.
+    {"undefined", []}.
 
 -spec format_event(event(), event_meta(), woody:rpc_id() | undefined) ->
     log_msg().
@@ -352,16 +356,6 @@ maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = Woody
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
 
-%% NOTE: Must match to supported types for `~s`
-id_to_string(Value) when is_list(Value) ->
-    Value;
-id_to_string(Value) when is_binary(Value) ->
-    binary_to_list(Value);
-id_to_string(Value) when is_atom(Value) ->
-    atom_to_list(Value);
-id_to_string(_) ->
-    error(badarg).
-
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -374,7 +368,7 @@ format_msg({Fmt, Params}) ->
 
 format_event_msg({_Severity, {Fmt, Params}}) ->
     lists:flatten(
-        io_lib:format(Fmt, Params, [{chars_limit ,1024}])
+        io_lib:format(Fmt, Params, [{chars_limit, 1024}])
     ).
 
 -spec format_service_request_test_() -> _.
@@ -765,6 +759,7 @@ format_service_request_test_() -> [
 format_service_request_with_limit_test_() -> [
     ?_assertEqual(
         lists:flatten([
+            "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling ",
             "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
             "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
             "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",

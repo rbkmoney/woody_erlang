@@ -2,7 +2,8 @@
 
 -export([
     format_call/4,
-    format_reply/5
+    format_reply/5,
+    to_string/1
 ]).
 
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
@@ -73,16 +74,16 @@ format_thrift_value({struct, union, {Module, Struct}}, Value) ->
 format_thrift_value({struct, exception, {Module, Struct}}, Value) ->
     format_struct(Module, Struct, Value);
 format_thrift_value({enum, {_Module, _Struct}}, Value) ->
-    {"~s", [Value]};
+    {to_string(Value), []};
 format_thrift_value(string, Value) when is_binary(Value) ->
     case is_printable(Value) of
         true ->
-            {"'~ts'", [Value]};
+            {"'" ++ to_string(Value) ++ "'", []}; %% TODO UTF-8(?)
         false ->
             format_non_printable_string(Value)
     end;
 format_thrift_value(string, Value) ->
-    {"'~s'", [Value]};
+    {"'" ++ to_string(Value) ++ "'", []};
 format_thrift_value({list, Type}, ValueList) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {Format, Params} =
         lists:foldr(
@@ -128,9 +129,14 @@ format_thrift_value({map, KeyType, ValueType}, Map) ->
             {[], []}, MapData
         ),
     {"#{" ++ string:join(Params, ", ") ++ "}", Values};
-format_thrift_value(_Type, Value) ->
-    %% bool, double, i8, i16, i32, i64 formats here
-    {"~p", [Value]}.
+format_thrift_value(bool, false) ->
+    {"false", []};
+format_thrift_value(bool, true) ->
+    {"true", []};
+format_thrift_value(_Type, Value) when is_integer(Value) ->
+    {integer_to_list(Value), []};
+format_thrift_value(_Type, Value) when is_float(Value) ->
+    {float_to_list(Value), []}.
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     [ExceptionType] =
@@ -184,7 +190,7 @@ format_non_printable_string(Value) ->
         true ->
             {"~w", [Value]};
         false ->
-            {"~s", ["<<...>>"]}
+            {"<<...>>", []}
     end.
 
 is_printable(<<>>) ->
@@ -201,3 +207,14 @@ is_printable(Value) ->
             %% mark such data as non-printable instead
             false
     end.
+
+-spec to_string(list() | binary() | atom()) -> list().
+%% NOTE: Must match to supported types for `~s`
+to_string(Value) when is_list(Value) ->
+    Value;
+to_string(Value) when is_binary(Value) ->
+    binary_to_list(Value);
+to_string(Value) when is_atom(Value) ->
+    atom_to_list(Value);
+to_string(_) ->
+    error(badarg).
