@@ -2,7 +2,9 @@
 
 -export([
     format_call/4,
+    format_call/5,
     format_reply/5,
+    format_reply/6,
     to_string/1
 ]).
 
@@ -10,15 +12,24 @@
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 10).
 
--type opts():: #{}.
+-type opts():: #{
+    current_depth := neg_integer(),
+    max_depth := integer()
+}.
 
 -spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
 format_call(Module, Service, Function, Arguments) ->
+    format_call(Module, Service, Function, Arguments, #{}).
+
+-spec format_call(atom(), atom(), atom(), term(), opts()) ->
+    woody_event_handler:msg().
+format_call(Module, Service, Function, Arguments, Opts) ->
+    Opts1 = normalize_options(Opts),
     case Module:function_info(Service, Function, params_type) of
         {struct, struct, ArgTypes} ->
             {ArgsFormat, ArgsArgs} =
-                format_call_(ArgTypes, Arguments, {[], []}, #{}),
+                format_call_(ArgTypes, Arguments, {[], []}, Opts1),
             {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
         _Other ->
             {"~s:~s(~p)", [Service, Function, Arguments]}
@@ -52,16 +63,17 @@ format_reply(Module, Service, Function, Value, FormatAsException) ->
 -spec format_reply(atom(), atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
 format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_tuple(Value) ->
+    Opts1 = normalize_options(Opts),
     try
         case FormatAsException of
             false ->
                 ReplyType = Module:function_info(Service, Function, reply_type),
-                format_thrift_value(ReplyType, Value, Opts);
+                format_thrift_value(ReplyType, Value, Opts1);
             true ->
                 {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
                 Exception = element(1, Value),
                 ExceptionType = get_exception_type(Exception, ExceptionTypeList),
-                format_thrift_value(ExceptionType, Value, Opts)
+                format_thrift_value(ExceptionType, Value, Opts1)
         end
     catch
         _:_ ->
@@ -72,12 +84,12 @@ format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
 
 -spec format_thrift_value(term(), term(), opts()) ->
     woody_event_handler:msg().
-format_thrift_value({struct, struct, {Module, Struct}}, Value, Opts) ->
-    format_struct(Module, Struct, Value, Opts);
-format_thrift_value({struct, union, {Module, Struct}}, Value, Opts) ->
-    format_union(Module, Struct, Value, Opts);
-format_thrift_value({struct, exception, {Module, Struct}}, Value, Opts) ->
-    format_struct(Module, Struct, Value, Opts);
+format_thrift_value({struct, struct, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
+    format_struct(Module, Struct, Value, Opts#{current_depth := CD + 1});
+format_thrift_value({struct, union, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
+    format_union(Module, Struct, Value, Opts#{current_depth := CD + 1});
+format_thrift_value({struct, exception, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
+    format_struct(Module, Struct, Value, Opts#{current_depth := CD + 1});
 format_thrift_value({enum, {_Module, _Struct}}, Value, _Opts) ->
     {to_string(Value), []};
 format_thrift_value(string, Value, _Opts) when is_binary(Value) ->
@@ -89,22 +101,25 @@ format_thrift_value(string, Value, _Opts) when is_binary(Value) ->
     end;
 format_thrift_value(string, Value, _Opts) ->
     {"'" ++ to_string(Value) ++ "'", []};
-format_thrift_value({list, Type}, ValueList, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
+format_thrift_value({list, _}, _, #{current_depth := CD, max_depth := MD})
+    when MD >= 0, CD >= MD ->
+    {"[...]",[]};
+format_thrift_value({list, Type}, ValueList, Opts = #{current_depth := CD}) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {Format, Params} =
         lists:foldr(
             fun(Entry, {FA, FP}) ->
-                {F, P} = format_thrift_value(Type, Entry, Opts),
+                {F, P} = format_thrift_value(Type, Entry, Opts#{current_depth := CD + 1}),
                 {[F | FA], P ++ FP}
             end,
             {[], []},
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
-format_thrift_value({list, Type}, ValueList, Opts) ->
+format_thrift_value({list, Type}, ValueList, Opts = #{current_depth := CD}) ->
     FirstEntry = hd(ValueList),
-    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry, Opts),
+    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry, Opts#{current_depth := CD + 1}),
     LastEntry = hd(lists:reverse(ValueList)),
-    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry, Opts),
+    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry, Opts#{current_depth := CD + 1}),
     SkippedLength = length(ValueList) - 2,
     {
             "[" ++ FirstFormat ++ ", ...skipped ~b entry(-ies)..., " ++ LastFormat ++ "]",
@@ -158,14 +173,17 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
 
 -spec format_struct(atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_struct(Module, Struct, StructValue, Opts) ->
+format_struct(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
+    when MD >= 0, CD > MD ->
+    {to_string(Struct) ++ "{...}",[]};
+format_struct(Module, Struct, StructValue, Opts = #{current_depth := CD}) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
     ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
     case length(StructMeta) == length(ValueList) of
         true ->
             {Params, Values} =
-                format_struct_(StructMeta, ValueList, {[], []}, Opts),
+                format_struct_(StructMeta, ValueList, {[], []}, Opts#{current_depth => CD + 1}),
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
         false ->
             {"~p", [StructValue]}
@@ -183,6 +201,9 @@ format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, Opt
 
 -spec format_union(atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
+format_union(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
+    when MD >= 0, CD > MD ->
+    {to_string(Struct) ++ "{...}",[]};
 format_union(Module, Struct, {Type, UnionValue}, Opts) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
@@ -222,3 +243,170 @@ to_string(Value) when is_atom(Value) ->
     atom_to_list(Value);
 to_string(_) ->
     error(badarg).
+
+normalize_options(Opts) ->
+    CurrentDepth = maps:get(current_depth, Opts, 0),
+    MaxDepth = maps:get(max_depth, Opts, -1),
+    Opts#{
+        current_depth => CurrentDepth,
+        max_depth => MaxDepth
+    }.
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+-spec test() -> _.
+
+-define(ARGS, [undefined, <<"1CR1Xziml7o">>,
+    [{contract_modification,
+    {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+    {creation,
+    {payproc_ContractParams, undefined,
+    {domain_ContractTemplateRef, 1},
+    {domain_PaymentInstitutionRef, 1},
+    {legal_entity,
+    {russian_legal_entity,
+    {domain_RussianLegalEntity, <<"Hoofs & Horns OJSC">>,
+    <<"1234509876">>, <<"1213456789012">>,
+    <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>, <<"NaN">>,
+    <<"Director">>, <<"Someone">>, <<"100$ banknote">>,
+    {domain_RussianBankAccount, <<"4276300010908312893">>,
+    <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+    {contract_modification,
+    {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+    {payout_tool_modification,
+    {payproc_PayoutToolModificationUnit, <<"1CR1Y2ZcrA1">>,
+    {creation,
+    {payproc_PayoutToolParams,
+    {domain_CurrencyRef, <<"RUB">>},
+    {russian_bank_account,
+    {domain_RussianBankAccount, <<"4276300010908312893">>,
+    <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+    {shop_modification,
+    {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+    {creation,
+    {payproc_ShopParams,
+    {domain_CategoryRef, 1},
+    {url, <<>>},
+    {domain_ShopDetails, <<"Battle Ready Shop">>, undefined},
+    <<"1CR1Y2ZcrA0">>, <<"1CR1Y2ZcrA1">>}}}},
+    {shop_modification,
+    {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+    {shop_account_creation,
+    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]]
+    ).
+
+format_msg({Fmt, Params}) ->
+    lists:flatten(
+        io_lib:format(Fmt, Params)
+    ).
+
+-spec depth_test_() -> _.
+depth_test_() -> [
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [...])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 0}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{...}, ...skipped ",
+            "2 entry(-ies)..., PartyModification{...}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 1}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{...}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{...}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 2}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = ",
+            "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 3}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = ",
+            "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 4}
+            )
+        )
+    )
+].
+
+-endif.
