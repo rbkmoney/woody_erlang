@@ -12,10 +12,7 @@
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 10).
 
--type opts():: #{
-    current_depth := neg_integer(),
-    max_depth := integer()
-}.
+-type opts():: #{atom() => term()}.
 
 -spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().

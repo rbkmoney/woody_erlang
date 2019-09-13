@@ -825,9 +825,9 @@ format_service_request_with_limit_test_() -> [
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
                     type => call},
                 #{
-                    span_id => "1012689088534282240",
-                    trace_id => "1012689088739803136",
-                    parent_id => "1012689108264288256"}
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>}
             )
         )
     )
