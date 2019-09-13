@@ -103,7 +103,7 @@ format_thrift_value(string, Value, _Opts) ->
     {"'" ++ to_string(Value) ++ "'", []};
 format_thrift_value({list, _}, _, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD >= MD ->
-    {"[...]",[]};
+    {"[...]", []};
 format_thrift_value({list, Type}, ValueList, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {Format, Params} =
         lists:foldr(
@@ -127,7 +127,7 @@ format_thrift_value({list, Type}, ValueList, Opts) ->
     };
 format_thrift_value({set, _}, _, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD >= MD ->
-    {"{...}",[]};
+    {"{...}", []};
 format_thrift_value({set, Type}, SetofValues, Opts) ->
     {Format, Params} =
         ordsets:fold(
@@ -141,7 +141,7 @@ format_thrift_value({set, Type}, SetofValues, Opts) ->
     {"{" ++ Format ++ "}", Params};
 format_thrift_value({map, _}, _, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD >= MD ->
-    {"#{...}",[]};
+    {"#{...}", []};
 format_thrift_value({map, KeyType, ValueType}, Map, Opts) ->
     MapData = maps:to_list(Map),
     {Params, Values} =
@@ -181,7 +181,7 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     woody_event_handler:msg().
 format_struct(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD > MD ->
-    {to_string(Struct) ++ "{...}",[]};
+    {to_string(Struct) ++ "{...}", []};
 format_struct(Module, Struct, StructValue, Opts) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
@@ -209,7 +209,7 @@ format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, Opt
     woody_event_handler:msg().
 format_union(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD > MD ->
-    {to_string(Struct) ++ "{...}",[]};
+    {to_string(Struct) ++ "{...}", []};
 format_union(Module, Struct, {Type, UnionValue}, Opts) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
