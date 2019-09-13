@@ -84,12 +84,12 @@ format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
 
 -spec format_thrift_value(term(), term(), opts()) ->
     woody_event_handler:msg().
-format_thrift_value({struct, struct, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
-    format_struct(Module, Struct, Value, Opts#{current_depth := CD + 1});
-format_thrift_value({struct, union, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
-    format_union(Module, Struct, Value, Opts#{current_depth := CD + 1});
-format_thrift_value({struct, exception, {Module, Struct}}, Value, Opts = #{current_depth := CD}) ->
-    format_struct(Module, Struct, Value, Opts#{current_depth := CD + 1});
+format_thrift_value({struct, struct, {Module, Struct}}, Value, Opts) ->
+    format_struct(Module, Struct, Value, increment_depth(Opts));
+format_thrift_value({struct, union, {Module, Struct}}, Value, Opts) ->
+    format_union(Module, Struct, Value, increment_depth(Opts));
+format_thrift_value({struct, exception, {Module, Struct}}, Value, Opts) ->
+    format_struct(Module, Struct, Value, increment_depth(Opts));
 format_thrift_value({enum, {_Module, _Struct}}, Value, _Opts) ->
     {to_string(Value), []};
 format_thrift_value(string, Value, _Opts) when is_binary(Value) ->
@@ -104,22 +104,22 @@ format_thrift_value(string, Value, _Opts) ->
 format_thrift_value({list, _}, _, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD >= MD ->
     {"[...]",[]};
-format_thrift_value({list, Type}, ValueList, Opts = #{current_depth := CD}) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
+format_thrift_value({list, Type}, ValueList, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {Format, Params} =
         lists:foldr(
             fun(Entry, {FA, FP}) ->
-                {F, P} = format_thrift_value(Type, Entry, Opts#{current_depth := CD + 1}),
+                {F, P} = format_thrift_value(Type, Entry, increment_depth(Opts)),
                 {[F | FA], P ++ FP}
             end,
             {[], []},
             ValueList
         ),
     {"[" ++ string:join(Format, ", ") ++ "]", Params};
-format_thrift_value({list, Type}, ValueList, Opts = #{current_depth := CD}) ->
+format_thrift_value({list, Type}, ValueList, Opts) ->
     FirstEntry = hd(ValueList),
-    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry, Opts#{current_depth := CD + 1}),
+    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry, increment_depth(Opts)),
     LastEntry = hd(lists:reverse(ValueList)),
-    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry, Opts#{current_depth := CD + 1}),
+    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry, increment_depth(Opts)),
     SkippedLength = length(ValueList) - 2,
     {
             "[" ++ FirstFormat ++ ", ...skipped ~b entry(-ies)..., " ++ LastFormat ++ "]",
@@ -176,14 +176,14 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
 format_struct(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD > MD ->
     {to_string(Struct) ++ "{...}",[]};
-format_struct(Module, Struct, StructValue, Opts = #{current_depth := CD}) ->
+format_struct(Module, Struct, StructValue, Opts) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
     ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
     case length(StructMeta) == length(ValueList) of
         true ->
             {Params, Values} =
-                format_struct_(StructMeta, ValueList, {[], []}, Opts#{current_depth => CD + 1}),
+                format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts)),
             {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
         false ->
             {"~p", [StructValue]}
@@ -251,6 +251,9 @@ normalize_options(Opts) ->
         current_depth => CurrentDepth,
         max_depth => MaxDepth
     }.
+
+increment_depth(Opts = #{current_depth := CD}) ->
+    Opts#{current_depth => CD + 1}.
 
 -ifdef(TEST).
 
