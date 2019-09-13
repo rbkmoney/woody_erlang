@@ -16,20 +16,18 @@ format_call(Module, Service, Function, Arguments) ->
     case Module:function_info(Service, Function, params_type) of
         {struct, struct, ArgTypes} ->
             {ArgsFormat, ArgsArgs} =
-                lists:foldr(
-                    fun format_call_/2,
-                    {[], []},
-                    lists:zip(ArgTypes, Arguments)
-                ),
+                format_call_(ArgTypes, Arguments, {[], []}),
             {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
         _Other ->
             {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
 
-format_call_({Type, Argument}, {AccFmt, AccParam}) ->
+format_call_([], [], Result) ->
+    Result;
+format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}) ->
     case format_argument(Type, Argument) of
-        {"", []} -> {AccFmt, AccParam};
-        {Fmt, Param} -> {[Fmt | AccFmt], Param ++ AccParam}
+        {"", []} -> format_call_(RestType, RestArgument, {AccFmt, AccParam});
+        {Fmt, Param} -> format_call_(RestType, RestArgument, {AccFmt ++ [Fmt],  AccParam ++ Param})
     end.
 
 format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined) ->
