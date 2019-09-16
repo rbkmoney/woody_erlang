@@ -22,35 +22,49 @@ format_call(Module, Service, Function, Arguments) ->
 -spec format_call(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
 format_call(Module, Service, Function, Arguments, Opts) ->
-    Opts1 = normalize_options(Opts),
     case Module:function_info(Service, Function, params_type) of
         {struct, struct, ArgTypes} ->
+            #{current_length := CL} = Opts1 = normalize_options(Opts),
+            ServiceName = to_string(Service),
+            ServiceLength = length(ServiceName),
+            FunctionName = to_string(Function),
+            FunctionLength = length(FunctionName),
+            NewCL = CL + ServiceLength + FunctionLength + 3,
             {ArgsFormat, ArgsArgs} =
-                format_call_(ArgTypes, Arguments, {[], []}, Opts1),
-            {"~s:~s(" ++ string:join(ArgsFormat, ", ") ++ ")", [Service, Function] ++ ArgsArgs};
+                format_call_(ArgTypes, Arguments, {[], []}, Opts1#{current_length => NewCL}),
+            {ServiceName ++ ":" ++ FunctionName ++ "(" ++ string:join(ArgsFormat, ", ") ++ ")", ArgsArgs};
         _Other ->
-            {"~s:~s(~p)", [Service, Function, Arguments]}
+            {io_lib:format("~s:~s(~p)", [Service, Function, Arguments]), []}
     end.
 
 format_call_([], [], Result, _Opts) ->
     Result;
-format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, Opts) ->
+format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, Opts = #{current_length := CL, max_length := ML}) ->
     case format_argument(Type, Argument, Opts) of
         {"", []} -> format_call_(RestType, RestArgument, {AccFmt, AccParam}, Opts);
-        {Fmt, Param} -> format_call_(RestType, RestArgument, {AccFmt ++ [Fmt],  AccParam ++ Param}, Opts)
+        {Fmt, Param} ->
+            FmtLen = length(Fmt),
+            case FmtLen + CL of
+                NewCL when ML < 0 ->
+                    format_call_(RestType, RestArgument, {AccFmt ++ [Fmt],  AccParam ++ Param}, Opts#{current_length => NewCL});
+                NewCL when ML < NewCL ->
+                    format_call_(RestType, RestArgument, {AccFmt ++ ["..."],  AccParam}, Opts#{current_length => CL + 3}); %% 3 = length("...")
+                NewCL ->
+                    format_call_(RestType, RestArgument, {AccFmt ++ ["..."],  AccParam}, Opts#{current_length => NewCL})
+            end
     end.
 
 format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _Opts) ->
     {"", []};
 format_argument({_Fid, _Required, Type, Name, Default}, undefined, Opts) ->
     {Format, Params} = format_thrift_value(Type, Default, Opts),
-    {"~s = " ++ Format, [Name] ++ Params};
+    {io_lib:format("~s = " ++ Format, [Name] ++ Params), []};
 format_argument({_Fid, _Required, Type, Name, _Default}, Value, Opts) ->
     {Format, Params} = format_thrift_value(Type, Value, Opts),
-    {"~s = " ++ Format, [Name] ++ Params};
+    {io_lib:format("~s = " ++ Format, [Name] ++ Params), []};
 format_argument(_Type, Value, _Opts) ->
     %% All unknown types
-    {"~p", [Value]}.
+    {io_lib:format("~p", [Value]), []}.
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -74,10 +88,10 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
         end
     catch
         _:_ ->
-            {"~p", [Value]}
+            {io_lib:format("~p", [Value]), []}
     end;
 format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
-    {"~p", [{Kind, Result}]}.
+    {io_lib:format("~p", [{Kind, Result}]), []}.
 
 -spec format_thrift_value(term(), term(), opts()) ->
     woody_event_handler:msg().
@@ -179,17 +193,20 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
 format_struct(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
     when MD >= 0, CD > MD ->
     {to_string(Struct) ++ "{...}", []};
-format_struct(Module, Struct, StructValue, Opts) ->
+format_struct(Module, Struct, StructValue, Opts = #{current_length := CL}) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
     ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
     case length(StructMeta) == length(ValueList) of
         true ->
+            StructName = to_string(Struct),
+            StructNameLength = length(StructName),
+            NewCL = CL + StructNameLength,
             {Params, Values} =
-                format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts)),
-            {"~s{" ++ string:join(Params, ", ") ++ "}", [Struct | Values]};
+                format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts#{current_length := NewCL})),
+            {StructName ++ "{" ++ string:join(Params, ", ") ++ "}", Values};
         false ->
-            {"~p", [StructValue]}
+            {io_lib:format("~p", [StructValue]), []}
     end.
 
 format_struct_([], [], Acc, _Opts) ->
@@ -211,12 +228,12 @@ format_union(Module, Struct, {Type, UnionValue}, Opts) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
     {Format, Parameters} = format_argument(UnionMeta, UnionValue, Opts),
-    {"~s{" ++ Format ++ "}", [Struct] ++ Parameters}.
+    {io_lib:format("~s{" ++ Format ++ "}", [Struct] ++ Parameters), []}.
 
 format_non_printable_string(Value) ->
     case size(Value) =< ?MAX_BIN_SIZE of
         true ->
-            {"~w", [Value]};
+            {io_lib:format("~w", [Value]), []};
         false ->
             {"<<...>>", []}
     end.
@@ -250,9 +267,13 @@ to_string(_) ->
 normalize_options(Opts) ->
     CurrentDepth = maps:get(current_depth, Opts, 0),
     MaxDepth = maps:get(max_depth, Opts, -1),
+    MaxLength = maps:get(max_length, Opts, -1),
+    CurrentLength = maps:get(current_length, Opts, 0),
     Opts#{
         current_depth => CurrentDepth,
-        max_depth => MaxDepth
+        max_depth => MaxDepth,
+        max_length => MaxLength,
+        current_length => CurrentLength
     }.
 
 increment_depth(Opts = #{current_depth := CD}) ->
