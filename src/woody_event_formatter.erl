@@ -31,8 +31,8 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             FunctionLength = length(FunctionName),
             NewCL = CL + ServiceLength + FunctionLength + 3,
             {ArgsFormat, ArgsArgs} =
-                format_call_(ArgTypes, Arguments, {[], []}, Opts1#{current_length => NewCL}),
-            {ServiceName ++ ":" ++ FunctionName ++ "(" ++ string:join(ArgsFormat, ", ") ++ ")", ArgsArgs};
+                format_call_(ArgTypes, Arguments, {[], []}, Opts1#{current_length => NewCL, first_param => true}),
+            {ServiceName ++ ":" ++ FunctionName ++ "(" ++ ArgsFormat ++ ")", ArgsArgs};
         _Other ->
             {io_lib:format("~s:~s(~p)", [Service, Function, Arguments]), []}
     end.
@@ -44,13 +44,15 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, O
         {"", []} -> format_call_(RestType, RestArgument, {AccFmt, AccParam}, Opts);
         {Fmt, Param} ->
             FmtLen = length(Fmt),
+            Divider = get_divider(Opts),
+            DividerLen = length(Divider),
             case FmtLen + CL of
                 NewCL when ML < 0 ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ [Fmt],  AccParam ++ Param}, Opts#{current_length => NewCL});
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam ++ Param}, Opts#{current_length => NewCL, first_param => false});
                 NewCL when ML < NewCL ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ ["..."],  AccParam}, Opts#{current_length => CL + 3}); %% 3 = length("...")
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ "...", AccParam}, Opts#{current_length => CL + 3 + DividerLen, first_param => false}); %% 3 = length("...")
                 NewCL ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ ["..."],  AccParam}, Opts#{current_length => NewCL})
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam}, Opts#{current_length => NewCL + DividerLen, first_param => false})
             end
     end.
 
@@ -278,6 +280,11 @@ normalize_options(Opts) ->
 
 increment_depth(Opts = #{current_depth := CD}) ->
     Opts#{current_depth => CD + 1}.
+
+get_divider(#{first_param := true}) ->
+    "";
+get_divider(#{first_param := false}) ->
+    ", ".
 
 -ifdef(TEST).
 
@@ -553,6 +560,62 @@ depth_test_() -> [
                 'ProcessCall',
                 ?ARGS2,
                 #{max_depth => 5}
+            )
+        )
+    )
+].
+
+-spec length_test_() -> _.
+length_test_() -> [
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => -1}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => 2048}
             )
         )
     )
