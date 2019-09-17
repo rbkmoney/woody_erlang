@@ -43,10 +43,9 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, O
     case format_argument(Type, Argument, Opts) of
         {{"", []}, #{current_length := CL1}} -> format_call_(RestType, RestArgument, {AccFmt, AccParam}, Opts#{current_length => CL1}, IsFirst);
         {{Fmt, Param}, #{current_length := CL1}} ->
-            FmtLen = length(Fmt),
             Divider = get_divider(IsFirst),
             DividerLen = length(Divider),
-            case FmtLen + CL1 of
+            case CL1 of
                 NewCL when ML < 0 ->
                     format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam ++ Param}, Opts#{current_length => NewCL}, false);
                 NewCL when ML < NewCL ->
