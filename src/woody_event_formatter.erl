@@ -53,7 +53,7 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, C
             );
         {{Fmt, Param}, CL1} ->
             #{max_length := ML} = Opts,
-            Divider = get_divider(IsFirst),
+            Divider = get_delimiter(IsFirst),
             DividerLen = length(Divider),
             case CL1 of
                 NewCL when ML < 0 ->
@@ -239,18 +239,17 @@ format_struct(Module, Struct, StructValue, CurDepth, CL, Opts = #{max_length := 
         true ->
             StructName = to_string(Struct),
             StructNameLength = length(StructName),
-            NewCL = CL + StructNameLength + 2,
-            {{Params, Values}, CL1} =
+            {{Params, Values}, NewCL} =
                 format_struct_(
                     StructMeta,
                     ValueList,
                     {[], []},
                     CurDepth + 1,
-                    NewCL,
+                    CL + StructNameLength + 2,
                     Opts,
                     true
                 ),
-            {{StructName ++ "{" ++ Params ++ "}", Values}, CL1};
+            {{StructName ++ "{" ++ Params ++ "}", Values}, NewCL};
         false ->
             Length = get_length(ML, CL),
             Fmt = io_lib:format("~p", [StructValue], [{chars_limit, Length}]),
@@ -259,18 +258,23 @@ format_struct(Module, Struct, StructValue, CurDepth, CL, Opts = #{max_length := 
 
 format_struct_([], [], Acc, _CurDepth, CL, _Opts, _IsFirst) ->
     {Acc, CL};
+format_struct_(_Types, _Values, {AccFmt, AccParams}, _CurDepth, CL, #{max_length := ML}, IsFirst)
+    when ML >= 0, CL > ML->
+    Delimiter = get_delimiter(IsFirst),
+    DelimiterLen = length(Delimiter),
+    {{AccFmt ++ Delimiter ++ "...", AccParams}, CL + 3 + DelimiterLen};
 format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, CurDepth, CL, Opts, IsFirst) ->
     case format_argument(Type, Value, CurDepth, CL, Opts) of
-        {{"", []}, CL} ->
-            format_struct_(RestTypes, RestValues, Acc, CurDepth, CL, Opts, IsFirst);
+        {{"", []}, CL1} ->
+            format_struct_(RestTypes, RestValues, Acc, CurDepth, CL1, Opts, IsFirst);
         {{F, P}, CL1} ->
-            Divider = get_divider(IsFirst),
-            DividerLen = length(Divider),
+            Delimiter = get_delimiter(IsFirst),
+            DelimiterLen = length(Delimiter),
             format_struct_(
                 RestTypes,
                 RestValues,
-                {FAcc ++ Divider ++ F, PAcc ++ P},
-                CurDepth, CL1 + DividerLen,
+                {FAcc ++ Delimiter ++ F, PAcc ++ P},
+                CurDepth, CL1 + DelimiterLen,
                 Opts,
                 false
             )
@@ -337,9 +341,9 @@ normalize_options(Opts) ->
         max_length => MaxLength
     }.
 
-get_divider(true) ->
+get_delimiter(true) ->
     "";
-get_divider(false) ->
+get_delimiter(false) ->
     ", ".
 
 get_length(ML, CL) when ML > CL ->
@@ -351,7 +355,7 @@ format_list(_Type, [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
     {Result, CL};
 format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDepth, CL, Opts, IsFirst) ->
     #{max_length := ML} = Opts,
-    Delimiter = get_divider(IsFirst),
+    Delimiter = get_delimiter(IsFirst),
     DelimiterLen = length(Delimiter),
     {{Fmt, Params}, CL1} = format_thrift_value(Type, Entry, CurDepth, CL + DelimiterLen, Opts),
     Result = {AccFmt ++ Delimiter ++ Fmt, AccParams ++ Params},
@@ -372,7 +376,7 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
     #{max_length := ML} = Opts,
     MapStr = " => ",
     MapStrLen = 4,
-    Delimiter = get_divider(IsFirst),
+    Delimiter = get_delimiter(IsFirst),
     DelimiterLen = length(Delimiter),
     NewCL = CL2 + MapStrLen + DelimiterLen,
     case NewCL of
@@ -742,6 +746,20 @@ length_test_() -> [
                 'CreateClaim',
                 ?ARGS,
                 #{max_length => 1024}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [...])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => 100}
             )
         )
     )
