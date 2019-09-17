@@ -30,43 +30,44 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             FunctionName = to_string(Function),
             FunctionLength = length(FunctionName),
             NewCL = CL + ServiceLength + FunctionLength + 3,
-            {ArgsFormat, ArgsArgs} =
-                format_call_(ArgTypes, Arguments, {[], []}, Opts1#{current_length => NewCL, first_param => true}),
+            {{ArgsFormat, ArgsArgs}, _Opts} =
+                format_call_(ArgTypes, Arguments, {[], []}, Opts1#{current_length => NewCL}, true),
             {ServiceName ++ ":" ++ FunctionName ++ "(" ++ ArgsFormat ++ ")", ArgsArgs};
         _Other ->
             {io_lib:format("~s:~s(~p)", [Service, Function, Arguments]), []}
     end.
 
-format_call_([], [], Result, _Opts) ->
-    Result;
-format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, Opts = #{current_length := CL, max_length := ML}) ->
+format_call_([], [], Result, Opts, _IsFirst) ->
+    {Result, Opts};
+format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, Opts = #{current_length := CL, max_length := ML}, IsFirst) ->
     case format_argument(Type, Argument, Opts) of
-        {"", []} -> format_call_(RestType, RestArgument, {AccFmt, AccParam}, Opts);
-        {Fmt, Param} ->
+        {{"", []}, #{current_length := CL1}} -> format_call_(RestType, RestArgument, {AccFmt, AccParam}, Opts#{current_length => CL1}, IsFirst);
+        {{Fmt, Param}, #{current_length := CL1}} ->
             FmtLen = length(Fmt),
-            Divider = get_divider(Opts),
+            Divider = get_divider(IsFirst),
             DividerLen = length(Divider),
-            case FmtLen + CL of
+            case FmtLen + CL1 of
                 NewCL when ML < 0 ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam ++ Param}, Opts#{current_length => NewCL, first_param => false});
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam ++ Param}, Opts#{current_length => NewCL}, false);
                 NewCL when ML < NewCL ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ "...", AccParam}, Opts#{current_length => CL + 3 + DividerLen, first_param => false}); %% 3 = length("...")
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ "...", AccParam}, Opts#{current_length => CL + 3 + DividerLen}, false); %% 3 = length("...")
                 NewCL ->
-                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam}, Opts#{current_length => NewCL + DividerLen, first_param => false})
+                    format_call_(RestType, RestArgument, {AccFmt ++ Divider ++ Fmt, AccParam}, Opts#{current_length => NewCL + DividerLen}, false)
             end
     end.
 
-format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _Opts) ->
-    {"", []};
+format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, Opts) ->
+    {{"", []}, Opts};
 format_argument({_Fid, _Required, Type, Name, Default}, undefined, Opts) ->
-    {Format, Params} = format_thrift_value(Type, Default, Opts),
-    {io_lib:format("~s = " ++ Format, [Name] ++ Params), []};
+    {{Format, Params}, #{current_length := CL}} = format_thrift_value(Type, Default, Opts),
+    {{io_lib:format("~s = " ++ Format, [Name] ++ Params), []}, Opts#{current_length => CL}};
 format_argument({_Fid, _Required, Type, Name, _Default}, Value, Opts) ->
-    {Format, Params} = format_thrift_value(Type, Value, Opts),
-    {io_lib:format("~s = " ++ Format, [Name] ++ Params), []};
-format_argument(_Type, Value, _Opts) ->
+    {{Format, Params}, #{current_length := CL}} = format_thrift_value(Type, Value, Opts),
+    {{io_lib:format("~s = " ++ Format, [Name] ++ Params), []}, Opts#{current_length => CL}};
+format_argument(_Type, Value, Opts = #{max_length := ML, current_length := CL}) ->
     %% All unknown types
-    {io_lib:format("~p", [Value]), []}.
+    Length = get_length(ML, CL),
+    {{io_lib:format("~p", [Value], [{chars_limit, Length}]), []}, Opts#{current_length => CL + Length}}.
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -81,12 +82,14 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
         case FormatAsException of
             false ->
                 ReplyType = Module:function_info(Service, Function, reply_type),
-                format_thrift_value(ReplyType, Value, Opts1);
+                {Reply, _Opts2} = format_thrift_value(ReplyType, Value, Opts1),
+                Reply;
             true ->
                 {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
                 Exception = element(1, Value),
                 ExceptionType = get_exception_type(Exception, ExceptionTypeList),
-                format_thrift_value(ExceptionType, Value, Opts1)
+                {Reply, _Opts2} = format_thrift_value(ExceptionType, Value, Opts1),
+                Reply
         end
     catch
         _:_ ->
@@ -103,79 +106,80 @@ format_thrift_value({struct, union, {Module, Struct}}, Value, Opts) ->
     format_union(Module, Struct, Value, increment_depth(Opts));
 format_thrift_value({struct, exception, {Module, Struct}}, Value, Opts) ->
     format_struct(Module, Struct, Value, increment_depth(Opts));
-format_thrift_value({enum, {_Module, _Struct}}, Value, _Opts) ->
-    {to_string(Value), []};
-format_thrift_value(string, Value, _Opts) when is_binary(Value) ->
+format_thrift_value({enum, {_Module, _Struct}}, Value, Opts = #{current_length := CL}) ->
+    ValueString = to_string(Value),
+    Length = length(ValueString),
+    {{ValueString, []}, Opts#{current_value => CL + Length}};
+format_thrift_value(string, Value, Opts = #{current_length := CL}) when is_binary(Value) ->
     case is_printable(Value) of
         true ->
-            {"'" ++ to_string(Value) ++ "'", []}; %% TODO UTF-8(?)
+            ValueString = to_string(Value),
+            Length = length(ValueString),
+            {{"'" ++ to_string(Value) ++ "'", []}, Opts#{current_length => CL + Length + 2}}; %% TODO UTF-8(?)
         false ->
-            format_non_printable_string(Value)
+            {Fmt, Params} = format_non_printable_string(Value),
+            Length = length(Fmt),
+            {{Fmt, Params}, Opts#{current_length => CL + Length}}
     end;
-format_thrift_value(string, Value, _Opts) ->
-    {"'" ++ to_string(Value) ++ "'", []};
-format_thrift_value({list, _}, _, #{current_depth := CD, max_depth := MD})
+format_thrift_value(string, Value, Opts = #{current_length := CL}) ->
+    ValueString = to_string(Value),
+    Length = length(ValueString), %% TODO cut string
+    {{"'" ++ ValueString ++ "'", []}, Opts#{current_length => CL + Length + 2}};
+format_thrift_value(raw_string, Value, Opts = #{current_length := CL}) ->
+    ValueString = to_string(Value),
+    Length = length(ValueString), %% TODO cut string?
+    {{ValueString, []}, Opts#{current_length => CL + Length}};
+format_thrift_value({list, _}, _, Opts = #{current_depth := CD, max_depth := MD, current_length := CL})
     when MD >= 0, CD >= MD ->
-    {"[...]", []};
+    {{"[...]", []}, Opts#{current_length => CL + 5}};
 format_thrift_value({list, Type}, ValueList, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
-    {Format, Params} =
-        lists:foldr(
-            fun(Entry, {FA, FP}) ->
-                {F, P} = format_thrift_value(Type, Entry, increment_depth(Opts)),
-                {[F | FA], P ++ FP}
-            end,
-            {[], []},
-            ValueList
-        ),
-    {"[" ++ string:join(Format, ", ") ++ "]", Params};
-format_thrift_value({list, Type}, ValueList, Opts) ->
-    FirstEntry = hd(ValueList),
-    {FirstFormat, FirstParams} = format_thrift_value(Type, FirstEntry, increment_depth(Opts)),
-    LastEntry = hd(lists:reverse(ValueList)),
-    {LastFormat, LastParams} = format_thrift_value(Type, LastEntry, increment_depth(Opts)),
-    SkippedLength = length(ValueList) - 2,
-    {
-            "[" ++ FirstFormat ++ ", ...skipped ~b entry(-ies)..., " ++ LastFormat ++ "]",
-            FirstParams ++ [SkippedLength] ++ LastParams
-    };
-format_thrift_value({set, _}, _, #{current_depth := CD, max_depth := MD})
+    #{max_length := _ML, current_length := CL} = Opts,
+    TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
+    {{Format, Params}, #{current_length := CL1}} =
+        format_list(TypeList, ValueList, {"", []}, increment_depth(Opts#{current_length => CL + 2}), true), %% 2 = length("[]")
+    {{"[" ++ Format ++ "]", Params}, Opts#{current_length => CL1}};
+format_thrift_value({list, Type}, AllValueList, Opts) ->
+    #{max_length := _ML, current_length := CL} = Opts,
+    FirstEntry = hd(AllValueList),
+    LastEntry = hd(lists:reverse(AllValueList)),
+    SkipedLength = length(AllValueList) - 2,
+    SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkipedLength]),
+    TypeList = [Type, raw_string, Type],
+    ValueList = [FirstEntry, SkippedMsg, LastEntry],
+    {{Format, Params}, #{current_length := CL1}} =
+        format_list(TypeList, ValueList, {"", []}, increment_depth(Opts#{current_length => CL + 2}), true), %% 2 = length("[]")
+    {{"[" ++ Format ++ "]", Params}, Opts#{current_length => CL1}};
+format_thrift_value({set, _}, _, Opts = #{current_depth := CD, max_depth := MD, current_length := CL})
     when MD >= 0, CD >= MD ->
-    {"{...}", []};
+    {{"{...}", []}, Opts#{current_length => CL + 5}};
 format_thrift_value({set, Type}, SetofValues, Opts) ->
-    {Format, Params} =
-        ordsets:fold(
-            fun(Element, {AccFmt, AccParams}) ->
-                {Fmt, Param} = format_thrift_value(Type, Element, Opts),
-                {[Fmt | AccFmt], Param ++ AccParams}
-            end,
-            {[], []},
-            SetofValues
-        ),
-    {"{" ++ Format ++ "}", Params};
-format_thrift_value({map, _}, _, #{current_depth := CD, max_depth := MD})
+    #{max_length := _ML, current_length := CL} = Opts,
+    ValueList = sets:to_list(SetofValues),
+    TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
+    {{Format, Params}, #{current_length := CL1}} =
+        format_list(TypeList, ValueList, {"", []}, increment_depth(Opts#{current_length => CL + 2}), true), %% 2 = length("{}})
+    {{"{" ++ Format ++ "}", Params}, Opts#{current_length => CL1}};
+format_thrift_value({map, _}, _, Opts = #{current_depth := CD, max_depth := MD, current_length := CL})
     when MD >= 0, CD >= MD ->
-    {"#{...}", []};
-format_thrift_value({map, KeyType, ValueType}, Map, Opts) ->
+    {{"#{...}", []}, Opts#{current_length => CL + 6}};
+format_thrift_value({map, KeyType, ValueType}, Map, Opts) -> %% TODO Count length
+    #{max_length := _ML, current_length := CL} = Opts,
     MapData = maps:to_list(Map),
-    {Params, Values} =
-        lists:foldr(
-            fun({Key, Value}, {AccFmt, AccParam}) ->
-                {KeyFmt, KeyParam} = format_thrift_value(KeyType, Key, Opts),
-                {ValueFmt, ValueParam} = format_thrift_value(ValueType, Value, Opts),
-                EntryFormat = KeyFmt ++ " => " ++ ValueFmt,
-                {[EntryFormat | AccFmt], KeyParam ++ ValueParam ++ AccParam}
-            end,
-            {[], []}, MapData
-        ),
-    {"#{" ++ string:join(Params, ", ") ++ "}", Values};
-format_thrift_value(bool, false, _Opts) ->
-    {"false", []};
-format_thrift_value(bool, true, _Opts) ->
-    {"true", []};
-format_thrift_value(_Type, Value, _Opts) when is_integer(Value) ->
-    {integer_to_list(Value), []};
-format_thrift_value(_Type, Value, _Opts) when is_float(Value) ->
-    {float_to_list(Value), []}.
+    {{Params, Values}, #{current_length := CL1}} =
+        format_map(KeyType, ValueType, MapData, {"", []}, increment_depth(Opts#{current_length => CL + 3}), true),
+    {{"#{" ++ Params ++ "}", Values}, Opts#{current_length => CL1}};
+format_thrift_value(bool, false, Opts = #{current_length := CL}) ->
+    {{"false", []}, Opts#{current_length => CL + 5}};
+format_thrift_value(bool, true, Opts = #{current_length := CL}) ->
+    {{"true", []}, Opts#{current_length => CL + 4}};
+format_thrift_value(_Type, Value, Opts = #{current_length := CL}) when is_integer(Value) ->
+    ValueStr = integer_to_list(Value),
+    Length = length(ValueStr),
+    {{ValueStr, []}, Opts#{current_length => CL + Length}};
+format_thrift_value(_Type, Value, Opts = #{current_length := CL}) when is_float(Value) ->
+    ValueStr = float_to_list(Value),
+    Length = length(ValueStr),
+    {{ValueStr, []}, Opts#{current_length => CL + Length}}.
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     [ExceptionType] =
@@ -192,10 +196,10 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
 
 -spec format_struct(atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_struct(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
+format_struct(_Module, Struct, _StructValue, Opts = #{current_depth := CD, max_depth := MD, current_length := CL})
     when MD >= 0, CD > MD ->
-    {to_string(Struct) ++ "{...}", []};
-format_struct(Module, Struct, StructValue, Opts = #{current_length := CL}) ->
+    {{to_string(Struct) ++ "{...}", []}, Opts#{current_length => CL + 5}}; %% 5 = length("{...}")
+format_struct(Module, Struct, StructValue, Opts = #{current_length := CL, max_length := ML}) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
     ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
@@ -203,34 +207,40 @@ format_struct(Module, Struct, StructValue, Opts = #{current_length := CL}) ->
         true ->
             StructName = to_string(Struct),
             StructNameLength = length(StructName),
-            NewCL = CL + StructNameLength,
-            {Params, Values} =
-                format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts#{current_length := NewCL})),
-            {StructName ++ "{" ++ string:join(Params, ", ") ++ "}", Values};
+            NewCL = CL + StructNameLength + 2,
+            {{Params, Values}, Opts1} =
+                format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts#{current_length => NewCL}), true),
+            {{StructName ++ "{" ++ Params ++ "}", Values}, Opts1};
         false ->
-            {io_lib:format("~p", [StructValue]), []}
+            Length = get_length(ML, CL),
+            Fmt = io_lib:format("~p", [StructValue], [{chars_limit, Length}]),
+            {{Fmt, []}, Opts#{current_length => CL + Length}}
     end.
 
-format_struct_([], [], Acc, _Opts) ->
-    Acc;
-format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, Opts) ->
+format_struct_([], [], Acc, Opts, _IsFirst) ->
+    {Acc, Opts};
+format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, Opts, IsFirst) ->
     case format_argument(Type, Value, Opts) of
-        {"", []} ->
-            format_struct_(RestTypes, RestValues, Acc, Opts);
-        {F, P} ->
-            format_struct_(RestTypes, RestValues, {FAcc ++ [F], PAcc ++ P}, Opts)
+        {{"", []}, Opts1} ->
+            format_struct_(RestTypes, RestValues, Acc, Opts1, IsFirst);
+        {{F, P}, Opts1 = #{current_length := CL}} ->
+            Divider = get_divider(IsFirst),
+            DividerLen = length(Divider),
+            format_struct_(RestTypes, RestValues, {FAcc ++ Divider ++ F, PAcc ++ P}, Opts1#{current_length => CL + DividerLen}, false)
     end.
 
 -spec format_union(atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_union(_Module, Struct, _StructValue, #{current_depth := CD, max_depth := MD})
+format_union(_Module, Struct, _StructValue, Opts = #{current_depth := CD, max_depth := MD, current_length := CL})
     when MD >= 0, CD > MD ->
-    {to_string(Struct) ++ "{...}", []};
-format_union(Module, Struct, {Type, UnionValue}, Opts) ->
+    {{to_string(Struct) ++ "{...}", []}, Opts#{current_length => CL + 5}}; %% 5 = length("{...}"
+format_union(Module, Struct, {Type, UnionValue}, Opts = #{current_length := CL}) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
     {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
-    {Format, Parameters} = format_argument(UnionMeta, UnionValue, Opts),
-    {io_lib:format("~s{" ++ Format ++ "}", [Struct] ++ Parameters), []}.
+    StructName = to_string(Struct),
+    StructNameLen = length(StructName),
+    {{Format, Parameters}, #{current_length := CL1}} = format_argument(UnionMeta, UnionValue, Opts#{current_length => CL + StructNameLen + 2}), %% 2 = length("{}")
+    {{io_lib:format(StructName ++ "{" ++ Format ++ "}", Parameters), []}, Opts#{current_length := CL1}}.
 
 format_non_printable_string(Value) ->
     case size(Value) =< ?MAX_BIN_SIZE of
@@ -281,10 +291,53 @@ normalize_options(Opts) ->
 increment_depth(Opts = #{current_depth := CD}) ->
     Opts#{current_depth => CD + 1}.
 
-get_divider(#{first_param := true}) ->
+get_divider(true) ->
     "";
-get_divider(#{first_param := false}) ->
+get_divider(false) ->
     ", ".
+
+get_length(ML, CL) when ML > CL ->
+    ML - CL;
+get_length(_ML, _CL) ->
+    0.
+
+format_list(_Type, [], Result, Opts, _IsFirst) ->
+    {Result, Opts};
+format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, Opts = #{current_length := CL, max_length := ML}, IsFirst) ->
+    Delimiter = get_divider(IsFirst),
+    DelimiterLen = length(Delimiter),
+    {{Fmt, Params}, #{current_length := CL1}} = format_thrift_value(Type, Entry, Opts#{current_length => CL + DelimiterLen}),
+    Result = {AccFmt ++ Delimiter ++ Fmt, AccParams ++ Params},
+    case CL1 of
+        CL1 when ML < 0 ->
+            format_list(TypeList, ValueList, Result, Opts#{current_length => CL1}, false);
+        CL1 when CL1 =< ML ->
+            format_list(TypeList, ValueList, Result, Opts#{current_length => CL1}, false);
+        _ ->
+            {{AccFmt ++ Delimiter ++ "...", AccParams}, Opts#{current_length => CL + 3}}
+    end.
+
+format_map(_KeyType, _ValueType, [], Result, Opts, _IsFirst) ->
+    {Result, Opts};
+format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Opts, IsFirst) ->
+    {{KeyFmt, KeyParam}, #{current_length := CL}} = format_thrift_value(KeyType, Key, Opts),
+    {{ValueFmt, ValueParam}, Opts2} = format_thrift_value(ValueType, Value, Opts#{current_length => CL}),
+    #{current_length := CL1, max_length := ML} = Opts2,
+    MapStr = " => ",
+    MapStrLen = 4,
+    Delimiter = get_divider(IsFirst),
+    DelimiterLen = length(Delimiter),
+    NewCL = CL1 + MapStrLen + DelimiterLen,
+    case NewCL of
+        NewCL when ML < 0 ->
+            Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
+            format_map(KeyType, ValueType, MapData, Result, Opts#{current_length => NewCL}, false);
+        NewCL when NewCL =< ML ->
+            Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
+            format_map(KeyType, ValueType, MapData, Result, Opts#{current_length => NewCL}, false);
+        NewCL ->
+            {{AccFmt ++ Delimiter ++ "...", AccParams}, Opts#{current_length => CL + 3}} %% 3 = length("...")
+    end.
 
 -ifdef(TEST).
 
@@ -616,6 +669,32 @@ length_test_() -> [
                 'CreateClaim',
                 ?ARGS,
                 #{max_length => 2048}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
+            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
+            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
+            "symbolic_code = 'RUB'}}}}}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => 1024}
             )
         )
     )
