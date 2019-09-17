@@ -208,9 +208,9 @@ format_struct(Module, Struct, StructValue, Opts = #{current_length := CL, max_le
             StructName = to_string(Struct),
             StructNameLength = length(StructName),
             NewCL = CL + StructNameLength + 2,
-            {{Params, Values}, Opts1} =
+            {{Params, Values}, #{current_length := CL1}} =
                 format_struct_(StructMeta, ValueList, {[], []}, increment_depth(Opts#{current_length => NewCL}), true),
-            {{StructName ++ "{" ++ Params ++ "}", Values}, Opts1};
+            {{StructName ++ "{" ++ Params ++ "}", Values}, Opts#{current_length => CL1}};
         false ->
             Length = get_length(ML, CL),
             Fmt = io_lib:format("~p", [StructValue], [{chars_limit, Length}]),
