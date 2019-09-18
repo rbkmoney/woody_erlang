@@ -153,7 +153,7 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) -
         true ->
             ValueString = to_string(Value),
             Length = length(ValueString),
-            {{"'" ++ to_string(Value) ++ "'", []}, CL + Length + 2}; %% TODO UTF-8(?)
+            {{"'" ++ to_string(Value) ++ "'", []}, CL + Length + 2};
         false ->
             {Fmt, Params} = format_non_printable_string(Value),
             Length = length(Fmt),
@@ -161,11 +161,11 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) -
     end;
 format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
     ValueString = to_string(Value),
-    Length = length(ValueString), %% TODO cut string
+    Length = length(ValueString),
     {{"'" ++ ValueString ++ "'", []}, CL + Length + 2};
 format_thrift_value(raw_string, Value, _CurDepth, CL, _Opts) ->
     ValueString = to_string(Value),
-    Length = length(ValueString), %% TODO cut string?
+    Length = length(ValueString),
     {{ValueString, []}, CL + Length};
 format_thrift_value({list, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
@@ -197,7 +197,7 @@ format_thrift_value({set, Type}, SetofValues, CurDepth, CL, Opts) ->
 format_thrift_value({map, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
     {{"#{...}", []}, CL + 6};
-format_thrift_value({map, KeyType, ValueType}, Map, CurDepth, CL, Opts) -> %% TODO Count length
+format_thrift_value({map, KeyType, ValueType}, Map, CurDepth, CL, Opts) ->
     MapData = maps:to_list(Map),
     {{Params, Values}, CL1} =
         format_map(KeyType, ValueType, MapData, {"", []}, CurDepth + 1, CL + 3, Opts, true),
