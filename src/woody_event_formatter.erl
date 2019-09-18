@@ -270,7 +270,15 @@ format_struct_(_Types, _Values, {AccFmt, AccParams}, _CurDepth, CL, #{max_length
 format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, CurDepth, CL, Opts, IsFirst) ->
     case format_argument(Type, Value, CurDepth, CL, Opts) of
         {{"", []}, CL1} ->
-            format_struct_(RestTypes, RestValues, Acc, CurDepth, CL1, Opts, IsFirst);
+            format_struct_(
+                RestTypes,
+                RestValues,
+                Acc,
+                CurDepth,
+                CL1,
+                Opts,
+                IsFirst
+            );
         {{F, P}, CL1} ->
             Delimiter = get_delimiter(IsFirst),
             DelimiterLen = length(Delimiter),
