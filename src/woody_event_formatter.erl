@@ -883,4 +883,76 @@ length_test_() -> [
     )
 ].
 
+-spec depth_and_lenght_test_() -> _.
+depth_and_lenght_test_() -> [
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{...}}}}, ...skipped 2 entry(-ies)..., ",
+            "PartyModification{...}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => 2048, max_depth => 5}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
+            "ContractModification{creation = ContractParams{template = ContractTemplateRef{...}, ",
+            "payment_institution = PaymentInstitutionRef{...}, contractor = Contractor{...}}}}}, ",
+            "...skipped 2 entry(-ies)..., PartyModification{...}])"
+        ]),
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_length => 2048, max_depth => 7}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, ",
+            "aux_state_legacy = Value{...}}})"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 512, max_depth => 3}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, ",
+            "direction = backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = ",
+            "#{Value{...} => Value{...}, Value{...} => Value{...}}}}})"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 512, max_depth => 5}
+            )
+        )
+    )
+].
+
 -endif.
