@@ -34,7 +34,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
                 format_call_(ArgTypes, Arguments, {[], []}, 0, NewCL, Opts1, true),
             {ServiceName ++ ":" ++ FunctionName ++ "(" ++ ArgsFormat ++ ")", ArgsArgs};
         _Other ->
-            {io_lib:format("~s:~s(~p)", [Service, Function, Arguments]), []}
+            {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
 
 format_call_([], [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
@@ -131,10 +131,10 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
         Reply
     catch
         _:_ ->
-            {io_lib:format("~p", [Value]), []}
+            {"~p", [Value]}
     end;
 format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
-    {io_lib:format("~p", [{Kind, Result}]), []}.
+    {"~p", [{Kind, Result}]}.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {woody_event_handler:msg(), non_neg_integer()}.
