@@ -165,6 +165,7 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
     Length = length(ValueString),
     {{"'" ++ ValueString ++ "'", []}, CL + Length + 2};
 format_thrift_value(raw_string, Value, _CurDepth, CL, _Opts) ->
+    %% Hack for list formatting
     ValueString = to_string(Value),
     Length = length(ValueString),
     {{ValueString, []}, CL + Length};
