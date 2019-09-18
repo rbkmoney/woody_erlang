@@ -59,13 +59,14 @@
     execution_duration_ms => integer(),              %% EV_CLIENT_RECEIVE
     execution_end_time    => integer(),              %% EV_CLIENT_RECEIVE
 
-    url      => woody:url(),                        %% EV_CLIENT_SEND
-    code     => woody:http_code(),                  %% EV_CLIENT_RECEIVE
-    reason   => woody_error:details(),              %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
-    status   => status(),                           %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
-    address  => string(),                           %% EV_CLIENT_RESOLVE_RESULT
-    host     => string(),                           %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
-    result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT
+    url      => woody:url(),                         %% EV_CLIENT_SEND
+    code     => woody:http_code(),                   %% EV_CLIENT_RECEIVE
+    reason   => woody_error:details(),               %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
+    status   => status(),                            %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
+    address  => string(),                            %% EV_CLIENT_RESOLVE_RESULT
+    host     => string(),                            %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
+    result   => woody:result() | woody_error:error(),%% EV_SERVICE_RESULT
+    formatter_opts => meta_formatter_opts()
 }.
 -export_type([meta_client/0]).
 
@@ -95,7 +96,8 @@
     ignore       => boolean(),                   %% EV_SERVICE_HANDLER_RESULT
     except_class => woody_error:erlang_except(), %% EV_SERVICE_HANDLER_RESULT
     class        => business | system,           %% EV_SERVICE_HANDLER_RESULT
-    stack        => woody_error:stack()          %% EV_SERVICE_HANDLER_RESULT
+    stack        => woody_error:stack(),         %% EV_SERVICE_HANDLER_RESULT
+    formatter_opts => meta_formatter_opts()
 }.
 -export_meta([meta_server/0]).
 
@@ -151,6 +153,10 @@
     (?EV_INTERNAL_ERROR, woody:rpc_id(), meta_internal_error(), woody:options()) -> _;
     (?EV_TRACE, woody:rpc_id() | undefined, meta_trace(), woody:options()) -> _.
 
+-type meta_formatter_opts() :: #{
+    max_length := integer(),
+    max_depth := integer()
+}.
 
 %% Util Types
 -type status() :: ok | error.
@@ -315,17 +321,20 @@ format_event(UnknownEventType, Meta) ->
 %%
 -spec format_service_request(map()) ->
     msg().
-format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}) ->
-    woody_event_formatter:format_call(Module, Service, Function, Args).
+format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args} = Meta) ->
+    FormatterOpts = maps:get(formatter_opts, Meta, #{}),
+    woody_event_formatter:format_call(Module, Service, Function, Args, FormatterOpts).
 
 -spec format_service_reply(map()) ->
     msg().
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={_, Result}} = Meta) ->
+    FormatterOpts = maps:get(formatter_opts, Meta, #{}),
     FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
+    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException, FormatterOpts);
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, status := ok, result:=Result} = Meta) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
+    FormatterOpts = maps:get(formatter_opts, Meta, #{}),
+    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException, FormatterOpts);
 format_service_reply(Result) ->
     {"~w", [Result]}.
 
