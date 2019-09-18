@@ -309,7 +309,7 @@ format_union(Module, Struct, {Type, UnionValue}, CurDepth, CL, Opts) ->
         CL + StructNameLen + 2,
         Opts
     ), %% 2 = length("{}")
-    {{io_lib:format(StructName ++ "{" ++ Format ++ "}", Parameters), []}, CL1}.
+    {{StructName ++ "{" ++ Format ++ "}", Parameters}, CL1}.
 
 format_non_printable_string(Value) ->
     case size(Value) =< ?MAX_BIN_SIZE of
