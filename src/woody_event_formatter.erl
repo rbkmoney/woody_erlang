@@ -138,7 +138,7 @@ format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
     {io_lib:format("~p", [{Kind, Result}]), []}.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    woody_event_handler:msg().
+    {woody_event_handler:msg(), non_neg_integer()}.
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
     format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
 format_thrift_value({struct, union, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
@@ -231,7 +231,7 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     ExceptionType.
 
 -spec format_struct(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    woody_event_handler:msg().
+    {woody_event_handler:msg(), non_neg_integer()}.
 format_struct(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth > MD ->
     {{to_string(Struct) ++ "{...}", []}, CL + 5}; %% 5 = length("{...}")
@@ -293,7 +293,7 @@ format_struct_([Type | RestTypes], [Value | RestValues], {FAcc, PAcc} = Acc, Cur
     end.
 
 -spec format_union(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    woody_event_handler:msg().
+    {woody_event_handler:msg(), non_neg_integer()}.
 format_union(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth > MD ->
     {{to_string(Struct) ++ "{...}", []}, CL + 5}; %% 5 = length("{...}"
