@@ -367,8 +367,14 @@ format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDept
             format_list(TypeList, ValueList, Result, CurDepth, CL1, Opts, false);
         CL1 when CL1 =< ML ->
             format_list(TypeList, ValueList, Result, CL1, CurDepth, Opts, false);
-        _ ->
-            {{AccFmt ++ Delimiter ++ "...", AccParams}, CL + 3}
+        CL1 ->
+            Delimiter1 = get_delimiter(false),
+            DelimiterLen1 = length(Delimiter),
+            {ResultFmt, ResultParams} = Result,
+            {
+                {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
+                CL1 + 3 + DelimiterLen1 % 3 = length("...")
+            }
     end.
 
 format_map(_KeyType, _ValueType, [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
@@ -382,15 +388,20 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
     Delimiter = get_delimiter(IsFirst),
     DelimiterLen = length(Delimiter),
     NewCL = CL2 + MapStrLen + DelimiterLen,
+    Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
     case NewCL of
         NewCL when ML < 0 ->
-            Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, false);
         NewCL when NewCL =< ML ->
-            Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, false);
         NewCL ->
-            {{AccFmt ++ Delimiter ++ "...", AccParams}, CL2 + 3 + DelimiterLen} %% 3 = length("...")
+            Delimiter1 = get_delimiter(false),
+            DelimiterLen1 = length(Delimiter),
+            {ResultFmt, ResultParams} = Result,
+            {
+                {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
+                NewCL + 3 + DelimiterLen1 %% 3 = length("...")
+            }
     end.
 
 -ifdef(TEST).
@@ -731,13 +742,16 @@ length_test_() -> [
             "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
             "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
             "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity ",
-            "= LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
+            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
+            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
             "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
             "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', russian_bank_account ",
-            "= RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = ",
-            "'123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ...])"
+            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
+            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = ",
+            "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ",
+            "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = ",
+            "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency ",
+            "= CurrencyRef{symbolic_code = 'RUB'}}}}}, ...], ...)"
         ]),
         format_msg(
             format_call(
@@ -751,7 +765,8 @@ length_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [...])"
+            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...], ...)"
         ]),
         format_msg(
             format_call(
@@ -771,10 +786,8 @@ length_test_() -> [
             "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
             "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
             "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ...])"
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...], ",
+            "...)"
         ]),
         format_msg(
             format_call(
@@ -830,11 +843,10 @@ length_test_() -> [
     ),
     ?_assertEqual(
         lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = ",
-            "'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = Value{arr = [...]}}], history_range = HistoryRange{limit = 10, direction = backward}, ",
-            "aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, ...}}}, ",
-            "...}}, ...)"
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = ",
+            "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, ",
+            "...]}}, ...], ...}}, ...)"
         ]),
         format_msg(
             format_call(
@@ -849,7 +861,7 @@ length_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [...], ...}}, ...)"
+            "id = '1CSHThTEJ84', history = [Event{...}, ...], ...}}, ...)"
         ]),
         format_msg(
             format_call(
