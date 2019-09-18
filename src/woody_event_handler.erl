@@ -65,7 +65,7 @@
     status   => status(),                            %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
     address  => string(),                            %% EV_CLIENT_RESOLVE_RESULT
     host     => string(),                            %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
-    result   => woody:result() | woody_error:error(),%% EV_SERVICE_RESULT
+    result   => woody:result() | woody_error:error(), %% EV_SERVICE_RESULT
     formatter_opts => meta_formatter_opts()
 }.
 -export_type([meta_client/0]).
