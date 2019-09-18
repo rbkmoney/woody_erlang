@@ -93,8 +93,8 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, C
 
 format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _CurDepth, CL, _Opts) ->
     {{"", []}, CL};
-format_argument({_Fid, _Required, Type, Name, Default}, undefined, CurDepth, CL, Opts) ->
-    format_argument({_Fid, _Required, Type, Name, Default}, Default, CurDepth, CL, Opts);
+format_argument({Fid, Required, Type, Name, Default}, undefined, CurDepth, CL, Opts) ->
+    format_argument({Fid, Required, Type, Name, Default}, Default, CurDepth, CL, Opts);
 format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Opts) ->
     {{Format, Params}, NewCL} = format_thrift_value(Type, Value, CurDepth, CL, Opts),
     NameStr = to_string(Name),
@@ -118,18 +118,17 @@ format_reply(Module, Service, Function, Value, FormatAsException) ->
 format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_tuple(Value) ->
     Opts1 = normalize_options(Opts),
     try
-        case FormatAsException of
-            false ->
-                ReplyType = Module:function_info(Service, Function, reply_type),
-                {Reply, _Opts2} = format_thrift_value(ReplyType, Value, 0, 0, Opts1),
-                Reply;
-            true ->
-                {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
-                Exception = element(1, Value),
-                ExceptionType = get_exception_type(Exception, ExceptionTypeList),
-                {Reply, _Opts2} = format_thrift_value(ExceptionType, Value, 0, 0, Opts1),
-                Reply
-        end
+        ReplyType =
+            case FormatAsException of
+                false ->
+                    Module:function_info(Service, Function, reply_type);
+                true ->
+                    {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
+                    Exception = element(1, Value),
+                    get_exception_type(Exception, ExceptionTypeList)
+            end,
+        {Reply, _Opts2} = format_thrift_value(ReplyType, Value, 0, 0, Opts1),
+        Reply
     catch
         _:_ ->
             {io_lib:format("~p", [Value]), []}
