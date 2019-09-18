@@ -53,36 +53,38 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, C
             );
         {{Fmt, Param}, CL1} ->
             #{max_length := ML} = Opts,
-            Divider = get_delimiter(IsFirst),
-            DividerLen = length(Divider),
+            Delimiter = get_delimiter(IsFirst),
+            DelimiterLen = length(Delimiter),
             case CL1 of
                 NewCL when ML < 0 ->
                     format_call_(
                         RestType,
                         RestArgument,
-                        {AccFmt ++ Divider ++ Fmt, AccParam ++ Param},
+                        {AccFmt ++ Delimiter ++ Fmt, AccParam ++ Param},
                         CurDepth,
                         NewCL,
                         Opts,
                         false
                     );
                 NewCL when ML < NewCL ->
+                    Delimiter1 = get_delimiter(false),
+                    Delimiter1Len = length(Delimiter1),
                     format_call_(
                         RestType,
                         RestArgument,
-                        {AccFmt ++ Divider ++ "...", AccParam},
+                        {AccFmt ++ Delimiter ++ Fmt ++ Delimiter1 ++ "...", AccParam},
                         CurDepth,
-                        CL + 3 + DividerLen,
+                        CL + 3 + DelimiterLen + Delimiter1Len, %% 3 = length("...")
                         Opts,
                         false
-                    ); %% 3 = length("...")
+                    );
                 NewCL ->
                     format_call_(
                         RestType,
                         RestArgument,
-                        {AccFmt ++ Divider ++ Fmt, AccParam},
+                        {AccFmt ++ Delimiter ++ Fmt, AccParam},
                         CurDepth,
-                        NewCL + DividerLen,
+                        NewCL + DelimiterLen,
                         Opts,
                         false
                     )
@@ -387,7 +389,7 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
             Result = {AccFmt ++ Delimiter ++ KeyFmt ++ MapStr ++ ValueFmt, AccParams ++ KeyParam ++ ValueParam},
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, false);
         NewCL ->
-            {{AccFmt ++ Delimiter ++ "...", AccParams}, NewCL} %% 3 = length("...")
+            {{AccFmt ++ Delimiter ++ "...", AccParams}, CL2 + 3 + DelimiterLen} %% 3 = length("...")
     end.
 
 -ifdef(TEST).
@@ -783,6 +785,83 @@ length_test_() -> [
                 'CreateClaim',
                 ?ARGS,
                 #{max_length => 512}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{",
+            "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
+            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
+            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, ",
+            "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => ",
+            "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
+            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
+            "=> Value{str = 'application/x-erlang-binary'}}}}})"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 1024}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{",
+            "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
+            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
+            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, ",
+            "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => ",
+            "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
+            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
+            "=> Value{str = 'application/x-erlang-binary'}}}}})"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 512}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
+            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = ",
+            "Value{arr = [...]}}], history_range = HistoryRange{limit = 10, direction = backward}, aux_state = ",
+            "Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} => ",
+            "Value{str = 'application/x-erlang-binary'}}}}, aux_state_legacy = Value{obj = #{Value{str = ",
+            "'aux_state'} => Value{bin = <<...>>}, ...}}}}, ...)"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 200}
+            )
+        )
+    ),
+    ?_assertEqual(
+        lists:flatten([
+            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = ",
+            "'party', id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{limit = 10, ...}, ",
+            "...}}, ...)"
+        ]),
+        format_msg(
+            format_call(
+                mg_proto_state_processing_thrift,
+                'Processor',
+                'ProcessCall',
+                ?ARGS2,
+                #{max_length => 100}
             )
         )
     )
