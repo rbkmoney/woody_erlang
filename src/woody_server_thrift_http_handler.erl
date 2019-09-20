@@ -273,7 +273,7 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
             end;
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
-            woody_monitor:save_woody_state(WoodyState),
+            woody_monitor:put_woody_state(WoodyState),
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => Details}),
             Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
@@ -315,7 +315,7 @@ handle(Req, State = #{
 }) ->
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            woody_monitor:save_woody_state(WoodyState),
+            woody_monitor:put_woody_state(WoodyState),
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, WoodyState, Req1);
         {ok, <<>>, Req1} ->
@@ -447,7 +447,7 @@ check_deadline_header(DeadlineBin, Req, Mode, State) ->
 check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
     case woody_deadline:is_reached(Deadline) of
         true ->
-            woody_monitor:save_woody_state(WoodyState),
+            woody_monitor:put_woody_state(WoodyState),
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
@@ -515,7 +515,7 @@ reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
 reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) ->
-    woody_monitor:save_woody_state(WoodyState),
+    woody_monitor:put_woody_state(WoodyState),
     _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
             #{url => Url, status => error, reason => Reason}),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).

@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 -export([register_me/0]).
--export([save_woody_state/1]).
+-export([put_woody_state/1]).
 
 -export([child_spec/0]).
 -export([start_link/0]).
@@ -36,8 +36,8 @@ child_spec() ->
 register_me() ->
    ok = gen_server:call(?MODULE, register).
 
--spec save_woody_state(_) -> _.
-save_woody_state(WoodyState) ->
+-spec put_woody_state(woody_state:st()) -> _.
+put_woody_state(WoodyState) ->
     ok = gen_server:call(?MODULE, {put_woody_state, WoodyState}).
 
 -spec start_link() ->
