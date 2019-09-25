@@ -3,8 +3,6 @@
 
 -module(woody_deadline).
 
--include("otp_20_compatibility.hrl").
-
 %% API
 -export([is_reached/1]).
 -export([to_timeout/1]).
@@ -63,7 +61,7 @@ to_binary(Deadline = {{Date, Time}, Millisec}) ->
             %% so just throw any non succeess case here.
             erlang:error({bad_deadline, Error}, [Deadline])
     catch
-        ?STACKTRACE(error, Error, Stacktrace)
+        error:Error:Stacktrace ->
             erlang:error({bad_deadline, {Error, Stacktrace}}, [Deadline])
     end.
 
