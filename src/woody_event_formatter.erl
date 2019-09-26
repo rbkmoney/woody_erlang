@@ -173,8 +173,7 @@ format_thrift_value({list, _}, _, CurDepth, CL, #{max_depth := MD})
     {{"[...]", []}, CL + 5};
 format_thrift_value({list, Type}, ValueList, CurDepth, CL, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
-    {{Format, Params}, CL1} =
-        format_list(TypeList, ValueList, {"", []}, CurDepth + 1, CL + 2, Opts, true), %% 2 = length("[]")
+    {Format, Params, CL1} = format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts),
     {{"[" ++ Format ++ "]", Params}, CL1};
 format_thrift_value({list, Type}, AllValueList, CurDepth, CL, Opts) ->
     FirstEntry = hd(AllValueList),
@@ -183,8 +182,7 @@ format_thrift_value({list, Type}, AllValueList, CurDepth, CL, Opts) ->
     SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
     TypeList = [Type, raw_string, Type],
     ValueList = [FirstEntry, SkippedMsg, LastEntry],
-    {{Format, Params}, CL1} =
-        format_list(TypeList, ValueList, {"", []}, CurDepth + 1, CL + 2, Opts, true), %% 2 = length("[]")
+    {Format, Params, CL1} = format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts),
     {{"[" ++ Format ++ "]", Params}, CL1};
 format_thrift_value({set, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
@@ -192,8 +190,7 @@ format_thrift_value({set, _}, _, CurDepth, CL, #{max_depth := MD})
 format_thrift_value({set, Type}, SetofValues, CurDepth, CL, Opts) ->
     ValueList = sets:to_list(SetofValues),
     TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
-    {{Format, Params}, CL1} =
-        format_list(TypeList, ValueList, {"", []}, CurDepth + 1, CL + 2, Opts, true), %% 2 = length("{}})
+    {Format, Params, CL1} = format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts),
     {{"{" ++ Format ++ "}", Params}, CL1};
 format_thrift_value({map, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
@@ -215,6 +212,11 @@ format_thrift_value(_Type, Value, _CurDepth, CL, _Opts) when is_float(Value) ->
     ValueStr = float_to_list(Value),
     Length = length(ValueStr),
     {{ValueStr, []}, CL + Length}.
+
+format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts) ->
+    {{Format, Params}, CL1} =
+        format_list(TypeList, ValueList, {"", []}, CurDepth + 1, CL + 2, Opts, true), %% 2 is the length of parentheses
+    {Format, Params, CL1}.
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     [ExceptionType] =
