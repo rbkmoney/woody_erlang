@@ -138,7 +138,8 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
             lists:flatten(ReplyParams)
         }
     catch
-        _:_ ->
+        E:R:S ->
+            logger:warning("EVENT FORMATTER ERROR: ~p~n~p~n~p", [E, R, S]),
             {"~p", [Value]}
     end;
 format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
