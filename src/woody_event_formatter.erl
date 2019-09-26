@@ -376,13 +376,7 @@ format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDept
         CL1 when CL1 =< ML ->
             format_list(TypeList, ValueList, Result, CL1, CurDepth, Opts, false);
         CL1 ->
-            Delimiter1 = get_delimiter(false),
-            DelimiterLen1 = length(Delimiter),
-            {ResultFmt, ResultParams} = Result,
-            {
-                {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
-                CL1 + 3 + DelimiterLen1 % 3 = length("...")
-            }
+            stop_format(Result, CL1)
     end.
 
 format_map(_KeyType, _ValueType, [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
@@ -403,14 +397,17 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
         NewCL when NewCL =< ML ->
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, false);
         NewCL ->
-            Delimiter1 = get_delimiter(false),
-            DelimiterLen1 = length(Delimiter),
-            {ResultFmt, ResultParams} = Result,
-            {
-                {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
-                NewCL + 3 + DelimiterLen1 %% 3 = length("...")
-            }
+            stop_format(Result, NewCL)
     end.
+
+stop_format(Result, CL1) ->
+    Delimiter1 = get_delimiter(false),
+    DelimiterLen1 = length(Delimiter1),
+    {ResultFmt, ResultParams} = Result,
+    {
+        {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
+        CL1 + 3 + DelimiterLen1 % 3 = length("...")
+    }.
 
 -ifdef(TEST).
 
