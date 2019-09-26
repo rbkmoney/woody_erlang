@@ -15,8 +15,6 @@
 %%%
 -module(woody_joint_workers).
 
--include("otp_20_compatibility.hrl").
-
 %% API
 -export([child_spec/2]).
 -export([start_link/1]).
@@ -193,6 +191,6 @@ do_task_safe(Task, Deadline) ->
     try
         {ok, Task(Deadline)}
     catch
-        ?STACKTRACE(Class, Error, Stacktrace)
+        Class:Error:Stacktrace ->
             {exception, {Class, Error, Stacktrace}}
     end.
