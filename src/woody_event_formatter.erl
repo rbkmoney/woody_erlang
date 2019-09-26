@@ -67,14 +67,17 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, C
                         false
                     );
                 NewCL when ML < NewCL ->
-                    Delimiter1 = get_delimiter(false),
+                    HasMoreArguments = length(RestType) =/= 0,
+                    Delimiter1 = get_delimiter(not HasMoreArguments),
                     Delimiter1Len = length(Delimiter1),
+                    MoreArguments = maybe_add_more_marker(HasMoreArguments),
+                    MoreArgumentsLen = length(MoreArguments),
                     format_call_(
                         RestType,
                         RestArgument,
-                        {AccFmt ++ Delimiter ++ Fmt ++ Delimiter1 ++ "...", AccParam},
+                        {AccFmt ++ Delimiter ++ Fmt ++ Delimiter1 ++ MoreArguments, AccParam},
                         CurDepth,
-                        CL + 3 + DelimiterLen + Delimiter1Len, %% 3 = length("...")
+                        CL + MoreArgumentsLen + DelimiterLen + Delimiter1Len,
                         Opts,
                         false
                     );
@@ -758,7 +761,7 @@ length_test_() -> [
             "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ",
             "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = ",
             "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency ",
-            "= CurrencyRef{symbolic_code = 'RUB'}}}}}, ...], ...)"
+            "= CurrencyRef{symbolic_code = 'RUB'}}}}}, ...])"
         ]),
         format_msg(
             format_call(
@@ -773,7 +776,7 @@ length_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...], ...)"
+            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...])"
         ]),
         format_msg(
             format_call(
@@ -793,8 +796,7 @@ length_test_() -> [
             "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
             "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
             "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...], ",
-            "...)"
+            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...])"
         ]),
         format_msg(
             format_call(
@@ -853,7 +855,7 @@ length_test_() -> [
             "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
             "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = ",
             "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, ",
-            "...]}}, ...], ...}}, ...)"
+            "...]}}, ...], ...}})"
         ]),
         format_msg(
             format_call(
@@ -868,7 +870,7 @@ length_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{...}, ...], ...}}, ...)"
+            "id = '1CSHThTEJ84', history = [Event{...}, ...], ...}})"
         ]),
         format_msg(
             format_call(
@@ -955,3 +957,8 @@ depth_and_lenght_test_() -> [
 ].
 
 -endif.
+
+maybe_add_more_marker(false) ->
+    "";
+maybe_add_more_marker(true) ->
+    "...".
