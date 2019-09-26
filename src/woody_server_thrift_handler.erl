@@ -6,7 +6,6 @@
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
 -include("woody_defs.hrl").
--include("otp_20_compatibility.hrl").
 
 %% Types
 -type client_error() :: {client, woody_error:details()}.
@@ -201,7 +200,7 @@ throw_decode_error(Error) ->
 call_handler_safe(State) ->
     try handle_success(call_handler(State), State)
     catch
-        ?STACKTRACE(Class, Reason, Stacktrace)
+        Class:Reason:Stacktrace ->
             handle_function_catch(Class, Reason, Stacktrace, State)
     end.
 
@@ -338,7 +337,7 @@ encode_reply(Status, Reply, State = #{
         {Protocol4, ok} = thrift_protocol:flush_transport(Protocol3),
         {Status, State#{th_proto => Protocol4}}
     catch
-        ?STACKTRACE(error, {badmatch, {_, {error, Error}}}, Stack)
+        error:{badmatch, {_, {error, Error}}}:Stack ->
             Reason = woody_error:format_details(Error),
             _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
                     error  => <<"thrift protocol write failed">>,
