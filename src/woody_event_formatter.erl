@@ -386,7 +386,8 @@ format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDept
         CL1 when CL1 =< ML ->
             format_list(TypeList, ValueList, Result, CL1, CurDepth, Opts, true);
         CL1 ->
-            stop_format(Result, CL1)
+            MaybeAddMoreMarker = length(ValueList) =/= 0,
+            stop_format(Result, CL1, MaybeAddMoreMarker)
     end.
 
 format_map(_KeyType, _ValueType, [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
@@ -407,16 +408,19 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
         NewCL when NewCL =< ML ->
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, true);
         NewCL ->
-            stop_format(Result, NewCL)
+            MaybeAddMoreMarker = length(MapData) =/= 0,
+            stop_format(Result, NewCL, MaybeAddMoreMarker)
     end.
 
-stop_format(Result, CL1) ->
-    Delimiter1 = maybe_add_delimiter(true),
+stop_format(Result, CL1, MaybeAddMoreMarker) ->
+    Delimiter1 = maybe_add_delimiter(MaybeAddMoreMarker),
     DelimiterLen1 = length(Delimiter1),
+    MoreMarker = maybe_add_more_marker(MaybeAddMoreMarker),
+    MoreMarkerLen = length(MoreMarker),
     {ResultFmt, ResultParams} = Result,
     {
-        {ResultFmt ++ Delimiter1 ++ "...", ResultParams},
-        CL1 + 3 + DelimiterLen1 % 3 = length("...")
+        {ResultFmt ++ Delimiter1 ++ MoreMarker, ResultParams},
+        CL1 + MoreMarkerLen + DelimiterLen1
     }.
 
 -ifdef(TEST).
@@ -766,7 +770,7 @@ length_test_() -> [
             "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ",
             "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = ",
             "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency ",
-            "= CurrencyRef{symbolic_code = 'RUB'}}}}}, ...])"
+            "= CurrencyRef{symbolic_code = 'RUB'}}}}}])"
         ]),
         format_msg(
             format_call(
@@ -860,7 +864,7 @@ length_test_() -> [
             "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
             "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = ",
             "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, ",
-            "...]}}, ...], ...}})"
+            "...]}}], ...}})"
         ]),
         format_msg(
             format_call(
@@ -875,7 +879,7 @@ length_test_() -> [
     ?_assertEqual(
         lists:flatten([
             "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{...}, ...], ...}})"
+            "id = '1CSHThTEJ84', history = [Event{...}], ...}})"
         ]),
         format_msg(
             format_call(
