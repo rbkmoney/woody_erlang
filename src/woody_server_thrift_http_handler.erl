@@ -91,7 +91,8 @@
     server_opts    := server_opts(),
     handler_limits := handler_limits(),
     url            => woody:url(),
-    woody_state    => woody_state:st()
+    woody_state    => woody_state:st(),
+    monitor        => pid()
 }.
 
 -type cowboy_init_result() ::
@@ -120,8 +121,7 @@ child_spec(Id, Opts) ->
     RanchRef = {?MODULE, Id},
     DrainSpec = make_drain_childspec(RanchRef, Opts),
     RanchSpec = ranch:child_spec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
-    MonitorSpec = woody_monitor:child_spec(),
-    make_server_childspec(Id, [RanchSpec, DrainSpec, MonitorSpec]).
+    make_server_childspec(Id, [RanchSpec, DrainSpec]).
 
 make_drain_childspec(Ref, Opts) ->
     ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),
@@ -253,27 +253,26 @@ trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
 trace_resp(_, Req, _, _, _, _) ->
     Req.
 
-
 %%
 %% cowboy_http_handler callbacks
 %%
 -spec init(cowboy_req:req(), state()) ->
     cowboy_init_result().
 init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
-    woody_monitor:register_me(),
     ok = set_handler_limits(Limits),
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
     WoodyState = create_dummy_state(EvHandler),
+    Monitor = woody_monitor:monitor(),
+    woody_monitor:put_woody_state(Monitor, WoodyState),
     case have_resources_to_continue(Limits) of
         true ->
-            Opts1 = Opts#{url => Url, woody_state => WoodyState},
+            Opts1 = Opts#{url => Url, woody_state => WoodyState, monitor => Monitor},
             case check_request(Req, Opts1) of
                 {ok, Req1, State} -> handle(Req1, State);
                 {stop, Req1, State} -> {ok, Req1, State}
             end;
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
-            woody_monitor:put_woody_state(WoodyState),
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => Details}),
             Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
@@ -311,11 +310,12 @@ handle(Req, State = #{
     url         := Url,
     woody_state := WoodyState,
     server_opts := ServerOpts,
-    th_handler  := ThriftHandler
+    th_handler  := ThriftHandler,
+    monitor     := Monitor
 }) ->
+    woody_monitor:put_woody_state(Monitor, WoodyState),
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            woody_monitor:put_woody_state(WoodyState),
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, WoodyState, Req1);
         {ok, <<>>, Req1} ->
@@ -386,16 +386,17 @@ check_accept(BadAccept, Req1, State) ->
 
 -spec check_woody_headers(cowboy_req:req(), state()) ->
     check_result().
-check_woody_headers(Req, State = #{woody_state := WoodyState0}) ->
+check_woody_headers(Req, State = #{woody_state := WoodyState0, monitor := Monitor}) ->
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
         {ok, RpcId, Req1} ->
-            WoodyState1 = set_rpc_id(RpcId, WoodyState0),
+            WoodyState1 = set_cert(Req1, set_rpc_id(RpcId, WoodyState0)),
+            woody_monitor:put_woody_state(Monitor, WoodyState1),
             check_deadline_header(
                 cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
                 Req1,
                 Mode,
-                State#{woody_state => set_cert(Req1, WoodyState1)}
+                State#{woody_state => WoodyState1}
             );
         {error, BadRpcId, Req1} ->
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
@@ -444,10 +445,10 @@ check_deadline_header(DeadlineBin, Req, Mode, State) ->
 
 -spec check_deadline(woody:deadline(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
     check_result().
-check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
+check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState, monitor := Monitor}) ->
     case woody_deadline:is_reached(Deadline) of
         true ->
-            woody_monitor:put_woody_state(WoodyState),
+            woody_monitor:put_woody_state(Monitor, WoodyState),
             woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
                 #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
@@ -514,8 +515,8 @@ reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
 
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
-reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) ->
-    woody_monitor:put_woody_state(WoodyState),
+reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState, monitor := Monitor}) ->
+    woody_monitor:put_woody_state(Monitor, WoodyState),
     _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
             #{url => Url, status => error, reason => Reason}),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).

@@ -2,11 +2,10 @@
 
 -behaviour(gen_server).
 
--export([register_me/0]).
--export([put_woody_state/1]).
+-export([monitor/0]).
+-export([put_woody_state/2]).
 
 -export([child_spec/0]).
--export([start_link/0]).
 
 -export([init/1]).
 -export([handle_call/3]).
@@ -16,11 +15,14 @@
 
 -include("woody_defs.hrl").
 
--type state() :: #{
-    pid() => woody_state:st()
-}.
+-type state() :: woody_state:st().
 
 %% API
+
+-spec monitor() -> pid().
+monitor() ->
+    {ok, Pid} = start(self()),
+    Pid.
 
 -spec child_spec() ->
     supervisor:child_spec().
@@ -32,55 +34,42 @@ child_spec() ->
         restart => permanent
     }.
 
--spec register_me() -> _.
-register_me() ->
-   ok = gen_server:call(?MODULE, register).
+-spec put_woody_state(pid(), woody_state:st()) -> _.
+put_woody_state(MonitorPid, WoodyState) ->
+    ok = gen_server:cast(MonitorPid, {put_woody_state, WoodyState}).
 
--spec put_woody_state(woody_state:st()) -> _.
-put_woody_state(WoodyState) ->
-    ok = gen_server:call(?MODULE, {put_woody_state, WoodyState}).
-
--spec start_link() ->
+-spec start(pid()) ->
     genlib_gen:start_ret().
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, undefined, []).
+start(Pid) ->
+    gen_server:start(?MODULE, Pid, []).
 
 %% supervisor callbacks
 
--spec init(_) ->
-    {ok, map()}.
+-spec init(pid()) ->
+    {ok, undefined}.
 
-init(_) ->
-    {ok, #{}}.
+init(Parent) ->
+    erlang:monitor(process, Parent),
+    {ok, undefined}.
 
 -spec handle_call(_, _, state()) ->
     {noreply, state()}.
-handle_call(register, {PID, _}, St) ->
-    erlang:monitor(process, PID),
-    {reply, ok, St#{PID => undefined}};
-handle_call({put_woody_state, WoodyState}, {PID, _}, St0) ->
-    St = case maps:is_key(PID, St0) of
-        true ->
-            put_woody_state(PID, WoodyState, St0);
-        false ->
-            St0
-    end,
-    {reply, ok, St};
 handle_call(_Call, _From, St) ->
     {noreply, St}.
 
 -spec handle_cast(_, state()) ->
     {noreply, state()}.
 
+handle_cast({put_woody_state, WoodyState}, _) ->
+    {noreply, WoodyState};
 handle_cast(_Cast, St) ->
     {noreply, St}.
 
 -spec handle_info(_, state()) ->
-    {noreply, state()}.
-handle_info({'DOWN', Ref, process, PID, Reason}, St) ->
+    {stop, normal, ok}.
+handle_info({'DOWN', Ref, process, _PID, Reason}, WoodyState) ->
     erlang:demonitor(Ref),
-    WoodyState = get_woody_state(PID, St),
     case Reason =/= normal of
         true ->
             woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
@@ -90,17 +79,9 @@ handle_info({'DOWN', Ref, process, PID, Reason}, St) ->
         false ->
             ok
     end,
-    {noreply, maps:remove(PID, St)}.
+    {stop, normal, ok}.
 
 -spec terminate(_, state()) ->
     ok.
 terminate(_, _) ->
     ok.
-
-%% private
-
-put_woody_state(PID, ProcessState, State) ->
-    State#{PID => ProcessState}.
-
-get_woody_state(PID, State) ->
-    genlib_map:get(PID, State).
