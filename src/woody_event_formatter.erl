@@ -69,7 +69,7 @@ format_call_([Type | RestType], [Argument | RestArgument], {AccFmt, AccParam}, C
                         true
                     );
                 NewCL when ML < NewCL ->
-                    HasMoreArguments = length(RestType) =/= 0,
+                    HasMoreArguments = RestType =/= [],
                     Delimiter1 = maybe_add_delimiter(HasMoreArguments),
                     Delimiter1Len = length(Delimiter1),
                     MoreArguments = maybe_add_more_marker(HasMoreArguments),
@@ -139,7 +139,8 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
         }
     catch
         E:R:S ->
-            logger:warning("EVENT FORMATTER ERROR: ~p~n~p~n~p", [E, R, S]),
+            WarningDetails = genlib_format:format_exception({E, R, S}),
+            logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
             {"~p", [Value]}
     end;
 format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
@@ -203,7 +204,7 @@ format_thrift_value({set, Type}, SetofValues, CurDepth, CL, Opts) ->
     {{["{", Format, "}"], Params}, CL1};
 format_thrift_value({map, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
-    {{"#{...}", []}, CL + 6}; %% 5 = length("#{...}")
+    {{"#{...}", []}, CL + 6}; %% 6 = length("#{...}")
 format_thrift_value({map, KeyType, ValueType}, Map, CurDepth, CL, Opts) ->
     MapData = maps:to_list(Map),
     {{Params, Values}, CL1} =
@@ -414,7 +415,7 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], {AccFmt, AccParams}, Cu
         NewCL when NewCL =< ML ->
             format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, true);
         NewCL ->
-            MaybeAddMoreMarker = length(MapData) =/= 0,
+            MaybeAddMoreMarker = MapData =/= [],
             stop_format(Result, NewCL, MaybeAddMoreMarker)
     end.
 
