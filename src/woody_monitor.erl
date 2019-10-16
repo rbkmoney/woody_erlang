@@ -72,7 +72,7 @@ handle_info({'DOWN', Ref, process, _PID, Reason}, WoodyState) ->
     erlang:demonitor(Ref),
     case Reason =/= normal of
         true ->
-            woody_event_handler:handle_event(?EV_INTERNAL_ERROR,
+            woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
                 WoodyState,
                 #{status => error, reason => woody_util:to_binary(Reason)}
             );
