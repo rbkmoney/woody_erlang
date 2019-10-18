@@ -1,87 +1,59 @@
 -module(woody_monitor).
+-behaviour(cowboy_stream).
 
--behaviour(gen_server).
+-dialyzer(no_undefined_callbacks).
 
--export([monitor/0]).
+%% callback exports
+
+-export([init/3]).
+-export([data/4]).
+-export([info/3]).
+-export([terminate/3]).
+-export([early_error/5]).
+
+-type state() :: #{
+    next := any(),
+    woody_state := woody_state:st()
+}.
+
 -export([put_woody_state/2]).
 
--export([child_spec/0]).
+-spec put_woody_state(woody_state:st(), cowboy_req:req()) -> any().
+put_woody_state(WoodyState, #{pid := Pid, streamid := StreamID}) ->
+    ct:log("Pid: ~p, StreamID: ~p", [Pid, StreamID]),
+    Pid ! {{Pid, StreamID}, {woody_state, WoodyState}}. % cowboy-certified way to send messages to streams
 
--export([init/1]).
--export([handle_call/3]).
--export([handle_cast/2]).
--export([handle_info/2]).
--export([terminate/2]).
+%% callbacks
 
--include("woody_defs.hrl").
+-spec init(cowboy_stream:streamid(), cowboy_req:req(), cowboy:opts())
+    -> {cowboy_stream:commands(), state()}.
+init(StreamID, Req, Opts) ->
+    {Commands0, Next} = cowboy_stream:init(StreamID, Req, Opts),
+    {Commands0, #{next => Next}}.
 
--type state() :: woody_state:st().
+-spec data(cowboy_stream:streamid(), cowboy_stream:fin(), cowboy_req:resp_body(), State)
+    -> {cowboy_stream:commands(), State} when State::state().
+data(StreamID, IsFin, Data, #{next := Next0} = State) ->
+    {Commands0, Next} = cowboy_stream:data(StreamID, IsFin, Data, Next0),
+    {Commands0, State#{next => Next}}.
 
-%% API
+-spec info(cowboy_stream:streamid(), any(), State)
+    -> {cowboy_stream:commands(), State} when State::state().
+info(StreamID, {woody_state, WoodyState} = Info, #{next := Next0} = State) ->
+    {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
+    {Commands, State#{next => Next, woody_state => WoodyState}};
+info(StreamID, Info, #{next := Next0} = State) ->
+    {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
+    {Commands, State#{next => Next}}.
 
--spec monitor() -> pid().
-monitor() ->
-    {ok, Pid} = start(self()),
-    Pid.
+-spec terminate(cowboy_stream:streamid(), cowboy_stream:reason(), state()) -> any().
+terminate(StreamID, Reason, #{next := Next}) ->
+    % TODO log termination
+    cowboy_stream:terminate(StreamID, Reason, Next).
 
--spec child_spec() ->
-    supervisor:child_spec().
-
-child_spec() ->
-    #{
-        id => ?MODULE,
-        start => {?MODULE, start_link, []},
-        restart => permanent
-    }.
-
--spec put_woody_state(pid(), woody_state:st()) -> _.
-put_woody_state(MonitorPid, WoodyState) ->
-    ok = gen_server:cast(MonitorPid, {put_woody_state, WoodyState}).
-
--spec start(pid()) ->
-    genlib_gen:start_ret().
-
-start(Pid) ->
-    gen_server:start(?MODULE, Pid, []).
-
-%% supervisor callbacks
-
--spec init(pid()) ->
-    {ok, undefined}.
-
-init(Parent) ->
-    erlang:monitor(process, Parent),
-    {ok, undefined}.
-
--spec handle_call(_, _, state()) ->
-    {noreply, state()}.
-handle_call(_Call, _From, St) ->
-    {noreply, St}.
-
--spec handle_cast(_, state()) ->
-    {noreply, state()}.
-
-handle_cast({put_woody_state, WoodyState}, _) ->
-    {noreply, WoodyState};
-handle_cast(_Cast, St) ->
-    {noreply, St}.
-
--spec handle_info(_, state()) ->
-    {stop, normal, ok}.
-handle_info({'DOWN', Ref, process, _PID, Reason}, WoodyState) ->
-    erlang:demonitor(Ref),
-    case Reason =/= normal of
-        true ->
-            woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-                WoodyState,
-                #{status => error, reason => woody_util:to_binary(Reason)}
-            );
-        false ->
-            ok
-    end,
-    {stop, normal, ok}.
-
--spec terminate(_, state()) ->
-    ok.
-terminate(_, _) ->
-    ok.
+-spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
+    cowboy_stream:partial_req(), Resp, cowboy:opts()) -> Resp
+    when Resp::cowboy_stream:resp_command().
+early_error(StreamID, Reason, PartialReq, Resp, _Opts) ->
+    % TODO: Log smth
+    cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, #{}).
