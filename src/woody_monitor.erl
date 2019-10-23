@@ -3,6 +3,8 @@
 
 -dialyzer(no_undefined_callbacks).
 
+-include("woody_defs.hrl").
+
 %% callback exports
 
 -export([init/3]).
@@ -47,13 +49,21 @@ info(StreamID, Info, #{next := Next0} = State) ->
     {Commands, State#{next => Next}}.
 
 -spec terminate(cowboy_stream:streamid(), cowboy_stream:reason(), state()) -> any().
-terminate(StreamID, Reason, #{next := Next}) ->
-    % TODO log termination
-    cowboy_stream:terminate(StreamID, Reason, Next).
+terminate(StreamID, normal = Reason, #{next := Next}) ->
+    cowboy_stream:terminate(StreamID, Reason, Next);
+terminate(StreamID, AbnormalReason, #{woody_state := WoodyState, next := Next}) ->
+    woody_event_handler:handle_event(?EV_SERVICE_HANDLER_RESULT,
+        WoodyState,
+        #{status => error, reason => woody_util:to_binary(AbnormalReason)}
+    ),
+    cowboy_stream:terminate(StreamID, AbnormalReason, Next).
 
 -spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
     cowboy_stream:partial_req(), Resp, cowboy:opts()) -> Resp
     when Resp::cowboy_stream:resp_command().
 early_error(StreamID, Reason, PartialReq, Resp, _Opts) ->
-    % TODO: Log smth
+    woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
+        #{},
+        #{status => error, reason => woody_util:to_binary(Reason)}
+    ),
     cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, #{}).
