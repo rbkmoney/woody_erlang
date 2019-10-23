@@ -826,8 +826,7 @@ call_deadline_reached_on_client_test(_) ->
     Context = woody_context:new(Id, #{<<"sleep">> => <<"1000">>}, Deadline),
     try woody_client:call(Request, Opts, Context)
     catch
-        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok;
-        _:_:_ -> ok
+        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
     end.
 
 call_deadline_timeout_test(_) ->

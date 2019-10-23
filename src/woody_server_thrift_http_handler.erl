@@ -152,7 +152,7 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     ok         = validate_event_handler(EvHandler),
     Dispatch   = get_dispatch(Opts),
     ProtocolOpts = maps:get(protocol_opts, Opts, #{}),
-    CowboyOpts   = maps:put(stream_handlers, [woody_monitor_h, woody_trace_h, cowboy_stream_h], ProtocolOpts),
+    CowboyOpts   = maps:put(stream_handlers, [woody_monitor, woody_trace_h, cowboy_stream_h], ProtocolOpts),
     ReadBodyOpts = maps:get(read_body_opts, Opts, #{}),
     maps:merge(#{
         env =>#{dispatch => Dispatch, event_handler => EvHandler, read_body_opts => ReadBodyOpts},
@@ -263,7 +263,6 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
     WoodyState = create_dummy_state(EvHandler),
     woody_monitor:put_woody_state(WoodyState, Req),
-    timer:sleep(2000),
     case have_resources_to_continue(Limits) of
         true ->
             Opts1 = Opts#{url => Url, woody_state => WoodyState},

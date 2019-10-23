@@ -21,9 +21,8 @@
 -export([put_woody_state/2]).
 
 -spec put_woody_state(woody_state:st(), cowboy_req:req()) -> any().
-put_woody_state(WoodyState, #{pid := Pid, streamid := StreamID}) ->
-    ct:log("Pid: ~p, StreamID: ~p", [Pid, StreamID]),
-    Pid ! {{Pid, StreamID}, {woody_state, WoodyState}}. % cowboy-certified way to send messages to streams
+put_woody_state(WoodyState, Req) ->
+    cowboy_req:cast({woody_state, WoodyState}, Req).
 
 %% callbacks
 
@@ -49,14 +48,14 @@ info(StreamID, Info, #{next := Next0} = State) ->
     {Commands, State#{next => Next}}.
 
 -spec terminate(cowboy_stream:streamid(), cowboy_stream:reason(), state()) -> any().
-terminate(StreamID, normal = Reason, #{next := Next}) ->
+terminate(StreamID, Reason, #{next := Next}) when is_atom(Reason) -> % normal | switch_protocol
     cowboy_stream:terminate(StreamID, Reason, Next);
-terminate(StreamID, AbnormalReason, #{woody_state := WoodyState, next := Next}) ->
+terminate(StreamID, {_, _, HumanReadable} = Reason, #{woody_state := WoodyState, next := Next}) ->
     woody_event_handler:handle_event(?EV_SERVICE_HANDLER_RESULT,
         WoodyState,
-        #{status => error, reason => woody_util:to_binary(AbnormalReason)}
+        #{status => error, reason => woody_util:to_binary(HumanReadable)}
     ),
-    cowboy_stream:terminate(StreamID, AbnormalReason, Next).
+    cowboy_stream:terminate(StreamID, Reason, Next).
 
 -spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
     cowboy_stream:partial_req(), Resp, cowboy:opts()) -> Resp
