@@ -223,6 +223,7 @@ handle_result({error, Reason}, WoodyState) when
     Reason             =:= checkout_timeout;
     Reason             =:= enetdown        ;
     Reason             =:= enetunreach     ;
+    Reason             =:= ehostunreach    ;
     element(1, Reason) =:= resolve_failed
 ->
     BinReason = woody_error:format_details(Reason),
