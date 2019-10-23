@@ -15,7 +15,7 @@
 
 -type state() :: #{
     next := any(),
-    woody_state := woody_state:st()
+    woody_state => woody_state:st()
 }.
 
 -export([put_woody_state/2]).
@@ -60,9 +60,6 @@ terminate(StreamID, {_, _, HumanReadable} = Reason, #{woody_state := WoodyState,
 -spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
     cowboy_stream:partial_req(), Resp, cowboy:opts()) -> Resp
     when Resp::cowboy_stream:resp_command().
-early_error(StreamID, Reason, PartialReq, Resp, _Opts) ->
-    woody_event_handler:handle_event(?EV_SERVER_RECEIVE,
-        #{},
-        #{status => error, reason => woody_util:to_binary(Reason)}
-    ),
-    cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, #{}).
+early_error(StreamID, Reason, PartialReq, Resp, Opts) ->
+    % We can't really do anything about it
+    cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, Opts).
