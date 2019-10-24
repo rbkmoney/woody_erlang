@@ -91,8 +91,7 @@
     server_opts    := server_opts(),
     handler_limits := handler_limits(),
     url            => woody:url(),
-    woody_state    => woody_state:st(),
-    monitor        => pid()
+    woody_state    => woody_state:st()
 }.
 
 -type cowboy_init_result() ::
