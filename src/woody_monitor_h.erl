@@ -48,13 +48,13 @@ info(StreamID, Info, #{next := Next0} = State) ->
     {Commands, State#{next => Next}}.
 
 -spec terminate(cowboy_stream:streamid(), cowboy_stream:reason(), state()) -> any().
-terminate(StreamID, Reason, #{next := Next}) when is_atom(Reason) -> % normal | switch_protocol
-    cowboy_stream:terminate(StreamID, Reason, Next);
-terminate(StreamID, {_, _, HumanReadable} = Reason, #{woody_state := WoodyState, next := Next}) ->
+terminate(StreamID, {socket_error, _, HumanReadable} = Reason, #{woody_state := WoodyState, next := Next}) ->
     woody_event_handler:handle_event(?EV_SERVICE_HANDLER_RESULT,
         WoodyState,
         #{status => error, reason => woody_util:to_binary(HumanReadable)}
     ),
+    cowboy_stream:terminate(StreamID, Reason, Next);
+terminate(StreamID, Reason, #{next := Next}) ->
     cowboy_stream:terminate(StreamID, Reason, Next).
 
 -spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
