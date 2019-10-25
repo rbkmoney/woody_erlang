@@ -395,8 +395,9 @@ check_woody_headers(Req, State = #{woody_state := WoodyState0}) ->
                 State#{woody_state => WoodyState1}
             );
         {error, BadRpcId, Req1} ->
+            WoodyState1 = update_woody_state(set_rpc_id(BadRpcId, WoodyState0), Req),
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
-                Req1, State#{woody_state => set_rpc_id(BadRpcId, WoodyState0)}
+                Req1, State#{woody_state => WoodyState1}
             )
     end.
 
