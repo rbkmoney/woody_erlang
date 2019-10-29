@@ -260,10 +260,10 @@ trace_resp(_, Req, _, _, _, _) ->
 init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
-    WoodyState = update_woody_state(create_dummy_state(EvHandler), Req),
+    WoodyState = create_dummy_state(EvHandler),
     case have_resources_to_continue(Limits) of
         true ->
-            Opts1 = Opts#{url => Url, woody_state => WoodyState},
+            Opts1 = update_woody_state(Opts#{url => Url}, WoodyState, Req),
             case check_request(Req, Opts1) of
                 {ok, Req1, State} -> handle(Req1, State);
                 {stop, Req1, State} -> {ok, Req1, State}
@@ -385,17 +385,17 @@ check_woody_headers(Req, State = #{woody_state := WoodyState0}) ->
     {Mode, Req0} = woody_util:get_req_headers_mode(Req),
     case get_rpc_id(Req0, Mode) of
         {ok, RpcId, Req1} ->
-            WoodyState1 = update_woody_state(set_cert(Req1, set_rpc_id(RpcId, WoodyState0)), Req1),
+            WoodyState1 = set_cert(Req1, set_rpc_id(RpcId, WoodyState0)),
             check_deadline_header(
                 cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
                 Req1,
                 Mode,
-                State#{woody_state => WoodyState1}
+                update_woody_state(State, WoodyState1, Req1)
             );
         {error, BadRpcId, Req1} ->
-            WoodyState1 = update_woody_state(set_rpc_id(BadRpcId, WoodyState0), Req),
+            WoodyState1 = set_rpc_id(BadRpcId, WoodyState0),
             reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
-                Req1, State#{woody_state => WoodyState1}
+                Req1, update_woody_state(State, WoodyState1, Req1)
             )
     end.
 
@@ -448,19 +448,16 @@ check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodySt
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
             {stop, Req1, undefined};
         false ->
-            WoodyState1 = update_woody_state(set_deadline(Deadline, WoodyState), Req),
+            WoodyState1 = set_deadline(Deadline, WoodyState),
             Headers = cowboy_req:headers(Req),
-            check_metadata_headers(Headers, Req, Mode, State#{woody_state => WoodyState1})
+            check_metadata_headers(Headers, Req, Mode, update_woody_state(State, WoodyState1, Req))
     end.
 
 -spec check_metadata_headers(woody:http_headers(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
     check_result().
 check_metadata_headers(Headers, Req, Mode, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
-    WoodyState1 = update_woody_state(
-        set_metadata(find_metadata(Headers, Mode, ServerOpts), WoodyState),
-        Req
-    ),
-    {ok, Req, State#{woody_state => WoodyState1}}.
+    WoodyState1 = set_metadata(find_metadata(Headers, Mode, ServerOpts), WoodyState),
+    {ok, Req, update_woody_state(State, WoodyState1, Req)}.
 
 -spec find_metadata(woody:http_headers(), woody_util:headers_mode(), server_opts()) ->
     woody_context:meta().
@@ -602,9 +599,9 @@ reply_status(_) -> error.
 log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
 
-update_woody_state(WoodyState, Req) ->
+update_woody_state(State, WoodyState, Req) ->
     woody_monitor_h:put_woody_state(WoodyState, Req),
-    WoodyState.
+    State#{woody_state => WoodyState}.
 
 handle_event(Event, WoodyState, ExtraMeta, Req) ->
     woody_monitor_h:handle_event(Event, Req),
