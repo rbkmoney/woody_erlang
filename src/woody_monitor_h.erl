@@ -1,8 +1,6 @@
 -module(woody_monitor_h).
 -behaviour(cowboy_stream).
 
--dialyzer(no_undefined_callbacks).
-
 -include("woody_defs.hrl").
 
 %% callback exports
