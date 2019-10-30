@@ -10,7 +10,10 @@
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 10).
 
--type opts():: #{atom() => term()}.
+-type opts():: #{
+    max_depth  => integer(),
+    max_length => integer()
+}.
 
 -spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -357,12 +360,7 @@ to_string(_) ->
     error(badarg).
 
 normalize_options(Opts) ->
-    MaxDepth = maps:get(max_depth, Opts, -1),
-    MaxLength = maps:get(max_length, Opts, -1),
-    Opts#{
-        max_depth => MaxDepth,
-        max_length => MaxLength
-    }.
+    maps:merge(#{max_depth => -1, max_length => -1}, Opts).
 
 maybe_add_delimiter(false) ->
     "";
