@@ -33,7 +33,8 @@ format_call(Module, Service, Function, Arguments, Opts) ->
                 format_call_(ArgTypes, Arguments, {[], []}, 0, NewCL, Opts1, false),
             FinalFormat = lists:flatten([ServiceName, ":", FunctionName, "(", ArgsFormat, ")"]),
             FinalParams = lists:flatten(ArgsArgs),
-            {FinalFormat, FinalParams};
+            Result = io_lib:format(FinalFormat, FinalParams),
+            {"~s", [Result]};
         _Other ->
             {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
@@ -110,7 +111,7 @@ format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     Length = get_length(ML, CL),
     Fmt = io_lib:format("~p", [Value], [{chars_limit, Length}]),
     FmtLen = length(Fmt),
-    {{Fmt, []}, CL + FmtLen}.
+    {{"~s", [Fmt]}, CL + FmtLen}.
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -390,7 +391,7 @@ format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDept
         CL1 when ML < 0 ->
             format_list(TypeList, ValueList, Result, CurDepth, CL1, Opts, true);
         CL1 when CL1 =< ML ->
-            format_list(TypeList, ValueList, Result, CL1, CurDepth, Opts, true);
+            format_list(TypeList, ValueList, Result, CurDepth, CL1, Opts, true);
         CL1 ->
             MaybeAddMoreMarker = length(ValueList) =/= 0,
             stop_format(Result, CL1, MaybeAddMoreMarker)
@@ -570,21 +571,19 @@ format_msg({Fmt, Params}) ->
 -spec depth_test_() -> _.
 depth_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
+        "symbolic_code = 'RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -595,9 +594,7 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [...])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -609,10 +606,8 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{...}, ...skipped ",
-            "2 entry(-ies)..., PartyModification{...}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{...}, ...skipped "
+        "2 entry(-ies)..., PartyModification{...}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -624,11 +619,9 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{...}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{...}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{...}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{...}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -640,12 +633,10 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = ",
-            "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -657,12 +648,10 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = ",
-            "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -674,11 +663,9 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, ",
-            "aux_state_legacy = Value{...}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
+        "aux_state_legacy = Value{...}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -690,12 +677,10 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, direction = ",
-            "backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = #{Value{...} => ",
-            "Value{...}, Value{...} => Value{...}}}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, direction = "
+        "backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = #{Value{...} => "
+        "Value{...}, Value{...} => Value{...}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -711,21 +696,19 @@ depth_test_() -> [
 -spec length_test_() -> _.
 length_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
+        "symbolic_code = 'RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -737,21 +720,19 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
+        "symbolic_code = 'RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -763,21 +744,19 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = ",
-            "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ",
-            "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = ",
-            "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency ",
-            "= CurrencyRef{symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
+        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, "
+        "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = "
+        "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency "
+        "= CurrencyRef{symbolic_code = 'RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -789,10 +768,8 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -804,15 +781,13 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -824,16 +799,14 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{",
-            "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, ",
-            "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => ",
-            "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
-            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
-            "=> Value{str = 'application/x-erlang-binary'}}}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{"
+        "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
+        "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
+        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "=> Value{str = 'application/x-erlang-binary'}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -845,16 +818,12 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{",
-            "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, ",
-            "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => ",
-            "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
-            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
-            "=> Value{str = 'application/x-erlang-binary'}}}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
+        "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
+        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -866,12 +835,10 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = ",
-            "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, ",
-            "...]}}], ...}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
+        "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, "
+        "...]}}], ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -883,10 +850,8 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{...}], ...}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{...}], ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -902,12 +867,11 @@ length_test_() -> [
 -spec depth_and_lenght_test_() -> _.
 depth_and_lenght_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{...}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{...}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{contract_modification "
+        "= ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ContractModification{creation = "
+        "ContractParams{...}}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = "
+        "ShopAccountParams{...}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -919,13 +883,12 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{...}, ",
-            "payment_institution = PaymentInstitutionRef{...}, contractor = Contractor{...}}}}}, ",
-            "...skipped 2 entry(-ies)..., PartyModification{...}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{contract_modification "
+        "= ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ContractModification{creation = "
+        "ContractParams{template = ContractTemplateRef{...}, payment_institution = PaymentInstitutionRef{...}, "
+        "contractor = Contractor{...}}}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = "
+        "ShopAccountParams{currency = CurrencyRef{...}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -937,11 +900,9 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, ",
-            "aux_state_legacy = Value{...}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
+        "aux_state_legacy = Value{...}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -953,12 +914,10 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, ",
-            "direction = backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = ",
-            "#{Value{...} => Value{...}, Value{...} => Value{...}}}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, "
+        "direction = backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = "
+        "#{Value{...} => Value{...}, Value{...} => Value{...}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,

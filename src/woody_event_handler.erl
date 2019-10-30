@@ -95,7 +95,7 @@
     ignore       => boolean(),                   %% EV_SERVICE_HANDLER_RESULT
     except_class => woody_error:erlang_except(), %% EV_SERVICE_HANDLER_RESULT
     class        => business | system,           %% EV_SERVICE_HANDLER_RESULT
-    stack        => woody_error:stack()         %% EV_SERVICE_HANDLER_RESULT
+    stack        => woody_error:stack()          %% EV_SERVICE_HANDLER_RESULT
 }.
 -export_meta([meta_server/0]).
 
@@ -433,10 +433,8 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', ",
-            "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})"
-        ),
+        "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', "
+        "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -456,10 +454,8 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW')"
-        ),
+        "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW')",
         format_msg(
             format_service_request(
                 #{args =>
@@ -478,10 +474,8 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})"
-        ),
+        "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -538,11 +532,9 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, ",
-            "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{",
-            "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})"
-        ]),
+        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, "
+        "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{"
+        "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -571,21 +563,19 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
+        "symbolic_code = 'RUB'}}}}}])",
         format_msg(
             format_service_request(
                 #{args =>
@@ -639,16 +629,14 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{",
-            "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} ",
-            "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
-            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
-            "=> Value{str = 'application/x-erlang-binary'}}}}})"
-        ]),
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
+        "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{"
+        "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} "
+        "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "=> Value{str = 'application/x-erlang-binary'}}}}})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -757,22 +745,20 @@ format_service_request_test_() -> [
 -spec format_service_request_with_limit_test_() -> _.
 format_service_request_with_limit_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling ",
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
+        "symbolic_code = 'RUB'}}}}}])",
         format_event_msg(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -836,13 +822,11 @@ format_service_request_with_limit_test_() -> [
 -spec result_test_() -> _.
 result_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{",
-            "aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, ",
-            "Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{",
-            "arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}]}, action = ComplexAction{}}"
-        ]),
+        "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{"
+        "aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, "
+        "Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{"
+        "arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}]}, action = ComplexAction{}}",
         format_msg(
             format_service_reply(
                 #{
@@ -911,31 +895,29 @@ result_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
-            "created_at = '2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', ",
-            "since = '2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{",
-            "since = '2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => ",
-            "Contract{id = '1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, ",
-            "created_at = '2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, ",
-            "terms = TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', ",
-            "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, ",
-            "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{",
-            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-            "bank_bik = '66642666'}}}], contractor = Contractor{legal_entity = LegalEntity{",
-            "russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}, shops = #{'1CSWG8j04wM' => ",
-            "Shop{id = '1CSWG8j04wM', created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocking{blocked = ",
-            "Blocked{reason = '', since = '2019-08-13T11:19:03.015222Z'}}, suspension = Suspension{",
-            "active = Active{since = '2019-08-13T11:19:01.387269Z'}}, details = ShopDetails{",
-            "name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, category = CategoryRef{id = 1}, ",
-            "account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, ",
-            "payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}"
-        ]),
+        "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, "
+        "created_at = '2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', "
+        "since = '2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{"
+        "since = '2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => "
+        "Contract{id = '1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, "
+        "created_at = '2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, "
+        "terms = TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', "
+        "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, "
+        "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{"
+        "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', "
+        "bank_bik = '66642666'}}}], contractor = Contractor{legal_entity = LegalEntity{"
+        "russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}, shops = #{'1CSWG8j04wM' => "
+        "Shop{id = '1CSWG8j04wM', created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocking{blocked = "
+        "Blocked{reason = '', since = '2019-08-13T11:19:03.015222Z'}}, suspension = Suspension{"
+        "active = Active{since = '2019-08-13T11:19:01.387269Z'}}, details = ShopDetails{"
+        "name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, category = CategoryRef{id = 1}, "
+        "account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, "
+        "payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}",
         format_msg(
             format_service_reply(
             #{args =>
@@ -998,15 +980,13 @@ result_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
-            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
-            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{",
-            "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
-            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
-            "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
-            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
-        ]),
+        "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, "
+        "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{"
+        "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{"
+        "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{"
+        "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, "
+        "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, "
+        "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}",
         format_msg(
             format_service_reply(
                 #{args =>
@@ -1059,15 +1039,13 @@ result_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
-            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
-            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{",
-            "Value{str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
-            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
-            "Value{str = 'metadata'} => Value{str = <<...>>}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
-            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
-        ]),
+        "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, "
+        "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{"
+        "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{"
+        "Value{str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{"
+        "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, "
+        "Value{str = 'metadata'} => Value{str = <<...>>}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, "
+        "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}",
         format_msg(
             format_service_reply(
                 #{args =>
