@@ -18,15 +18,15 @@
 }.
 
 -export([put_woody_state/2]).
--export([handle_event/2]).
+-export([set_event/2]).
 
 -spec put_woody_state(woody_state:st(), cowboy_req:req()) -> ok.
 put_woody_state(WoodyState, Req) ->
     cowboy_req:cast({woody_state, WoodyState}, Req).
 
--spec handle_event(woody_event_handler:event(), cowboy_req:req()) -> ok.
-handle_event(Event, Req) ->
-    cowboy_req:cast({woody_event, Event}, Req).
+-spec set_event(woody_event_handler:event(), cowboy_req:req()) -> ok.
+set_event(Event, Req) ->
+    cowboy_req:cast({set_event, Event}, Req).
 
 %% callbacks
 
@@ -48,9 +48,9 @@ info(StreamID, {woody_state, WoodyState} = Info, #{next := Next0} = State) ->
     {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
     {Commands, State#{next => Next, woody_state => WoodyState}};
 % Handler emited server receive, so monitor should emit service result
-info(StreamID, {woody_event, ?EV_SERVER_RECEIVE} = Info, #{next := Next0} = State) ->
+info(StreamID, {set_event, Event} = Info, #{next := Next0} = State) ->
     {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
-    {Commands, State#{next => Next, event_to_emit => ?EV_SERVICE_HANDLER_RESULT}};
+    {Commands, State#{next => Next, event_to_emit => Event}};
 info(StreamID, Info, #{next := Next0} = State) ->
     {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
     {Commands, State#{next => Next}}.

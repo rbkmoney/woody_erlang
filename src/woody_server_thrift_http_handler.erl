@@ -603,6 +603,9 @@ update_woody_state(State, WoodyState, Req) ->
     woody_monitor_h:put_woody_state(WoodyState, Req),
     State#{woody_state => WoodyState}.
 
-handle_event(Event, WoodyState, ExtraMeta, Req) ->
-    woody_monitor_h:handle_event(Event, Req),
+
+handle_event(?EV_SERVER_RECEIVE = Event, WoodyState, ExtraMeta, Req) ->
+    woody_monitor_h:set_event(?EV_SERVICE_HANDLER_RESULT, Req),
+    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta);
+handle_event(Event, WoodyState, ExtraMeta, _Req) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
