@@ -319,14 +319,21 @@ format_service_request(#{service_schema := {Module, Service}, function:=Function
 
 -spec format_service_reply(map()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={_, Result}} = Meta) ->
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, status := ok, result:=Result} = Meta) ->
-    FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
+    case FormatasException of
+        false ->
+            woody_event_formatter:format_reply(Module, Service, Function, get_result(Result));
+        true ->
+            woody_event_formatter:format_exception(Module, Service, Function, get_result(Result))
+    end;
 format_service_reply(Result) ->
     {"~w", [Result]}.
+
+get_result({_, Result}) ->
+    Result;
+get_result(Result) ->
+    Result.
 
 -spec format_exception(msg(), woody_error:stack()) ->
     msg().

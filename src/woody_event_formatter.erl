@@ -2,7 +2,8 @@
 
 -export([
     format_call/4,
-    format_reply/5,
+    format_reply/4,
+    format_exception/4,
     to_string/1
 ]).
 
@@ -116,25 +117,23 @@ format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     FmtLen = length(FormattedValue),
     {{"~s", [FormattedValue]}, CL + FmtLen}.
 
--spec format_reply(atom(), atom(), atom(), atom(), term()) ->
+-spec format_reply(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
-format_reply(Module, Service, Function, Value, FormatAsException) ->
-    format_reply(Module, Service, Function, Value, FormatAsException, #{}).
+format_reply(Module, Service, Function, Value) ->
+    ReplyType = Module:function_info(Service, Function, reply_type),
+    format(ReplyType, Value, #{}).
 
--spec format_reply(atom(), atom(), atom(), atom(), term(), opts()) ->
+-spec format_exception(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
-format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_tuple(Value) ->
+format_exception(Module, Service, Function, Value) ->
+    {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
+    Exception = element(1, Value),
+    ReplyType = get_exception_type(Exception, ExceptionTypeList),
+    format(ReplyType, Value, #{}).
+
+format(ReplyType, Value, Opts) when is_tuple(Value) ->
     Opts1 = normalize_options(Opts),
     try
-        ReplyType =
-            case FormatAsException of
-                false ->
-                    Module:function_info(Service, Function, reply_type);
-                true ->
-                    {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
-                    Exception = element(1, Value),
-                    get_exception_type(Exception, ExceptionTypeList)
-            end,
         {{ReplyFmt, ReplyParams}, _Opts2} = format_thrift_value(ReplyType, Value, 0, 0, Opts1),
         {
             lists:flatten(ReplyFmt),
@@ -146,8 +145,8 @@ format_reply(Module, Service, Function, Value, FormatAsException, Opts) when is_
             logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
             {"~p", [Value]}
     end;
-format_reply(_Module, _Service, _Function, Kind, Result, _Opts) ->
-    {"~p", [{Kind, Result}]}.
+format(_ReplyType, Value, _Opts) ->
+    {"~p", [Value]}.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {woody_event_handler:msg(), non_neg_integer()}.
