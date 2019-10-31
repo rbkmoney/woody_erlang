@@ -380,10 +380,8 @@ format_event_msg({_Severity, {Fmt, Params}}) ->
 -spec format_service_request_test_() -> _.
 format_service_request_test_() -> [
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:Create(party_id = '1CQdDqPROyW', params = PartyParams{",
-            "contact_info = PartyContactInfo{email = 'hg_ct_helper'}})"
-        ),
+        "PartyManagement:Create(party_id = '1CQdDqPROyW', params = PartyParams{"
+        "contact_info = PartyContactInfo{email = 'hg_ct_helper'}})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -401,11 +399,9 @@ format_service_request_test_() -> [
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, params = PartyParams{contact_info = PartyContactInfo{",
-            "email = 'hg_ct_helper'}})"
-            ]),
+        "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, params = PartyParams{contact_info = PartyContactInfo{"
+        "email = 'hg_ct_helper'}})",
         format_msg(
             format_service_request(
                 #{args =>
@@ -428,6 +424,22 @@ format_service_request_test_() -> [
         format_msg(
             format_service_request(
                 #{args => [undefined, <<"1CQdDqPROyW">>],
+                    deadline => undefined, execution_start_time => 1565596875696,
+                    function => 'Get',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CQdDqPROyW">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    role => server, service => 'PartyManagement',
+                    service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
+                    type => call}
+            )
+        )
+    ),
+    ?_assertEqual(
+        "PartyManagement:Get(party_id = '~s')",
+        format_msg(
+            format_service_request(
+                #{args => [undefined, <<"~s">>],
                     deadline => undefined, execution_start_time => 1565596875696,
                     function => 'Get',
                     metadata =>
@@ -763,9 +775,7 @@ format_service_request_with_limit_test_() -> [
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
-        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
-        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
-        "symbolic_code = 'RUB'}}}}}])",
+        "PartyModification{shop_modification = Sho...)",
         format_event_msg(
             format_event(
                 ?EV_CALL_SERVICE,

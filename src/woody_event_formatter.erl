@@ -35,10 +35,8 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             NewCL = ServiceLength + FunctionLength + 3,
             {{ArgsFormat, ArgsArgs}, _Opts} =
                 format_call_(ArgTypes, Arguments, {[], []}, 0, NewCL, Opts1, false),
-            FinalFormat = lists:flatten([ServiceName, ":", FunctionName, "(", ArgsFormat, ")"]),
-            FinalParams = lists:flatten(ArgsArgs),
-            Result = io_lib:format(FinalFormat, FinalParams),
-            {"~s", [Result]};
+            [] = lists:flatten(ArgsArgs),
+            {"~s:~s(~s)", [ServiceName, FunctionName, lists:flatten(ArgsFormat)]};
         _Other ->
             {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
@@ -115,7 +113,7 @@ format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     Length = get_length(ML, CL),
     FormattedValue = io_lib:format("~p", [Value], [{chars_limit, Length}]),
     FmtLen = length(FormattedValue),
-    {{"~s", [FormattedValue]}, CL + FmtLen}.
+    {{FormattedValue, []}, CL + FmtLen}.
 
 -spec format_reply(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -143,10 +141,14 @@ format(ReplyType, Value, Opts) when is_tuple(Value) ->
         E:R:S ->
             WarningDetails = genlib_format:format_exception({E, R, S}),
             logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
-            {"~p", [Value]}
+            ML = maps:get(max_length, Opts, -1),
+            FormattedValue = io_lib:format("~p", [Value], [{chars_limit, ML}]),
+            {FormattedValue, []}
     end;
-format(_ReplyType, Value, _Opts) ->
-    {"~p", [Value]}.
+format(_ReplyType, Value, Opts) ->
+    ML = maps:get(max_length, Opts, -1),
+    FormattedValue = io_lib:format("~p", [Value], [{chars_limit, ML}]),
+    {FormattedValue, []}.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {woody_event_handler:msg(), non_neg_integer()}.
