@@ -109,7 +109,7 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Op
     {{[NameStr, " = ", Format], Params}, NewCL + NameStrLen + 3}; %% 3 = length(" = ")
 format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     %% All unknown types
-    #{max_length := ML} = Opts,
+    ML = maps:get(max_length, Opts, -1),
     Length = get_length(ML, CL),
     FormattedValue = io_lib:format("~p", [Value], [{chars_limit, Length}]),
     FmtLen = length(FormattedValue),
