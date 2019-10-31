@@ -112,9 +112,9 @@ format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     %% All unknown types
     #{max_length := ML} = Opts,
     Length = get_length(ML, CL),
-    Fmt = io_lib:format("~p", [Value], [{chars_limit, Length}]),
-    FmtLen = length(Fmt),
-    {{"~s", [Fmt]}, CL + FmtLen}.
+    FormattedValue = io_lib:format("~p", [Value], [{chars_limit, Length}]),
+    FmtLen = length(FormattedValue),
+    {{"~s", [FormattedValue]}, CL + FmtLen}.
 
 -spec format_reply(atom(), atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
