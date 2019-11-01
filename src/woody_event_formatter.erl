@@ -230,7 +230,7 @@ format_thrift_list([Type | _], OriginalValueList, CurDepth, CL, Opts) ->
     format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts).
 
 format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
-    ValueList = sets:to_list(SetofValues),
+    ValueList = ordsets:to_list(SetofValues),
     TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
     {{Format, Params}, CL1} =
         format_list(TypeList, ValueList, {"", []}, CurDepth, CL, Opts, false), %% 2 is the length of parentheses
@@ -664,6 +664,16 @@ depth_test_() -> [
                 #{max_depth => 4}
             )
         )
+    ),
+    ?_test(
+        begin
+            {{Fmt, _}, _} =
+                format_thrift_value({set, string}, ordsets:from_list(["a","2","ddd"]), 0, 0, #{max_length => -1, max_depth => -1}),
+            ?_assertEqual(
+                "{'a', '2', 'ddd'}",
+                lists:flatten(Fmt)
+                )
+        end
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
