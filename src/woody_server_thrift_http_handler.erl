@@ -270,8 +270,8 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
             end;
         false ->
             Details = <<"erlang vm exceeded total memory threshold">>,
-            _ = handle_event(?EV_SERVER_RECEIVE, WoodyState,
-                #{url => Url, status => error, reason => Details}, Req),
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+                #{url => Url, status => error, reason => Details}),
             Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
             {ok, Req2, undefined}
     end.
@@ -311,7 +311,7 @@ handle(Req, State = #{
 }) ->
     Req2 = case get_body(Req, ServerOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
-            _ = handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}, Req),
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, WoodyState, Req1);
         {ok, <<>>, Req1} ->
             reply_client_error(400, <<"body empty">>, Req1, State)
@@ -330,14 +330,14 @@ create_dummy_state(EvHandler) ->
     ok.
 terminate(normal, _Req, _Status) ->
     ok;
-terminate(Reason, Req, #{ev_handler := EvHandler} = Opts) ->
+terminate(Reason, _Req, #{ev_handler := EvHandler} = Opts) ->
     WoodyState = maps:get(woody_state, Opts, create_dummy_state(EvHandler)),
-    _ = handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
+    _ = woody_event_handler:handle_event(?EV_INTERNAL_ERROR, WoodyState, #{
             error  => <<"http handler terminated abnormally">>,
             reason => woody_error:format_details(Reason),
             class  => undefined,
             final  => true
-        }, Req),
+        }),
     ok.
 
 
@@ -443,8 +443,8 @@ check_deadline_header(DeadlineBin, Req, Mode, State) ->
 check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
     case woody_deadline:is_reached(Deadline) of
         true ->
-            _ = handle_event(?EV_SERVER_RECEIVE, WoodyState,
-                #{url => Url, status => error, reason => <<"Deadline reached">>}, Req),
+            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+                #{url => Url, status => error, reason => <<"Deadline reached">>}),
             Req1 = handle_error({system, {internal, resource_unavailable, <<"deadline reached">>}}, Req, WoodyState),
             {stop, Req1, undefined};
         false ->
@@ -511,8 +511,8 @@ reply_bad_header(Code, Reason, Req, State) when is_integer(Code) ->
 -spec reply_client_error(woody:http_code(), woody:http_header_val(), cowboy_req:req(), state()) ->
     cowboy_req:req().
 reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) ->
-    _ = handle_event(?EV_SERVER_RECEIVE, WoodyState,
-            #{url => Url, status => error, reason => Reason}, Req),
+    _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
+            #{url => Url, status => error, reason => Reason}),
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).
 
 %% handle functions
@@ -534,6 +534,7 @@ do_get_body(Body, Req, Opts) ->
 -spec handle_request(woody:http_body(), woody:th_handler(), woody_state:st(), cowboy_req:req()) ->
     cowboy_req:req().
 handle_request(Body, ThriftHander, WoodyState, Req) ->
+    woody_monitor_h:set_event(?EV_SERVICE_HANDLER_RESULT, Req),
     case woody_server_thrift_handler:init_handler(Body, ThriftHander, WoodyState) of
         {ok, oneway_void, HandlerState} ->
             Req1 = reply(200, Req, WoodyState),
@@ -602,10 +603,3 @@ log_event(Event, WoodyState, ExtraMeta) ->
 update_woody_state(State, WoodyState, Req) ->
     woody_monitor_h:put_woody_state(WoodyState, Req),
     State#{woody_state => WoodyState}.
-
-
-handle_event(?EV_SERVER_RECEIVE = Event, WoodyState, ExtraMeta, Req) ->
-    woody_monitor_h:set_event(?EV_SERVICE_HANDLER_RESULT, Req),
-    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta);
-handle_event(Event, WoodyState, ExtraMeta, _Req) ->
-    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
