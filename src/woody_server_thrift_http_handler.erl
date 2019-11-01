@@ -534,7 +534,7 @@ do_get_body(Body, Req, Opts) ->
 -spec handle_request(woody:http_body(), woody:th_handler(), woody_state:st(), cowboy_req:req()) ->
     cowboy_req:req().
 handle_request(Body, ThriftHander, WoodyState, Req) ->
-    woody_monitor_h:set_event(?EV_SERVICE_HANDLER_RESULT, Req),
+    ok = woody_monitor_h:set_event(?EV_SERVICE_HANDLER_RESULT, Req),
     case woody_server_thrift_handler:init_handler(Body, ThriftHander, WoodyState) of
         {ok, oneway_void, HandlerState} ->
             Req1 = reply(200, Req, WoodyState),
@@ -601,5 +601,5 @@ log_event(Event, WoodyState, ExtraMeta) ->
     woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
 
 update_woody_state(State, WoodyState, Req) ->
-    woody_monitor_h:put_woody_state(WoodyState, Req),
+    ok = woody_monitor_h:put_woody_state(WoodyState, Req),
     State#{woody_state => WoodyState}.
