@@ -106,13 +106,7 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Op
     NameStr = to_string(Name),
     NameStrLen = length(NameStr),
     {{Format, Params}, NewCL} = format_thrift_value(Type, Value, CurDepth, CL + NameStrLen + 3, Opts),
-    {{[NameStr, " = ", Format], Params}, NewCL};
-format_argument(_Type, Value, _CurDepth, CL, #{max_length := ML}) ->
-    %% All unknown types
-    Length = get_length(ML, CL),
-    FormattedValue = io_lib:format("~p", [Value], [{chars_limit, Length}]),
-    FmtLen = length(FormattedValue),
-    {{FormattedValue, []}, CL + FmtLen}.
+    {{[NameStr, " = ", Format], Params}, NewCL}.
 
 -spec format_reply(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
