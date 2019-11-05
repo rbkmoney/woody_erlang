@@ -177,17 +177,11 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
     ValueString = to_string(Value),
     Length = length(ValueString),
     {{["'", ValueString, "'"], []}, CL + Length + 2}; %% 2 = length("''")
-format_thrift_value(raw_string, Value, _CurDepth, CL, _Opts) ->
-    %% Hack for list formatting
-    ValueString = to_string(Value),
-    Length = length(ValueString),
-    {{ValueString, []}, CL + Length};
 format_thrift_value({list, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
     {{"[...]", []}, CL + 5}; %% 5 = length("[...]")
 format_thrift_value({list, Type}, ValueList, CurDepth, CL, Opts) ->
-    TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
-    {Format, Params, CL1} = format_thrift_list(TypeList, ValueList, CurDepth + 1, CL + 2, Opts),
+    {Format, Params, CL1} = format_thrift_list(Type, ValueList, CurDepth + 1, CL + 2, Opts),
     {{["[", Format, "]"], Params}, CL1};
 format_thrift_value({set, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
@@ -216,24 +210,33 @@ format_thrift_value(_Type, Value, _CurDepth, CL, _Opts) when is_float(Value) ->
     Length = length(ValueStr),
     {{ValueStr, []}, CL + Length}.
 
-format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
+format_thrift_list(Type, ValueList, CurDepth, CL, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
     {{Format, Params}, CL1} =
-        format_list(TypeList, ValueList, {"", []}, CurDepth, CL, Opts, false), %% 2 is the length of parentheses
+        format_list(Type, ValueList, {"", []}, CurDepth, CL, Opts, false),
     {Format, Params, CL1};
-format_thrift_list([Type | _], OriginalValueList, CurDepth, CL, Opts) ->
+format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = Opts) ->
     FirstEntry = hd(OriginalValueList),
-    LastEntry = hd(lists:reverse(OriginalValueList)),
+    LastEntry = lists:last(OriginalValueList),
+    {{FirstEntryFmt, FirstEntryParams}, FirstEntryCL} =
+        format_thrift_value(Type, FirstEntry, CurDepth, CL, Opts),
     SkippedLength = length(OriginalValueList) - 2,
     SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
-    TypeList = [Type, raw_string, Type],
-    ValueList = [FirstEntry, SkippedMsg, LastEntry],
-    format_thrift_list(TypeList, ValueList, CurDepth, CL, Opts).
+    SkippedMsgLength = length(SkippedMsg),
+    {{LastEntryFmt, LastEntryParams}, LastEntryCL} =
+        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength, Opts),
+    if
+        LastEntryCL < ML orelse ML < 0 ->
+            {[FirstEntryFmt, ", ", SkippedMsg, ", ", LastEntryFmt], [FirstEntryParams | LastEntryParams], LastEntryCL};
+        FirstEntryCL < ML ->
+            {FirstEntryFmt, FirstEntryParams, FirstEntryCL};
+        true ->
+            {"...", [], CL + 3}
+    end.
 
 format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
     ValueList = ordsets:to_list(SetofValues),
-    TypeList = [Type || _L <- lists:seq(1, length(ValueList))],
     {{Format, Params}, CL1} =
-        format_list(TypeList, ValueList, {"", []}, CurDepth, CL, Opts, false), %% 2 is the length of parentheses
+        format_list(Type, ValueList, {"", []}, CurDepth, CL, Opts, false),
     {Format, Params, CL1}.
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
@@ -384,7 +387,7 @@ get_length(_ML, _CL) ->
 
 format_list(_Type, [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
     {Result, CL};
-format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDepth, CL, Opts, IsFirst) ->
+format_list(Type, [Entry | ValueList], {AccFmt, AccParams}, CurDepth, CL, Opts, IsFirst) ->
     #{max_length := ML} = Opts,
     Delimiter = maybe_add_delimiter(IsFirst),
     DelimiterLen = length(Delimiter),
@@ -392,9 +395,9 @@ format_list([Type | TypeList], [Entry | ValueList], {AccFmt, AccParams}, CurDept
     Result = {[AccFmt | [Delimiter, Fmt]], [AccParams | Params]},
     case CL1 of
         CL1 when ML < 0 ->
-            format_list(TypeList, ValueList, Result, CurDepth, CL1, Opts, true);
+            format_list(Type, ValueList, Result, CurDepth, CL1, Opts, true);
         CL1 when CL1 =< ML ->
-            format_list(TypeList, ValueList, Result, CurDepth, CL1, Opts, true);
+            format_list(Type, ValueList, Result, CurDepth, CL1, Opts, true);
         CL1 ->
             MaybeAddMoreMarker = length(ValueList) =/= 0,
             stop_format(Result, CL1, MaybeAddMoreMarker)
