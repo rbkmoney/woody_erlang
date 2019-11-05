@@ -103,10 +103,10 @@ format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _CurDepth
 format_argument({Fid, Required, Type, Name, Default}, undefined, CurDepth, CL, Opts) ->
     format_argument({Fid, Required, Type, Name, Default}, Default, CurDepth, CL, Opts);
 format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Opts) ->
-    {{Format, Params}, NewCL} = format_thrift_value(Type, Value, CurDepth, CL, Opts),
     NameStr = to_string(Name),
     NameStrLen = length(NameStr),
-    {{[NameStr, " = ", Format], Params}, NewCL + NameStrLen + 3}; %% 3 = length(" = ")
+    {{Format, Params}, NewCL} = format_thrift_value(Type, Value, CurDepth, CL + NameStrLen + 3, Opts),
+    {{[NameStr, " = ", Format], Params}, NewCL};
 format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     %% All unknown types
     ML = maps:get(max_length, Opts, -1),
@@ -223,14 +223,12 @@ format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = 
     SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
     SkippedMsgLength = length(SkippedMsg),
     {{LastEntryFmt, LastEntryParams}, LastEntryCL} =
-        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength, Opts),
-    if
-        LastEntryCL < ML orelse ML < 0 ->
-            {[FirstEntryFmt, ", ", SkippedMsg, ", ", LastEntryFmt], [FirstEntryParams | LastEntryParams], LastEntryCL};
-        FirstEntryCL < ML ->
-            {FirstEntryFmt, FirstEntryParams, FirstEntryCL};
+        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength + 4, Opts),
+    case LastEntryCL < ML orelse ML < 0 of
         true ->
-            {"...", [], CL + 3}
+            {[FirstEntryFmt, ", ", SkippedMsg, ", ", LastEntryFmt], [FirstEntryParams | LastEntryParams], LastEntryCL};
+        false ->
+            {[FirstEntryFmt, ", ..."], FirstEntryParams, FirstEntryCL + 5}
     end.
 
 format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
@@ -769,10 +767,7 @@ length_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
-        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, "
-        "...skipped 2 entry(-ies)..., PartyModification{shop_modification = ShopModificationUnit{id = "
-        "'1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = ShopAccountParams{currency "
-        "= CurrencyRef{symbolic_code = 'RUB'}}}}}])",
+        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -785,7 +780,7 @@ length_test_() -> [
     ),
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
-        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', ...}}, ...])",
+        "contract_modification = ContractModificationUnit{...}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -797,13 +792,12 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
-        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
-        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
-        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
-        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
-        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ...}}}}}}}, ...])",
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{contract_modification "
+        "= ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ContractModification{creation = "
+        "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
+        "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
+        "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -867,7 +861,7 @@ length_test_() -> [
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
-        "id = '1CSHThTEJ84', history = [Event{...}], ...}})",
+        "id = '1CSHThTEJ84', ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
