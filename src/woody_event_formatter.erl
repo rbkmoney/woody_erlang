@@ -107,9 +107,8 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Op
     NameStrLen = length(NameStr),
     {{Format, Params}, NewCL} = format_thrift_value(Type, Value, CurDepth, CL + NameStrLen + 3, Opts),
     {{[NameStr, " = ", Format], Params}, NewCL};
-format_argument(_Type, Value, _CurDepth, CL, Opts) ->
+format_argument(_Type, Value, _CurDepth, CL, #{max_length := ML}) ->
     %% All unknown types
-    ML = maps:get(max_length, Opts, -1),
     Length = get_length(ML, CL),
     FormattedValue = io_lib:format("~p", [Value], [{chars_limit, Length}]),
     FmtLen = length(FormattedValue),
@@ -119,7 +118,7 @@ format_argument(_Type, Value, _CurDepth, CL, Opts) ->
     woody_event_handler:msg().
 format_reply(Module, Service, Function, Value) ->
     ReplyType = Module:function_info(Service, Function, reply_type),
-    format(ReplyType, Value, #{}).
+    format(ReplyType, Value, normalize_options(#{})).
 
 -spec format_exception(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
@@ -127,12 +126,11 @@ format_exception(Module, Service, Function, Value) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, #{}).
+    format(ReplyType, Value, normalize_options(#{})).
 
-format(ReplyType, Value, Opts) when is_tuple(Value) ->
-    Opts1 = normalize_options(Opts),
+format(ReplyType, Value, #{max_length := ML} = Opts) when is_tuple(Value) ->
     try
-        {{ReplyFmt, ReplyParams}, _Opts2} = format_thrift_value(ReplyType, Value, 0, 0, Opts1),
+        {{ReplyFmt, ReplyParams}, _} = format_thrift_value(ReplyType, Value, 0, 0, Opts),
         {
             lists:flatten(ReplyFmt),
             lists:flatten(ReplyParams)
@@ -141,12 +139,10 @@ format(ReplyType, Value, Opts) when is_tuple(Value) ->
         E:R:S ->
             WarningDetails = genlib_format:format_exception({E, R, S}),
             logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
-            ML = maps:get(max_length, Opts, -1),
             FormattedValue = io_lib:format("~p", [Value], [{chars_limit, ML}]),
             {FormattedValue, []}
     end;
-format(_ReplyType, Value, Opts) ->
-    ML = maps:get(max_length, Opts, -1),
+format(_ReplyType, Value, #{max_length := ML}) ->
     FormattedValue = io_lib:format("~p", [Value], [{chars_limit, ML}]),
     {FormattedValue, []}.
 
