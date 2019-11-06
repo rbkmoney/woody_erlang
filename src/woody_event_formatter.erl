@@ -36,7 +36,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             {{ArgsFormat, ArgsArgs}, _Opts} =
                 format_call_(ArgTypes, Arguments, {[], []}, 0, NewCL, Opts1, false),
             [] = lists:flatten(ArgsArgs),
-            {"~s:~s(~s)", [ServiceName, FunctionName, lists:flatten(ArgsFormat)]};
+            {"~s:~s(~s)", [ServiceName, FunctionName, ArgsFormat]};
         _Other ->
             {"~s:~s(~p)", [Service, Function, Arguments]}
     end.
