@@ -209,17 +209,35 @@ format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = 
     LastEntry = lists:last(OriginalValueList),
     {{FirstEntryFmt, FirstEntryParams}, FirstEntryCL} =
         format_thrift_value(Type, FirstEntry, CurDepth, CL, Opts),
-    SkippedLength = length(OriginalValueList) - 2,
-    SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
-    SkippedMsgLength = length(SkippedMsg),
-    {{LastEntryFmt, LastEntryParams}, LastEntryCL} =
-        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength + 4, Opts),
-    case LastEntryCL < ML orelse ML < 0 of
+    case FirstEntryCL < ML orelse ML < 0 of
         true ->
-            {[FirstEntryFmt, ", ", SkippedMsg, ", ", LastEntryFmt], [FirstEntryParams | LastEntryParams], LastEntryCL};
+            SkippedLength = length(OriginalValueList) - 2,
+            SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
+            SkippedMsgLength = length(SkippedMsg),
+            case FirstEntryCL + SkippedMsgLength + 2 < ML orelse ML < 0 of
+                true ->
+                    {{LastEntryFmt, LastEntryParams}, LastEntryCL} =
+                        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength + 4, Opts),
+                    format_list_result(
+                        LastEntryCL < ML orelse ML < 0,
+                        {[FirstEntryFmt, ", ", SkippedMsg, ", ", LastEntryFmt], [FirstEntryParams | LastEntryParams]},
+                        LastEntryCL,
+                        {[FirstEntryFmt, ", ..."], FirstEntryParams},
+                        FirstEntryCL + 5
+                    );
+                false ->
+                    {[FirstEntryFmt, ", ..."], FirstEntryParams, FirstEntryCL + 5}
+            end;
         false ->
+            %% TODO Uncomment after fix for structures
+%%            {["..."], FirstEntryParams, FirstEntryCL + 5}
             {[FirstEntryFmt, ", ..."], FirstEntryParams, FirstEntryCL + 5}
     end.
+
+format_list_result(true, {Fmt, Params}, CL, _, _) ->
+    {Fmt, Params, CL};
+format_list_result(false, _, _, {Fmt, Params}, CL) ->
+    {Fmt, Params, CL + 5}.
 
 format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
     ValueList = ordsets:to_list(SetofValues),
@@ -659,7 +677,11 @@ depth_test_() -> [
     ?_test(
         begin
             {{Fmt, _}, _} =
-                format_thrift_value({set, string}, ordsets:from_list(["a","2","ddd"]), 0, 0, #{max_length => -1, max_depth => -1}),
+                format_thrift_value(
+                    {set, string},
+                    ordsets:from_list(["a", "2", "ddd"]),
+                    0, 0, #{max_length => -1, max_depth => -1}
+                ),
             ?_assertEqual(
                 "{'a', '2', 'ddd'}",
                 lists:flatten(Fmt)
