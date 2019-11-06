@@ -42,6 +42,13 @@ format_call(Module, Service, Function, Arguments, Opts) ->
 
 format_call_([], [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
     {Result, CL};
+format_call_(_, ArgumentList, Result, _CurDepth, CL, #{max_length := ML}, AddDelimiter) when ML >= 0, CL > ML ->
+    HasMoreArguments = AddDelimiter and ArgumentList =/= [],
+    Delimiter = maybe_add_delimiter(HasMoreArguments),
+    DelimiterLen = length(Delimiter),
+    MoreArguments = maybe_add_more_marker(HasMoreArguments),
+    MoreArgumentsLen = length(MoreArguments),
+    {[Result | [Delimiter, MoreArguments]], CL + DelimiterLen + MoreArgumentsLen};
 format_call_([Type | RestType], [Argument | RestArgs], Acc, CurDepth, CL, Opts, AddDelimiter) ->
     case format_argument(Type, Argument, CurDepth, CL, Opts) of
         {undefined, CL} ->
@@ -54,47 +61,18 @@ format_call_([Type | RestType], [Argument | RestArgs], Acc, CurDepth, CL, Opts, 
                 Opts,
                 AddDelimiter
             );
-        {Result, CL1} ->
-            #{max_length := ML} = Opts,
+        {Result, NewCL} ->
             Delimiter = maybe_add_delimiter(AddDelimiter),
             DelimiterLen = length(Delimiter),
-            case CL1 of
-                NewCL when ML < 0 ->
-                    format_call_(
-                        RestType,
-                        RestArgs,
-                        [Acc | [Delimiter, Result]],
-                        CurDepth,
-                        NewCL,
-                        Opts,
-                        true
-                    );
-                NewCL when ML < NewCL ->
-                    HasMoreArguments = RestType =/= [],
-                    Delimiter1 = maybe_add_delimiter(HasMoreArguments),
-                    Delimiter1Len = length(Delimiter1),
-                    MoreArguments = maybe_add_more_marker(HasMoreArguments),
-                    MoreArgumentsLen = length(MoreArguments),
-                    format_call_(
-                        RestType,
-                        RestArgs,
-                        [Acc | [Delimiter, Result, Delimiter1, MoreArguments]],
-                        CurDepth,
-                        CL + MoreArgumentsLen + DelimiterLen + Delimiter1Len,
-                        Opts,
-                        true
-                    );
-                NewCL ->
-                    format_call_(
-                        RestType,
-                        RestArgs,
-                        [Acc | [Delimiter, Result]],
-                        CurDepth,
-                        NewCL + DelimiterLen,
-                        Opts,
-                        true
-                    )
-            end
+            format_call_(
+                RestType,
+                RestArgs,
+                [Acc | [Delimiter, Result]],
+                CurDepth,
+                NewCL + DelimiterLen,
+                Opts,
+                true
+            )
     end.
 
 format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _CurDepth, CL, _Opts) ->
@@ -135,7 +113,7 @@ format(_ReplyType, Value, #{max_length := ML}) ->
     io_lib:format("~p", [Value], [{chars_limit, ML}]).
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {woody_event_handler:msg(), non_neg_integer()}.
+    {iolist(), non_neg_integer()}.
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
     format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
 format_thrift_value({struct, union, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
@@ -249,7 +227,7 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     ExceptionType.
 
 -spec format_struct(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {woody_event_handler:msg(), non_neg_integer()}.
+    {iolist(), non_neg_integer()}.
 format_struct(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth > MD ->
     {[to_string(Struct), "{...}"], CL + 5}; %% 5 = length("{...}")
@@ -311,7 +289,7 @@ format_struct_([Type | RestTypes], [Value | RestValues], Acc, CurDepth, CL, Opts
     end.
 
 -spec format_union(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {woody_event_handler:msg(), non_neg_integer()}.
+    {iolist(), non_neg_integer()}.
 format_union(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth > MD ->
     {[to_string(Struct), "{...}"], CL + 5}; %% 5 = length("{...}"
