@@ -196,11 +196,7 @@ handle_event(Handler, Event, RpcId, Meta) ->
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
-    {"[" ++
-        woody_event_formatter:to_string(Trace) ++ " " ++
-        woody_event_formatter:to_string(Parent) ++ " " ++
-        woody_event_formatter:to_string(Span) ++
-     "]", []};
+    {"[~s ~s ~s]", [Trace, Parent, Span]};
 format_rpc_id(undefined) ->
     {"undefined", []}.
 
