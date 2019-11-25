@@ -50,20 +50,20 @@ format_call_(_, ArgumentList, Result, _CurDepth, CL, #{max_length := ML}, AddDel
     MoreArgumentsLen = length(MoreArguments),
     {[Result | [Delimiter, MoreArguments]], CL + DelimiterLen + MoreArgumentsLen};
 format_call_([Type | RestType], [Argument | RestArgs], Acc, CurDepth, CL, Opts, AddDelimiter) ->
-    case format_argument(Type, Argument, CurDepth, CL, Opts) of
-        {undefined, CL} ->
+    Delimiter = maybe_add_delimiter(AddDelimiter),
+    DelimiterLen = length(Delimiter),
+    case format_argument(Type, Argument, CurDepth, CL + DelimiterLen, Opts) of
+        {undefined, NewCL} ->
             format_call_(
                 RestType,
                 RestArgs,
                 Acc,
                 CurDepth,
-                CL,
+                NewCL,
                 Opts,
                 AddDelimiter
             );
         {Result, NewCL} ->
-            Delimiter = maybe_add_delimiter(AddDelimiter),
-            DelimiterLen = length(Delimiter),
             format_call_(
                 RestType,
                 RestArgs,
