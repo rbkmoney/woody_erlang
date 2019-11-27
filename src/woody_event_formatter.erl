@@ -130,7 +130,7 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) -
         true ->
             ValueString = to_string(Value),
             Length = length(ValueString),
-            {["'", to_string(Value), "'"], CL + Length + 2}; %% 2 = length("''")
+            {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
         false ->
             Fmt = format_non_printable_string(Value),
             Length = length(Fmt),
