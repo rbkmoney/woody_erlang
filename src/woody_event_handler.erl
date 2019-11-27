@@ -610,7 +610,7 @@ format_service_request_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
         "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
         "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
         "symbolic_code = 'RUB'}}}}}])",
@@ -795,8 +795,8 @@ format_service_request_with_limit_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
-        "PartyModification{shop_modification = Sho...)",
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
+        "PartyModification{shop_modification = ShopModificationUn...)",
         format_event_msg(
             format_event(
                 ?EV_CALL_SERVICE,

@@ -183,7 +183,7 @@ format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = 
     case FirstEntryCL < ML orelse ML < 0 of
         true ->
             SkippedLength = length(OriginalValueList) - 2,
-            SkippedMsg = io_lib:format("...skipped ~b entry(-ies)...", [SkippedLength]),
+            SkippedMsg = io_lib:format("...~b more...", [SkippedLength]),
             SkippedMsgLength = length(SkippedMsg),
             case FirstEntryCL + SkippedMsgLength + 2 < ML orelse ML < 0 of
                 true ->
@@ -558,7 +558,7 @@ depth_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
         "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
         "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
         "symbolic_code = 'RUB'}}}}}])",
@@ -584,8 +584,8 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{...}, ...skipped "
-        "2 entry(-ies)..., PartyModification{...}])",
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{...}, ..."
+        "2 more..., PartyModification{...}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -598,7 +598,7 @@ depth_test_() -> [
     ),
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
-        "contract_modification = ContractModificationUnit{...}}, ...skipped 2 entry(-ies)..., "
+        "contract_modification = ContractModificationUnit{...}}, ...2 more..., "
         "PartyModification{shop_modification = ShopModificationUnit{...}}])",
         format_msg(
             format_call(
@@ -613,7 +613,7 @@ depth_test_() -> [
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
         "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
-        "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ContractModification{...}}}, ...2 more..., PartyModification{shop_modification = "
         "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])",
         format_msg(
             format_call(
@@ -628,7 +628,7 @@ depth_test_() -> [
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
         "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
-        "ContractModification{...}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ContractModification{...}}}, ...2 more..., PartyModification{shop_modification = "
         "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{...}}}])",
         format_msg(
             format_call(
@@ -697,7 +697,7 @@ length_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
         "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
         "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
         "symbolic_code = 'RUB'}}}}}])",
@@ -721,7 +721,7 @@ length_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
         "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
         "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{"
         "symbolic_code = 'RUB'}}}}}])",
@@ -857,7 +857,7 @@ depth_and_lenght_test_() -> [
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{contract_modification "
         "= ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ContractModification{creation = "
-        "ContractParams{...}}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "ContractParams{...}}}}, ...2 more..., PartyModification{shop_modification = "
         "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = "
         "ShopAccountParams{...}}}}])",
         format_msg(
@@ -874,7 +874,7 @@ depth_and_lenght_test_() -> [
         "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{contract_modification "
         "= ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ContractModification{creation = "
         "ContractParams{template = ContractTemplateRef{...}, payment_institution = PaymentInstitutionRef{...}, "
-        "contractor = Contractor{...}}}}}, ...skipped 2 entry(-ies)..., PartyModification{shop_modification = "
+        "contractor = Contractor{...}}}}}, ...2 more..., PartyModification{shop_modification = "
         "ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ShopModification{shop_account_creation = "
         "ShopAccountParams{currency = CurrencyRef{...}}}}}])",
         format_msg(
