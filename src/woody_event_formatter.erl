@@ -102,15 +102,15 @@ format_exception(Module, Service, Function, Value) ->
 format(ReplyType, Value, #{max_length := ML} = Opts) when is_tuple(Value) ->
     try
         {ReplyFmt, _} = format_thrift_value(ReplyType, Value, 0, 0, Opts),
-        {ReplyFmt, []}
+        {"~s", [ReplyFmt]}
     catch
         E:R:S ->
             WarningDetails = genlib_format:format_exception({E, R, S}),
             logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
-            io_lib:format("~p", [Value], [{chars_limit, ML}])
+            {"~s", [io_lib:format("~p", [Value], [{chars_limit, ML}])]}
     end;
 format(_ReplyType, Value, #{max_length := ML}) ->
-    io_lib:format("~p", [Value], [{chars_limit, ML}]).
+    {"~s", [io_lib:format("~p", [Value], [{chars_limit, ML}])]}.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {iolist(), non_neg_integer()}.
