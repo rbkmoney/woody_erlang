@@ -2,8 +2,8 @@
 
 %% API
 -export([handle_event/3, handle_event/4]).
--export([format_event/2, format_event/3]).
--export([format_event_and_meta/3, format_event_and_meta/4]).
+-export([format_event/3, format_event/4]).
+-export([format_event_and_meta/3, format_event_and_meta/4, format_event_and_meta/5]).
 -export([format_rpc_id/1]).
 
 -include("woody_defs.hrl").
@@ -200,11 +200,14 @@ format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
 format_rpc_id(undefined) ->
     {"undefined", []}.
 
--spec format_event(event(), event_meta(), woody:rpc_id() | undefined) ->
+-spec format_event(event(), event_meta(), woody:rpc_id() | undefined, woody:options()) ->
     log_msg().
-format_event(Event, Meta, RpcId) ->
-    {Severity, Msg} = format_event(Event, Meta),
-    {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
+format_event(Event, Meta, RpcId, Opts) ->
+    {RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
+    RpcIdMsg = io_lib:format(RpcIdFmt, RpcIdParams),
+    RpcIdLen = length(RpcIdMsg),
+    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
+    {Severity, append_msg({"~s", [RpcIdMsg]}, Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
     {severity(), msg(), meta()}.
@@ -214,7 +217,12 @@ format_event_and_meta(Event, Meta, RpcID) ->
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
     {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
-    {Severity, Msg} = format_event(Event, Meta, RpcID),
+    format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, #{}).
+
+-spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), woody:options()) ->
+    {severity(), msg(), meta()}.
+format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
+    {Severity, Msg} = format_event(Event, Meta, RpcID, Opts),
     {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
@@ -232,98 +240,98 @@ format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
 format_deadline(Meta) ->
     Meta.
 
--spec format_event(event(), event_meta()) ->
+-spec format_event(event(), event_meta(), woody:options()) ->
     log_msg().
-format_event(?EV_CLIENT_BEGIN, _Meta) ->
+format_event(?EV_CLIENT_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
-format_event(?EV_CLIENT_END, _Meta) ->
+format_event(?EV_CLIENT_END, _Meta, _Opts) ->
     {debug, {"[client] request end", []}};
-format_event(?EV_CALL_SERVICE, Meta) ->
-    {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
-format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
+format_event(?EV_CALL_SERVICE, Meta, Opts) ->
+    {info, append_msg({"[client] calling ", []}, format_service_request(Meta, Opts))};
+format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}, _Opts) ->
     {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
-format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
+format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}, _Opts) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
-format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta) ->
-    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta))};
-format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
+format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
+    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta, Opts))};
+format_event(?EV_CLIENT_SEND, #{url:=URL}, _Opts) ->
     {debug, {"[client] sending request to ~s", [URL]}};
-format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
+format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}, _Opts) ->
     {debug, {"[client] resolving location of ~s", [Host]}};
-format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Address}) ->
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Address}, _Opts) ->
     {debug, {"[client] resolved location of ~s to ~ts", [Host, Address]}};
-format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}) ->
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}, _Opts) ->
     {debug, {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}, _Opts) ->
     {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}, _Opts) ->
     {debug, {"[client] received response with code ~p", [Code]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}, _Opts) ->
     {warning, {"[client] received response with code ~p and details: ~ts", [Code, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}, _Opts) ->
     {warning, {"[client] sending request error ~ts", [Reason]}};
-format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}) ->
+format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}, _Opts) ->
     {debug, {"[server] request to ~s received", [URL]}};
-format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}) ->
+format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}, _Opts) ->
     {debug, {"[server] request to ~s unpacking error ~ts", [URL, Reason]}};
-format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}) ->
+format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}, _Opts) ->
     {debug, {"[server] response sent with code ~p", [Code]}};
-format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
+format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}, _Opts) ->
     {warning, {"[server] response sent with code ~p", [Code]}};
-format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
-    {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta) ->
-    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}) ->
+format_event(?EV_INVOKE_SERVICE_HANDLER, Meta, Opts) ->
+    {info, append_msg({"[server] handling ", []}, format_service_request(Meta, Opts))};
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
+    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta, Opts))};
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}, _Opts) ->
     {info, {"[server] handling result business error: ~p", [Error]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
-    except_class:=Class})
+    except_class:=Class}, _Opts)
 ->
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}, _Opts) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
-format_event(?EV_CLIENT_CACHE_BEGIN, _Meta) ->
+format_event(?EV_CLIENT_CACHE_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
-format_event(?EV_CLIENT_CACHE_END, _Meta) ->
+format_event(?EV_CLIENT_CACHE_END, _Meta, _Opts) ->
     {debug, {"[client] request end", []}};
-format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
+format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}, _Opts) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
-format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
+format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}, _Opts) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
-format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta) ->
-    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta))};
-format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta) ->
-    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta))};
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
+format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta, Opts) ->
+    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta, Opts))};
+format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta, Opts) ->
+    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta, Opts))};
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}, _Opts) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}, _Opts) ->
     {warning, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
-format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}) ->
+format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}, _Opts) ->
     {debug, {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
-format_event(?EV_TRACE, #{event:=Event, role:=Role}) ->
+format_event(?EV_TRACE, #{event:=Event, role:=Role}, _Opts) ->
     {debug, {"[~p] trace ~ts", [Role, Event]}};
-format_event(UnknownEventType, Meta) ->
+format_event(UnknownEventType, Meta, _Opts) ->
     {warning, {" unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
 
 %%
 %% Internal functions
 %%
--spec format_service_request(map()) ->
+-spec format_service_request(map(), woody:options()) ->
     msg().
-format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}) ->
-    woody_event_formatter:format_call(Module, Service, Function, Args).
+format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}, Opts) ->
+    woody_event_formatter:format_call(Module, Service, Function, Args, Opts).
 
--spec format_service_reply(map()) ->
+-spec format_service_reply(map(), woody:options()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta) ->
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta, Opts) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
     case FormatasException of
         false ->
-            woody_event_formatter:format_reply(Module, Service, Function, get_result(Result));
+            woody_event_formatter:format_reply(Module, Service, Function, get_result(Result), Opts);
         true ->
-            woody_event_formatter:format_exception(Module, Service, Function, get_result(Result))
+            woody_event_formatter:format_exception(Module, Service, Function, get_result(Result), Opts)
     end;
-format_service_reply(Result) ->
+format_service_reply(Result, _Opts) ->
     {"~w", [Result]}.
 
 get_result({_, Result}) ->
@@ -358,6 +366,11 @@ maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = Woody
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
 
+preserve_rpc_id_length(RpcIdLen, Opts = #{max_length := ML}) when ML > 0, ML > RpcIdLen ->
+    Opts#{max_length => ML - RpcIdLen};
+preserve_rpc_id_length(_RpcIdLen, Opts) ->
+    Opts.
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -390,7 +403,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -411,7 +425,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -427,7 +442,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -443,7 +459,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -464,7 +481,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'CustomerManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'CustomerManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -484,7 +502,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -506,7 +525,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -524,7 +544,8 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -542,7 +563,8 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -573,7 +595,8 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -639,7 +662,8 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -751,7 +775,8 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     )
@@ -825,7 +850,8 @@ format_service_request_with_limit_test_() -> [
                 #{
                     span_id => <<"1012689088534282240">>,
                     trace_id => <<"1012689088739803136">>,
-                    parent_id => <<"1012689108264288256">>}
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     )
@@ -903,7 +929,8 @@ result_test_() -> [
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
                     status => ok,
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -988,7 +1015,8 @@ result_test_() -> [
                 service => 'PartyManagement',
                 service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
                 status => ok,
-                type => call}
+                type => call},
+                #{}
             )
         )
     ),
@@ -1047,7 +1075,8 @@ result_test_() -> [
                             {mg_stateproc_ComplexAction, undefined, undefined, undefined, undefined}}},
                     role => server, service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{}
             )
         )
     ),
@@ -1107,7 +1136,8 @@ result_test_() -> [
                             {mg_stateproc_ComplexAction, undefined, undefined, undefined, undefined}}},
                     role => server, service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{}
             )
         )
     )
@@ -1133,7 +1163,8 @@ exception_test_() -> [
                     service => 'CustomerManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'CustomerManagement'},
                     status => ok,
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -1158,7 +1189,8 @@ exception_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     result => {payproc_OperationNotPermitted}, role => client, service => 'Invoicing',
                     service_schema => {dmsl_payment_processing_thrift, 'Invoicing'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{}
             )
         )
     )

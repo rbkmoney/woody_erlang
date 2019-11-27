@@ -2,8 +2,9 @@
 
 -export([
     format_call/4,
-    format_reply/4,
-    format_exception/4,
+    format_call/5,
+    format_reply/5,
+    format_exception/5,
     to_string/1
 ]).
 
@@ -85,19 +86,19 @@ format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Op
     {Format, NewCL} = format_thrift_value(Type, Value, CurDepth, CL + NameStrLen + 3, Opts),
     {[NameStr, " = ", Format], NewCL}.
 
--spec format_reply(atom(), atom(), atom(), term()) ->
+-spec format_reply(atom(), atom(), atom(), term(), woody:options()) ->
     woody_event_handler:msg().
-format_reply(Module, Service, Function, Value) ->
+format_reply(Module, Service, Function, Value, Opts) ->
     ReplyType = Module:function_info(Service, Function, reply_type),
-    format(ReplyType, Value, normalize_options(#{})).
+    format(ReplyType, Value, normalize_options(Opts)).
 
--spec format_exception(atom(), atom(), atom(), term()) ->
+-spec format_exception(atom(), atom(), atom(), term(), woody:options()) ->
     woody_event_handler:msg().
-format_exception(Module, Service, Function, Value) ->
+format_exception(Module, Service, Function, Value, Opts) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, normalize_options(#{})).
+    format(ReplyType, Value, normalize_options(Opts)).
 
 format(ReplyType, Value, #{max_length := ML} = Opts) when is_tuple(Value) ->
     try

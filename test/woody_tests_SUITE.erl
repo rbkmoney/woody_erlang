@@ -634,7 +634,7 @@ call3_ok_default_ev_handler_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, [Gun, self_to_bin()]},
-    Opts    = #{url => Url, event_handler => woody_event_handler_default},
+    Opts    = #{url => Url, event_handler => {woody_event_handler_default, #{}}},
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts).
 

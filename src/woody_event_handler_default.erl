@@ -13,8 +13,8 @@
     RpcId :: woody:rpc_id() | undefined,
     Meta  :: woody_event_handler:event_meta(),
     Opts  :: woody:options().
-handle_event(Event, RpcId, Meta, _Opts) ->
-    {Level, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
+handle_event(Event, RpcId, Meta, Opts) ->
+    {Level, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId, Opts),
     Function = get_logger_function(Level),
     _ = error_logger:Function(Format, Msg),
     ok.
