@@ -199,8 +199,6 @@ format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = 
                     {[FirstEntryFmt, ", ..."], FirstEntryCL + 5}
             end;
         false ->
-            %% TODO Uncomment after fix for structures
-%%            {["..."], FirstEntryParams, FirstEntryCL + 5}
             {[FirstEntryFmt, ", ..."], FirstEntryCL + 5}
     end.
 
