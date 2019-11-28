@@ -17,6 +17,8 @@
     max_length => integer()
 }.
 
+-export_type([opts/0]).
+
 -spec format_call(atom(), atom(), atom(), term()) ->
     woody_event_handler:msg().
 format_call(Module, Service, Function, Arguments) ->

@@ -44,7 +44,10 @@
 -export_type([rpc_type/0]).
 
 %% Generic
--type options()     :: any().
+-type options()     :: #{
+    formatter_opts => woody_event_formatter:opts(),
+    atom() => any()
+}.
 -type handler(Opts) :: {module(), Opts} | module().
 -type ev_handler()  :: handler(options()).
 -type ev_handlers() :: ev_handler() | [ev_handler()].

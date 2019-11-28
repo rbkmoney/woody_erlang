@@ -206,7 +206,8 @@ format_event(Event, Meta, RpcId, Opts) ->
     {RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
     RpcIdMsg = io_lib:format(RpcIdFmt, RpcIdParams),
     RpcIdLen = length(RpcIdMsg),
-    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
+    FormatOpts = get_formatter_opts(Opts),
+    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, FormatOpts)),
     {Severity, append_msg({"~s", [RpcIdMsg]}, Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
@@ -222,7 +223,8 @@ format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), woody:options()) ->
     {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
-    {Severity, Msg} = format_event(Event, Meta, RpcID, Opts),
+    FormatOpts = get_formatter_opts(Opts),
+    {Severity, Msg} = format_event(Event, Meta, RpcID, FormatOpts),
     {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
@@ -240,7 +242,7 @@ format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
 format_deadline(Meta) ->
     Meta.
 
--spec format_event(event(), event_meta(), woody:options()) ->
+-spec format_event(event(), event_meta(), woody_event_formatter:opts()) ->
     log_msg().
 format_event(?EV_CLIENT_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
@@ -316,12 +318,12 @@ format_event(UnknownEventType, Meta, _Opts) ->
 %%
 %% Internal functions
 %%
--spec format_service_request(map(), woody:options()) ->
+-spec format_service_request(map(), woody_event_formatter:opts()) ->
     msg().
 format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}, Opts) ->
     woody_event_formatter:format_call(Module, Service, Function, Args, Opts).
 
--spec format_service_reply(map(), woody:options()) ->
+-spec format_service_reply(map(), woody_event_formatter:opts()) ->
     msg().
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta, Opts) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
@@ -370,6 +372,11 @@ preserve_rpc_id_length(RpcIdLen, Opts = #{max_length := ML}) when ML > 0, ML > R
     Opts#{max_length => ML - RpcIdLen};
 preserve_rpc_id_length(_RpcIdLen, Opts) ->
     Opts.
+
+get_formatter_opts(#{formatter_opts := Opts}) ->
+    Opts;
+get_formatter_opts(_) ->
+    #{}.
 
 -ifdef(TEST).
 
