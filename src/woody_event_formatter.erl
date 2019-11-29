@@ -130,7 +130,7 @@ format_thrift_value({enum, {_Module, _Struct}}, Value, _CurDepth, CL, _Opts) ->
 format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) ->
     case is_printable(Value) of
         true ->
-            ValueString = to_string(Value),
+            ValueString = value_to_string(Value),
             Length = length(ValueString),
             {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
         false ->
@@ -139,7 +139,7 @@ format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) -
             {Fmt, CL + Length}
     end;
 format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
-    ValueString = to_string(Value),
+    ValueString = value_to_string(Value),
     Length = length(ValueString),
     {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
 format_thrift_value({list, _}, _, CurDepth, CL, #{max_depth := MD})
@@ -331,6 +331,15 @@ is_printable(Value) ->
             false
     end.
 
+-spec value_to_string(list() | binary() | atom()) -> list().
+value_to_string(S) ->
+    [maybe_escape(C) || C <- to_string(S)].
+
+maybe_escape($') ->
+    [$\\, $'];
+maybe_escape(C) ->
+    C.
+
 -spec to_string(list() | binary() | atom()) -> list().
 %% NOTE: Must match to supported types for `~s`
 to_string(Value) when is_list(Value) ->
@@ -426,7 +435,7 @@ stop_format(Result, CL1, MaybeAddMoreMarker) ->
                         {russian_legal_entity,
                             {domain_RussianLegalEntity, <<"Hoofs & Horns OJSC">>,
                                 <<"1234509876">>, <<"1213456789012">>,
-                                <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>, <<"NaN">>,
+                                <<"Nezahualcoyotl 109 Piso 8, O'Centro, 06082, MEXICO">>, <<"NaN">>,
                                 <<"Director">>, <<"Someone">>, <<"100$ banknote">>,
                                 {domain_RussianBankAccount, <<"4276300010908312893">>,
                                     <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
@@ -557,7 +566,7 @@ depth_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -696,7 +705,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -720,7 +729,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -744,7 +753,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
         "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
@@ -777,7 +786,7 @@ length_test_() -> [
         "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
         "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
         "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
-        "actual_address = 'Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO', ...}}}}}}}, ...])",
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 06082, MEXICO', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
