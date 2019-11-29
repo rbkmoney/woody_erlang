@@ -165,6 +165,10 @@
 -type meta() :: #{atom() => _}.
 -export_type([meta/0]).
 
+-type options() :: #{
+    formatter_opts => woody_event_formatter:opts()
+}.
+-export_type([options/0]).
 
 %%
 %% API
@@ -200,14 +204,13 @@ format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
 format_rpc_id(undefined) ->
     {"undefined", []}.
 
--spec format_event(event(), event_meta(), woody:rpc_id() | undefined, woody:options()) ->
+-spec format_event(event(), event_meta(), woody:rpc_id() | undefined, options()) ->
     log_msg().
 format_event(Event, Meta, RpcId, Opts) ->
     {RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
     RpcIdMsg = io_lib:format(RpcIdFmt, RpcIdParams),
     RpcIdLen = length(RpcIdMsg),
-    FormatOpts = get_formatter_opts(Opts),
-    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, FormatOpts)),
+    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
     {Severity, append_msg({"~s", [RpcIdMsg]}, Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
@@ -220,7 +223,7 @@ format_event_and_meta(Event, Meta, RpcID) ->
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
     format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, #{}).
 
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), woody:options()) ->
+-spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), options()) ->
     {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
     FormatOpts = get_formatter_opts(Opts),
@@ -242,7 +245,7 @@ format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
 format_deadline(Meta) ->
     Meta.
 
--spec format_event(event(), event_meta(), woody_event_formatter:opts()) ->
+-spec format_event(event(), event_meta(), options()) ->
     log_msg().
 format_event(?EV_CLIENT_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
@@ -318,20 +321,32 @@ format_event(UnknownEventType, Meta, _Opts) ->
 %%
 %% Internal functions
 %%
--spec format_service_request(map(), woody_event_formatter:opts()) ->
+-spec format_service_request(map(), options()) ->
     msg().
 format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}, Opts) ->
-    woody_event_formatter:format_call(Module, Service, Function, Args, Opts).
+    woody_event_formatter:format_call(Module, Service, Function, Args, get_formatter_opts(Opts)).
 
--spec format_service_reply(map(), woody_event_formatter:opts()) ->
+-spec format_service_reply(map(), options()) ->
     msg().
 format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta, Opts) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
     case FormatasException of
         false ->
-            woody_event_formatter:format_reply(Module, Service, Function, get_result(Result), Opts);
+            woody_event_formatter:format_reply(
+                Module,
+                Service,
+                Function,
+                get_result(Result),
+                get_formatter_opts(Opts)
+            );
         true ->
-            woody_event_formatter:format_exception(Module, Service, Function, get_result(Result), Opts)
+            woody_event_formatter:format_exception(
+                Module,
+                Service,
+                Function,
+                get_result(Result),
+                get_formatter_opts(Opts)
+            )
     end;
 format_service_reply(Result, _Opts) ->
     {"~w", [Result]}.
@@ -368,10 +383,15 @@ maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = Woody
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
 
-preserve_rpc_id_length(RpcIdLen, Opts = #{max_length := ML}) when ML > 0, ML > RpcIdLen ->
-    Opts#{max_length => ML - RpcIdLen};
-preserve_rpc_id_length(_RpcIdLen, Opts) ->
-    Opts.
+preserve_rpc_id_length(RpcIdLen, Opts) ->
+    case get_formatter_opts(Opts) of
+        FormatOpts = #{max_length := ML} when ML > 0, ML > RpcIdLen ->
+            Opts#{
+                formatter_opts => FormatOpts#{max_length => ML - RpcIdLen}
+            };
+        _ ->
+            #{}
+    end.
 
 get_formatter_opts(#{formatter_opts := Opts}) ->
     Opts;
