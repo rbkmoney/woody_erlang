@@ -2,8 +2,8 @@
 
 %% API
 -export([handle_event/3, handle_event/4]).
--export([format_event/2, format_event/3]).
--export([format_event_and_meta/3, format_event_and_meta/4]).
+-export([format_event/3, format_event/4]).
+-export([format_event_and_meta/3, format_event_and_meta/4, format_event_and_meta/5]).
 -export([format_rpc_id/1]).
 
 -include("woody_defs.hrl").
@@ -59,13 +59,13 @@
     execution_duration_ms => integer(),              %% EV_CLIENT_RECEIVE
     execution_end_time    => integer(),              %% EV_CLIENT_RECEIVE
 
-    url      => woody:url(),                        %% EV_CLIENT_SEND
-    code     => woody:http_code(),                  %% EV_CLIENT_RECEIVE
-    reason   => woody_error:details(),              %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
-    status   => status(),                           %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
-    address  => string(),                           %% EV_CLIENT_RESOLVE_RESULT
-    host     => string(),                           %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
-    result   => woody:result() | woody_error:error()  %% EV_SERVICE_RESULT
+    url      => woody:url(),                         %% EV_CLIENT_SEND
+    code     => woody:http_code(),                   %% EV_CLIENT_RECEIVE
+    reason   => woody_error:details(),               %% EV_CLIENT_RECEIVE | EV_CLIENT_RESOLVE_RESULT
+    status   => status(),                            %% EV_CLIENT_RECEIVE | EV_SERVICE_RESULT | EV_CLIENT_RESOLVE_RESULT
+    address  => string(),                            %% EV_CLIENT_RESOLVE_RESULT
+    host     => string(),                            %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
+    result   => woody:result() | woody_error:error() %% EV_SERVICE_RESULT
 }.
 -export_type([meta_client/0]).
 
@@ -151,7 +151,6 @@
     (?EV_INTERNAL_ERROR, woody:rpc_id(), meta_internal_error(), woody:options()) -> _;
     (?EV_TRACE, woody:rpc_id() | undefined, meta_trace(), woody:options()) -> _.
 
-
 %% Util Types
 -type status() :: ok | error.
 -export_type([status/0]).
@@ -166,6 +165,10 @@
 -type meta() :: #{atom() => _}.
 -export_type([meta/0]).
 
+-type options() :: #{
+    formatter_opts => woody_event_formatter:opts()
+}.
+-export_type([options/0]).
 
 %%
 %% API
@@ -199,13 +202,16 @@ handle_event(Handler, Event, RpcId, Meta) ->
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
     {"[~s ~s ~s]", [Trace, Parent, Span]};
 format_rpc_id(undefined) ->
-    {"~p", [undefined]}.
+    {"undefined", []}.
 
--spec format_event(event(), event_meta(), woody:rpc_id() | undefined) ->
+-spec format_event(event(), event_meta(), woody:rpc_id() | undefined, options()) ->
     log_msg().
-format_event(Event, Meta, RpcId) ->
-    {Severity, Msg} = format_event(Event, Meta),
-    {Severity, append_msg(format_rpc_id(RpcId), Msg)}.
+format_event(Event, Meta, RpcId, Opts) ->
+    {RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
+    RpcIdMsg = io_lib:format(RpcIdFmt, RpcIdParams),
+    RpcIdLen = length(RpcIdMsg),
+    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
+    {Severity, append_msg({"~s", [RpcIdMsg]}, Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
     {severity(), msg(), meta()}.
@@ -215,7 +221,13 @@ format_event_and_meta(Event, Meta, RpcID) ->
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
     {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
-    {Severity, Msg} = format_event(Event, Meta, RpcID),
+    format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, #{}).
+
+-spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), options()) ->
+    {severity(), msg(), meta()}.
+format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
+    FormatOpts = get_formatter_opts(Opts),
+    {Severity, Msg} = format_event(Event, Meta, RpcID, FormatOpts),
     {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
@@ -233,97 +245,116 @@ format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
 format_deadline(Meta) ->
     Meta.
 
--spec format_event(event(), event_meta()) ->
+-spec format_event(event(), event_meta(), options()) ->
     log_msg().
-format_event(?EV_CLIENT_BEGIN, _Meta) ->
+format_event(?EV_CLIENT_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
-format_event(?EV_CLIENT_END, _Meta) ->
+format_event(?EV_CLIENT_END, _Meta, _Opts) ->
     {debug, {"[client] request end", []}};
-format_event(?EV_CALL_SERVICE, Meta) ->
-    {info, append_msg({"[client] calling ", []}, format_service_request(Meta))};
-format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}) ->
+format_event(?EV_CALL_SERVICE, Meta, Opts) ->
+    {info, append_msg({"[client] calling ", []}, format_service_request(Meta, Opts))};
+format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack}, _Opts) ->
     {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
-format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}) ->
+format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}, _Opts) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
-format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta) ->
-    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta))};
-format_event(?EV_CLIENT_SEND, #{url:=URL}) ->
+format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
+    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta, Opts))};
+format_event(?EV_CLIENT_SEND, #{url:=URL}, _Opts) ->
     {debug, {"[client] sending request to ~s", [URL]}};
-format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}) ->
+format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}, _Opts) ->
     {debug, {"[client] resolving location of ~s", [Host]}};
-format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Address}) ->
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=ok, host:=Host, address:=Address}, _Opts) ->
     {debug, {"[client] resolved location of ~s to ~ts", [Host, Address]}};
-format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}) ->
+format_event(?EV_CLIENT_RESOLVE_RESULT, #{status:=error, host:=Host, reason:=Reason}, _Opts) ->
     {debug, {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code, reason:=Reason}, _Opts) ->
     {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=ok, code:=Code}, _Opts) ->
     {debug, {"[client] received response with code ~p", [Code]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=error, code:=Code, reason:=Reason}, _Opts) ->
     {warning, {"[client] received response with code ~p and details: ~ts", [Code, Reason]}};
-format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}) ->
+format_event(?EV_CLIENT_RECEIVE, #{status:=error, reason:=Reason}, _Opts) ->
     {warning, {"[client] sending request error ~ts", [Reason]}};
-format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}) ->
+format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=ok}, _Opts) ->
     {debug, {"[server] request to ~s received", [URL]}};
-format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}) ->
+format_event(?EV_SERVER_RECEIVE, #{url:=URL, status:=error, reason:=Reason}, _Opts) ->
     {debug, {"[server] request to ~s unpacking error ~ts", [URL, Reason]}};
-format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}) ->
+format_event(?EV_SERVER_SEND, #{status:=ok, code:=Code}, _Opts) ->
     {debug, {"[server] response sent with code ~p", [Code]}};
-format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}) ->
+format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}, _Opts) ->
     {warning, {"[server] response sent with code ~p", [Code]}};
-format_event(?EV_INVOKE_SERVICE_HANDLER, Meta) ->
-    {info, append_msg({"[server] handling ", []}, format_service_request(Meta))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta) ->
-    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}) ->
+format_event(?EV_INVOKE_SERVICE_HANDLER, Meta, Opts) ->
+    {info, append_msg({"[server] handling ", []}, format_service_request(Meta, Opts))};
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
+    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta, Opts))};
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}, _Opts) ->
     {info, {"[server] handling result business error: ~p", [Error]}};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
-    except_class:=Class})
+    except_class:=Class}, _Opts)
 ->
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}) ->
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}, _Opts) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
-format_event(?EV_CLIENT_CACHE_BEGIN, _Meta) ->
+format_event(?EV_CLIENT_CACHE_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};
-format_event(?EV_CLIENT_CACHE_END, _Meta) ->
+format_event(?EV_CLIENT_CACHE_END, _Meta, _Opts) ->
     {debug, {"[client] request end", []}};
-format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}) ->
+format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}, _Opts) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
-format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}) ->
+format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}, _Opts) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
-format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta) ->
-    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta))};
-format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta) ->
-    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta))};
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}) ->
+format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta, Opts) ->
+    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta, Opts))};
+format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta, Opts) ->
+    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta, Opts))};
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}, _Opts) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
-format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}) ->
+format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}, _Opts) ->
     {warning, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
-format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}) ->
+format_event(?EV_TRACE, Meta = #{event:=Event, role:=Role, headers:=Headers, body:=Body}, _Opts) ->
     {debug, {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
-format_event(?EV_TRACE, #{event:=Event, role:=Role}) ->
+format_event(?EV_TRACE, #{event:=Event, role:=Role}, _Opts) ->
     {debug, {"[~p] trace ~ts", [Role, Event]}};
-format_event(UnknownEventType, Meta) ->
+format_event(UnknownEventType, Meta, _Opts) ->
     {warning, {" unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
 
 %%
 %% Internal functions
 %%
--spec format_service_request(map()) ->
+-spec format_service_request(map(), options()) ->
     msg().
-format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}) ->
-    woody_event_formatter:format_call(Module, Service, Function, Args).
+format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}, Opts) ->
+    woody_event_formatter:format_call(Module, Service, Function, Args, get_formatter_opts(Opts)).
 
--spec format_service_reply(map()) ->
+-spec format_service_reply(map(), options()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:={_, Result}} = Meta) ->
+format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta, Opts) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, status := ok, result:=Result} = Meta) ->
-    FormatasException =  maps:get(format_as_exception, Meta, false),
-    woody_event_formatter:format_reply(Module, Service, Function, Result, FormatasException);
-format_service_reply(Result) ->
+    case FormatasException of
+        false ->
+            woody_event_formatter:format_reply(
+                Module,
+                Service,
+                Function,
+                get_result(Result),
+                get_formatter_opts(Opts)
+            );
+        true ->
+            woody_event_formatter:format_exception(
+                Module,
+                Service,
+                Function,
+                get_result(Result),
+                get_formatter_opts(Opts)
+            )
+    end;
+format_service_reply(Result, _Opts) ->
     {"~w", [Result]}.
+
+get_result({_, Result}) ->
+    Result;
+get_result(Result) ->
+    Result.
 
 -spec format_exception(msg(), woody_error:stack()) ->
     msg().
@@ -352,6 +383,20 @@ maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = Woody
 maybe_add_exec_time(_Event, WoodyStateEvMeta) ->
     WoodyStateEvMeta.
 
+preserve_rpc_id_length(RpcIdLen, Opts) ->
+    case get_formatter_opts(Opts) of
+        FormatOpts = #{max_length := ML} when ML > 0, ML > RpcIdLen ->
+            Opts#{
+                formatter_opts => FormatOpts#{max_length => ML - RpcIdLen}
+            };
+        _ ->
+            Opts
+    end.
+
+get_formatter_opts(#{formatter_opts := Opts}) ->
+    Opts;
+get_formatter_opts(_) ->
+    #{}.
 
 -ifdef(TEST).
 
@@ -363,15 +408,20 @@ format_msg({Fmt, Params}) ->
         io_lib:format(Fmt, Params)
     ).
 
+format_msg_limited({_Severity, {Fmt, Params}}) ->
+    lists:flatten(
+        io_lib:format(Fmt, Params, [{chars_limit, 1024}])
+    ).
+
 -spec format_service_request_test_() -> _.
 format_service_request_test_() -> [
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:Create(party_id = '1CQdDqPROyW', params = PartyParams{",
-            "contact_info = PartyContactInfo{email = 'hg_ct_helper'}})"
-        ),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:Create(party_id = '1CQdDqPROyW', params = PartyParams{"
+        "contact_info = PartyContactInfo{email = 'hg_ct_helper'}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [undefined, <<"1CQdDqPROyW">>,
                     {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}],
@@ -382,18 +432,23 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, params = PartyParams{contact_info = PartyContactInfo{",
-            "email = 'hg_ct_helper'}})"
-            ]),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, params = PartyParams{contact_info = PartyContactInfo{"
+        "email = 'hg_ct_helper'}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}}, undefined,
@@ -405,14 +460,21 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
         "PartyManagement:Get(party_id = '1CQdDqPROyW')",
-        format_msg(
-            format_service_request(
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args => [undefined, <<"1CQdDqPROyW">>],
                     deadline => undefined, execution_start_time => 1565596875696,
                     function => 'Get',
@@ -421,17 +483,45 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', ",
-            "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})"
-        ),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:Get(party_id = '~s')",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
+                #{args => [undefined, <<"~s">>],
+                    deadline => undefined, execution_start_time => 1565596875696,
+                    function => 'Get',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CQdDqPROyW">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    role => server, service => 'PartyManagement',
+                    service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
+            )
+        )
+    ),
+    ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', "
+        "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{payproc_CustomerParams, <<"1CQdDqPROyW">>, <<"1CQdDwgt3R3">>,
                     {domain_ContactInfo, undefined, <<"invalid_shop">>},
@@ -444,17 +534,22 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'CustomerManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'CustomerManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW')"
-        ),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW')",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}},
@@ -466,17 +561,22 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten(
-            "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = UserType{",
-            "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})"
-        ),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
+        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}},
@@ -490,14 +590,21 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
         "PartyManagement:Block(party_id = '1CQdDqPROyW', reason = '')",
-        format_msg(
-            format_service_request(
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args => [undefined, <<"1CQdDqPROyW">>, <<>>],
                     deadline => undefined,
                     execution_start_time => 1565596876383,
@@ -508,14 +615,21 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
         "PartyManagement:Unblock(party_id = '1CQdDqPROyW', reason = '')",
-        format_msg(
-            format_service_request(
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args => [undefined, <<"1CQdDqPROyW">>, <<>>],
                     deadline => undefined,
                     execution_start_time => 1565596876458,
@@ -526,18 +640,23 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, ",
-            "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{",
-            "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})"
-        ]),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, "
+        "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{"
+        "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{mg_stateproc_SignalArgs,
                     {init,
@@ -559,28 +678,30 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{",
-            "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = ",
-            "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, ",
-            "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = ",
-            "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...skipped 2 entry(-ies)..., ",
-            "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = ",
-            "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{",
-            "symbolic_code = 'RUB'}}}}}])"
-        ]),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [undefined, <<"1CR1Xziml7o">>,
                     [{contract_modification,
@@ -627,23 +748,28 @@ format_service_request_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     role => server, service => 'PartyManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{formatter_opts => #{max_length => 1024}}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', ",
-            "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', ",
-            "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{",
-            "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} ",
-            "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ",
-            "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} ",
-            "=> Value{str = 'application/x-erlang-binary'}}}}})"
-        ]),
-        format_msg(
-            format_service_request(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
+        "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{"
+        "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} "
+        "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "=> Value{str = 'application/x-erlang-binary'}}}}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{mg_stateproc_CallArgs,
                     {bin,
@@ -741,24 +867,105 @@ format_service_request_test_() -> [
                     role => server,
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     )
 ].
 
+-spec format_service_request_with_limit_test_() -> _.
+format_service_request_with_limit_test_() -> [
+    ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
+        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
+        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
+        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
+        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
+        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
+        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
+        "PartyModification{shop_modification = ShopModificationUn...)",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
+                #{args =>
+                [undefined, <<"1CR1Xziml7o">>,
+                    [{contract_modification,
+                        {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+                            {creation,
+                                {payproc_ContractParams, undefined,
+                                    {domain_ContractTemplateRef, 1},
+                                    {domain_PaymentInstitutionRef, 1},
+                                    {legal_entity,
+                                        {russian_legal_entity,
+                                            {domain_RussianLegalEntity, <<"Hoofs & Horns OJSC">>,
+                                                <<"1234509876">>, <<"1213456789012">>,
+                                                <<"Nezahualcoyotl 109 Piso 8, Centro, 06082, MEXICO">>, <<"NaN">>,
+                                                <<"Director">>, <<"Someone">>, <<"100$ banknote">>,
+                                                {domain_RussianBankAccount, <<"4276300010908312893">>,
+                                                    <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+                        {contract_modification,
+                            {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
+                                {payout_tool_modification,
+                                    {payproc_PayoutToolModificationUnit, <<"1CR1Y2ZcrA1">>,
+                                        {creation,
+                                            {payproc_PayoutToolParams,
+                                                {domain_CurrencyRef, <<"RUB">>},
+                                                {russian_bank_account,
+                                                    {domain_RussianBankAccount, <<"4276300010908312893">>,
+                                                        <<"SomeBank">>, <<"123129876">>, <<"66642666">>}}}}}}}},
+                        {shop_modification,
+                            {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+                                {creation,
+                                    {payproc_ShopParams,
+                                        {domain_CategoryRef, 1},
+                                        {url, <<>>},
+                                        {domain_ShopDetails, <<"Battle Ready Shop">>, undefined},
+                                        <<"1CR1Y2ZcrA0">>, <<"1CR1Y2ZcrA1">>}}}},
+                        {shop_modification,
+                            {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
+                                {shop_account_creation,
+                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]],
+                    deadline => undefined,
+                    execution_start_time => 1565617299263,
+                    function => 'CreateClaim',
+                    metadata =>
+                    #{<<"user-identity.id">> => <<"1CR1Xziml7o">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    role => server, service => 'PartyManagement',
+                    service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
+            )
+        )
+    )
+].
+
+
 -spec result_test_() -> _.
 result_test_() -> [
     ?_assertEqual(
-        lists:flatten([
-            "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{",
-            "aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, ",
-            "Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{",
-            "arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ",
-            "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}]}, action = ComplexAction{}}"
-        ]),
-        format_msg(
-            format_service_reply(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{aux_state = "
+        "Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} => "
+        "Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{arr = [Value{obj = "
+        "#{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, Value{str = 'vsn'} => Value{i = 6}}}, "
+        "Value{bin = <<...>>}]}}]}, action = ComplexAction{}}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
                 #{
                     deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
                     execution_start_time => 1565695142994,
@@ -820,38 +1027,33 @@ result_test_() -> [
                     service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
                     status => ok,
-                    type => call}
+                    type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
+    %% In some cases resulting message can have more data than expected
+    %% In such case it will cut by formatter, as shown below
     ?_assertEqual(
-        lists:flatten([
-            "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, ",
-            "created_at = '2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', ",
-            "since = '2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{",
-            "since = '2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => ",
-            "Contract{id = '1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, ",
-            "created_at = '2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, ",
-            "terms = TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', ",
-            "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, ",
-            "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{",
-            "account = '4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', ",
-            "bank_bik = '66642666'}}}], contractor = Contractor{legal_entity = LegalEntity{",
-            "russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', ",
-            "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, ",
-            "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', ",
-            "representative_full_name = 'Someone', representative_document = '100$ banknote', ",
-            "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', ",
-            "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}, shops = #{'1CSWG8j04wM' => ",
-            "Shop{id = '1CSWG8j04wM', created_at = '2019-08-13T11:19:01.387269Z', blocking = Blocking{blocked = ",
-            "Blocked{reason = '', since = '2019-08-13T11:19:03.015222Z'}}, suspension = Suspension{",
-            "active = Active{since = '2019-08-13T11:19:01.387269Z'}}, details = ShopDetails{",
-            "name = 'Battle Ready Shop'}, location = ShopLocation{url = ''}, category = CategoryRef{id = 1}, ",
-            "account = ShopAccount{currency = CurrencyRef{symbolic_code = 'RUB'}, settlement = 7, guarantee = 6, ",
-            "payout = 8}, contract_id = '1CSWG8j04wK', payout_tool_id = '1CSWG8j04wL'}}, wallets = #{}, revision = 6}"
-        ]),
-        format_msg(
-            format_service_reply(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, created_at = "
+        "'2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', since = "
+        "'2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{since = "
+        "'2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => Contract{id = "
+        "'1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, created_at = "
+        "'2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, terms = "
+        "TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', "
+        "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, "
+        "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{account = "
+        "'4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = "
+        "'66642666'}}}], con...",
+        format_msg_limited(
+            format_event(
+            ?EV_SERVICE_RESULT,
             #{args =>
             [{payproc_UserInfo, <<"1CSWG2vduGe">>,
                 {external_user, {payproc_ExternalUser}}},
@@ -907,22 +1109,28 @@ result_test_() -> [
                 service => 'PartyManagement',
                 service_schema => {dmsl_payment_processing_thrift, 'PartyManagement'},
                 status => ok,
-                type => call}
+                type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{formatter_opts => #{max_length => 1024}}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
-            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
-            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{",
-            "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
-            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
-            "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
-            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
-        ]),
-        format_msg(
-            format_service_reply(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled "
+        "successfully: "
+        "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, "
+        "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{"
+        "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{"
+        "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{"
+        "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, "
+        "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, "
+        "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
                 #{args =>
                 [{mg_stateproc_SignalArgs,
                     {init,
@@ -968,22 +1176,24 @@ result_test_() -> [
                             {mg_stateproc_ComplexAction, undefined, undefined, undefined, undefined}}},
                     role => server, service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     ),
     ?_assertEqual(
-        lists:flatten([
-            "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, ",
-            "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{",
-            "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{",
-            "Value{str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{",
-            "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, ",
-            "Value{str = 'metadata'} => Value{str = <<...>>}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, ",
-            "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}"
-        ]),
-        format_msg(
-            format_service_reply(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
+        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, "
+        "machine = Machine{ns = 'customer', id = '1CSWGJ3N8Ns', history = [], history_range = "
+        "HistoryRange{direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy "
+        "= Value{bin = ''}}})",
+        format_msg_limited(
+            format_event(
+                ?EV_CALL_SERVICE,
                 #{args =>
                 [{mg_stateproc_SignalArgs,
                     {init,
@@ -1030,12 +1240,16 @@ result_test_() -> [
                             {mg_stateproc_ComplexAction, undefined, undefined, undefined, undefined}}},
                     role => server, service => 'Processor',
                     service_schema => {mg_proto_state_processing_thrift, 'Processor'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
             )
         )
     )
 ].
-
 
 -spec exception_test_() -> _.
 exception_test_() -> [
@@ -1056,7 +1270,8 @@ exception_test_() -> [
                     service => 'CustomerManagement',
                     service_schema => {dmsl_payment_processing_thrift, 'CustomerManagement'},
                     status => ok,
-                    type => call}
+                    type => call},
+                #{}
             )
         )
     ),
@@ -1081,7 +1296,8 @@ exception_test_() -> [
                         <<"user-identity.realm">> => <<"external">>},
                     result => {payproc_OperationNotPermitted}, role => client, service => 'Invoicing',
                     service_schema => {dmsl_payment_processing_thrift, 'Invoicing'},
-                    status => ok, type => call}
+                    status => ok, type => call},
+                #{}
             )
         )
     )

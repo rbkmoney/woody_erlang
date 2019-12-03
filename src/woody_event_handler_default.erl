@@ -5,6 +5,11 @@
 %% woody_event_handler behaviour callback
 -export([handle_event/4]).
 
+-type options() :: #{
+    formatter_opts => woody_event_formatter:opts()
+}.
+-export_type([options/0]).
+
 %%
 %% woody_event_handler behaviour callback
 %%
@@ -12,9 +17,10 @@
     Event :: woody_event_handler:event(),
     RpcId :: woody:rpc_id() | undefined,
     Meta  :: woody_event_handler:event_meta(),
-    Opts  :: woody:options().
-handle_event(Event, RpcId, Meta, _Opts) ->
-    {Level, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
+    Opts  :: options().
+handle_event(Event, RpcId, Meta, Opts) ->
+    EHOpts = get_event_handler_opts(Opts),
+    {Level, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId, EHOpts),
     Function = get_logger_function(Level),
     _ = error_logger:Function(Format, Msg),
     ok.
@@ -26,3 +32,5 @@ get_logger_function(warning) ->
 get_logger_function(error)   ->
     error_msg.
 
+get_event_handler_opts(Opts) ->
+     Opts.
