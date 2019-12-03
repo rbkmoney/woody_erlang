@@ -351,7 +351,7 @@ format_service_reply(#{service_schema := {Module, Service}, function:=Function, 
 format_service_reply(Result, _Opts) ->
     {"~w", [Result]}.
 
-get_result({_, Result}) ->
+get_result({ok, Result}) ->
     Result;
 get_result(Result) ->
     Result.
