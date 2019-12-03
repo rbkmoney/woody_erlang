@@ -698,8 +698,7 @@ format_service_request_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., PartyModification"
-        "{shop_modification = ShopModificationUn...)",
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -754,7 +753,7 @@ format_service_request_test_() -> [
                     span_id => <<"1012689088534282240">>,
                     trace_id => <<"1012689088739803136">>,
                     parent_id => <<"1012689108264288256">>},
-                #{}
+                #{formatter_opts => #{max_length => 1024}}
             )
         )
     ),
@@ -1037,6 +1036,8 @@ result_test_() -> [
             )
         )
     ),
+    %% In some cases resulting message can have more data than expected
+    %% In such case it will cut by formatter, as shown below
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
         "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, created_at = "
@@ -1048,7 +1049,8 @@ result_test_() -> [
         "TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', "
         "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, "
         "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{account = "
-        "'4276300010908312893', bank_name = 'SomeBank', ...}}}], ...}}, ...}",
+        "'4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = "
+        "'66642666'}}}], con...",
         format_msg_limited(
             format_event(
             ?EV_SERVICE_RESULT,
@@ -1112,7 +1114,7 @@ result_test_() -> [
                     span_id => <<"1012689088534282240">>,
                     trace_id => <<"1012689088739803136">>,
                     parent_id => <<"1012689108264288256">>},
-                #{formatter_opts => #{max_length => 850}}
+                #{formatter_opts => #{max_length => 1024}}
             )
         )
     ),
