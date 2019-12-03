@@ -94,13 +94,24 @@ format_reply(Module, Service, Function, Value, Opts) ->
     ReplyType = Module:function_info(Service, Function, reply_type),
     format(ReplyType, Value, normalize_options(Opts)).
 
--spec format_exception(atom(), atom(), atom(), term(), woody:options()) ->
+-spec format_exception(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_exception(Module, Service, Function, Value, Opts) ->
+format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, normalize_options(Opts)).
+    format(ReplyType, Value, normalize_options(Opts));
+format_exception(_Module, _Service, _Function, Value, Opts) when is_binary(Value) ->
+    #{max_length := ML} = normalize_options(Opts),
+    case is_printable(Value) of
+        true ->
+            {"~s", [io_lib:format("~s", [Value], [{chars_limit, ML}])]};
+        false ->
+            {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}
+    end;
+format_exception(_Module, _Service, _Function, Value, Opts) ->
+    #{max_length := ML} = normalize_options(Opts),
+    {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
 
 format(ReplyType, Value, #{max_length := ML} = Opts) when is_tuple(Value) ->
     try
@@ -215,7 +226,7 @@ format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
     format_list(Type, ValueList, "", CurDepth, CL, Opts, false).
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
-    [ExceptionType] =
+    Result =
         lists:filtermap(
             fun ({_, _, Type = {struct, exception, {Module, Exception}}, _, _}) ->
                 case Module:record_name(Exception) of
@@ -225,7 +236,12 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
             end,
             ExceptionTypeList
         ),
-    ExceptionType.
+    case Result of
+        [ExceptionType] ->
+            ExceptionType;
+        [] ->
+            undefined
+    end.
 
 -spec format_struct(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {iolist(), non_neg_integer()}.
@@ -924,6 +940,22 @@ depth_and_lenght_test_() -> [
                 'ProcessCall',
                 ?ARGS2,
                 #{max_length => 512, max_depth => 5}
+            )
+        )
+    )
+].
+
+-spec exception_test_() -> _.
+exception_test_() -> [
+    ?_assertEqual(
+        "Parent payment refer to another shop",
+        format_msg(
+            format_exception(
+                dmsl_payment_processing_thrift,
+                'Invoicing',
+                'StartPayment',
+                <<"Parent payment refer to another shop">>,
+                #{}
             )
         )
     )
