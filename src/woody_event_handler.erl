@@ -390,7 +390,7 @@ preserve_rpc_id_length(RpcIdLen, Opts) ->
                 formatter_opts => FormatOpts#{max_length => ML - RpcIdLen}
             };
         _ ->
-            #{}
+            Opts
     end.
 
 get_formatter_opts(#{formatter_opts := Opts}) ->
@@ -698,7 +698,8 @@ format_service_request_test_() -> [
         "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., PartyModification"
+        "{shop_modification = ShopModificationUn...)",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -1047,8 +1048,7 @@ result_test_() -> [
         "TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', "
         "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, "
         "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{account = "
-        "'4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = "
-        "'66642666'}}}], ...",
+        "'4276300010908312893', bank_name = 'SomeBank', ...}}}], ...}}, ...}",
         format_msg_limited(
             format_event(
             ?EV_SERVICE_RESULT,
@@ -1112,7 +1112,7 @@ result_test_() -> [
                     span_id => <<"1012689088534282240">>,
                     trace_id => <<"1012689088739803136">>,
                     parent_id => <<"1012689108264288256">>},
-                #{}
+                #{formatter_opts => #{max_length => 850}}
             )
         )
     ),
@@ -1248,7 +1248,6 @@ result_test_() -> [
         )
     )
 ].
-
 
 -spec exception_test_() -> _.
 exception_test_() -> [
