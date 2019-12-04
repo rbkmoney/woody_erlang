@@ -94,13 +94,16 @@ format_reply(Module, Service, Function, Value, Opts) ->
     ReplyType = Module:function_info(Service, Function, reply_type),
     format(ReplyType, Value, normalize_options(Opts)).
 
--spec format_exception(atom(), atom(), atom(), term(), woody:options()) ->
+-spec format_exception(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_exception(Module, Service, Function, Value, Opts) ->
+format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, normalize_options(Opts)).
+    format(ReplyType, Value, normalize_options(Opts));
+format_exception(_Module, _Service, _Function, Value, Opts) ->
+    #{max_length := ML} = normalize_options(Opts),
+    {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
 
 format(ReplyType, Value, #{max_length := ML} = Opts) when is_tuple(Value) ->
     try
@@ -215,7 +218,7 @@ format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
     format_list(Type, ValueList, "", CurDepth, CL, Opts, false).
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
-    [ExceptionType] =
+    Result =
         lists:filtermap(
             fun ({_, _, Type = {struct, exception, {Module, Exception}}, _, _}) ->
                 case Module:record_name(Exception) of
@@ -225,7 +228,12 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
             end,
             ExceptionTypeList
         ),
-    ExceptionType.
+    case Result of
+        [ExceptionType] ->
+            ExceptionType;
+        [] ->
+            undefined
+    end.
 
 -spec format_struct(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {iolist(), non_neg_integer()}.
