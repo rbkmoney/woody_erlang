@@ -101,14 +101,6 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
     format(ReplyType, Value, normalize_options(Opts));
-format_exception(_Module, _Service, _Function, Value, Opts) when is_binary(Value) ->
-    #{max_length := ML} = normalize_options(Opts),
-    case is_printable(Value) of
-        true ->
-            {"~s", [io_lib:format("~s", [Value], [{chars_limit, ML}])]};
-        false ->
-            {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}
-    end;
 format_exception(_Module, _Service, _Function, Value, Opts) ->
     #{max_length := ML} = normalize_options(Opts),
     {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
@@ -940,22 +932,6 @@ depth_and_lenght_test_() -> [
                 'ProcessCall',
                 ?ARGS2,
                 #{max_length => 512, max_depth => 5}
-            )
-        )
-    )
-].
-
--spec exception_test_() -> _.
-exception_test_() -> [
-    ?_assertEqual(
-        "Parent payment refer to another shop",
-        format_msg(
-            format_exception(
-                dmsl_payment_processing_thrift,
-                'Invoicing',
-                'StartPayment',
-                <<"Parent payment refer to another shop">>,
-                #{}
             )
         )
     )

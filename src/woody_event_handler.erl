@@ -1300,6 +1300,39 @@ exception_test_() -> [
                 #{}
             )
         )
+    ),
+    ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "InvalidRecurrentParentPayment{details = 'Parent payment refer to another shop'}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
+                #{args=>[
+                    undefined,
+                    <<"1FToOuf532G">>,
+                    {payproc_InvoicePaymentParams,
+                        {recurrent, {payproc_RecurrentPayerParams,
+                            {domain_RecurrentParentPayment, <<"1FToOLnG2Ou">>, <<"1">>},
+                            {domain_ContactInfo, undefined, undefined}}},
+                        {instant, {payproc_InvoicePaymentParamsFlowInstant}},
+                        true, undefined, undefined, undefined, undefined}],
+                    deadline => undefined,
+                    execution_start_time => 1575444908463,
+                    format_as_exception => true,
+                    function => 'StartPayment',
+                    metadata => #{
+                        <<"user-identity.id">> => <<"1FToOJtk6YC">>,
+                        <<"user-identity.realm">> => <<"external">>},
+                    result => {payproc_InvalidRecurrentParentPayment, <<"Parent payment refer to another shop">>},
+                    role => client, service => 'Invoicing', service_schema =>
+                    {dmsl_payment_processing_thrift, 'Invoicing'}, status => ok, type => call},
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>},
+                #{}
+            )
+        )
     )
 
 ].
