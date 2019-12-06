@@ -159,9 +159,8 @@ format_thrift_value({map, _}, _, CurDepth, CL, #{max_depth := MD})
     when MD >= 0, CurDepth >= MD ->
     {"#{...}", CL + 6}; %% 6 = length("#{...}")
 format_thrift_value({map, KeyType, ValueType}, Map, CurDepth, CL, Opts) ->
-    MapData = maps:to_list(Map),
     {Params, CL1} =
-        format_map(KeyType, ValueType, MapData, "", CurDepth + 1, CL + 3, Opts, false),
+        format_map(KeyType, ValueType, Map, "", CurDepth + 1, CL + 3, Opts, false),
     {["#{", Params, "}"], CL1};
 format_thrift_value(bool, false, _CurDepth, CL, _Opts) ->
     {"false", CL + 5};
@@ -212,6 +211,7 @@ format_list_result(false, _, _, Fmt, CL) ->
     {Fmt, CL + 5}.
 
 format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
+    %% Actually ordsets is a list so leave this implementation as-is
     ValueList = ordsets:to_list(SetofValues),
     format_list(Type, ValueList, "", CurDepth, CL, Opts, false).
 
@@ -393,9 +393,13 @@ format_list(Type, [Entry | ValueList], AccFmt, CurDepth, CL, Opts, IsFirst) ->
             stop_format(Result, CL1, MaybeAddMoreMarker)
     end.
 
-format_map(_KeyType, _ValueType, [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
+format_map(_KeyType, _ValueType, E, Result, _CurDepth, CL, _Opts, _AddDelimiter) when map_size(E) =:= 0 ->
     {Result, CL};
-format_map(KeyType, ValueType, [{Key, Value} | MapData], AccFmt, CurDepth, CL, Opts, AddDelimiter) ->
+format_map(KeyType, ValueType, Map, AccFmt, CurDepth, CL, Opts, AddDelimiter) ->
+    MapIterator = maps:iterator(Map),
+    format_map_(KeyType, ValueType, maps:next(MapIterator), AccFmt, CurDepth, CL, Opts, AddDelimiter).
+
+format_map_(KeyType, ValueType, {Key, Value, MapIterator}, AccFmt, CurDepth, CL, Opts, AddDelimiter) ->
     {KeyFmt, CL1} = format_thrift_value(KeyType, Key, CurDepth, CL, Opts),
     {ValueFmt, CL2} = format_thrift_value(ValueType, Value, CurDepth, CL1, Opts),
     #{max_length := ML} = Opts,
@@ -405,15 +409,18 @@ format_map(KeyType, ValueType, [{Key, Value} | MapData], AccFmt, CurDepth, CL, O
     DelimiterLen = length(Delimiter),
     NewCL = CL2 + MapStrLen + DelimiterLen,
     Result = [AccFmt | [Delimiter, KeyFmt, MapStr, ValueFmt]],
+    Next = maps:next(MapIterator),
     case NewCL of
         NewCL when ML < 0 ->
-            format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, true);
+            format_map_(KeyType, ValueType, Next, Result, CurDepth, NewCL, Opts, true);
         NewCL when NewCL =< ML ->
-            format_map(KeyType, ValueType, MapData, Result, CurDepth, NewCL, Opts, true);
+            format_map_(KeyType, ValueType, Next, Result, CurDepth, NewCL, Opts, true);
         NewCL ->
-            MaybeAddMoreMarker = MapData =/= [],
+            MaybeAddMoreMarker = Next =/= none,
             stop_format(Result, NewCL, MaybeAddMoreMarker)
-    end.
+    end;
+format_map_(_, _, _, AccFmt, _, CL, _, _) ->
+    {AccFmt, CL}.
 
 stop_format(Result, CL1, MaybeAddMoreMarker) ->
     Delimiter1 = maybe_add_delimiter(MaybeAddMoreMarker),
