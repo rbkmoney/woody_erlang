@@ -96,11 +96,14 @@ format_reply(Module, Service, Function, Value, Opts) ->
 
 -spec format_exception(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
-format_exception(Module, Service, Function, Value, Opts) ->
+format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, normalize_options(Opts)).
+    format(ReplyType, Value, normalize_options(Opts));
+format_exception(_Module, _Service, _Function, Value, Opts) ->
+    #{max_length := ML} = normalize_options(Opts),
+    {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
 
 format(ReplyType, Value, #{max_length := ML} = Opts) ->
     try
