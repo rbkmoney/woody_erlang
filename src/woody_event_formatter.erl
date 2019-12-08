@@ -118,6 +118,9 @@ format(ReplyType, Value, #{max_length := ML} = Opts) ->
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {iolist(), non_neg_integer()}.
+format_thrift_value({struct,struct,[]}, _Value, _CurDepth, CL, _Opts) ->
+    %% {struct,struct,[]} === thrift's void
+    {"", CL};
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
     format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
 format_thrift_value({struct, union, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
