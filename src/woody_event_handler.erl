@@ -329,7 +329,7 @@ format_service_request(#{service_schema := {Module, Service}, function:=Function
 
 -spec format_service_reply(map(), options()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function:=Function, result:=Result} = Meta, Opts) ->
+format_service_reply(#{service_schema := {Module, Service}, function := Function, result := Result} = Meta, Opts) ->
     FormatasException =  maps:get(format_as_exception, Meta, false),
     case FormatasException of
         false ->
