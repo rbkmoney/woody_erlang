@@ -118,9 +118,13 @@ format(ReplyType, Value, #{max_length := ML} = Opts) ->
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
     {iolist(), non_neg_integer()}.
-format_thrift_value({struct, struct, []}, _Value, _CurDepth, CL, _Opts) ->
+format_thrift_value({struct, struct, []}, Value, _CurDepth, CL, Opts) ->
     %% {struct,struct,[]} === thrift's void
-    {"", CL};
+    %% so just return Value
+    #{max_length := ML} = normalize_options(Opts),
+    ValueString = io_lib:format("~w", [Value], [{chars_limit, ML}]),
+    Length = length(ValueString),
+    {ValueString, CL + Length};
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
     format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
 format_thrift_value({struct, union, {Module, Struct}}, Value, CurDepth, CL, Opts) ->

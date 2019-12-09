@@ -259,7 +259,7 @@ format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack},
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}, _Opts) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
 format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
-    {info, append_msg({"[client] request handled successfully", []}, format_service_reply(Meta, Opts))};
+    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta, Opts))};
 format_event(?EV_CLIENT_SEND, #{url:=URL}, _Opts) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}, _Opts) ->
