@@ -41,7 +41,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
                 format_call_(ArgTypes, Arguments, "", 0, NewCL, Opts1, false),
             {"~s:~s(~ts)", [ServiceName, FunctionName, Result]};
         _Other ->
-            {"~s:~s(~tp)", [Service, Function, Arguments]}
+            {"~s:~s(~0tp)", [Service, Function, Arguments]}
     end.
 
 format_call_([], [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
