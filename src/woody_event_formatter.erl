@@ -38,9 +38,9 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             NewCL = ServiceLength + FunctionLength + 3,
             {Result, _} =
                 format_call_(ArgTypes, Arguments, "", 0, NewCL, Opts1, false),
-            {"~s:~s(~s)", [ServiceName, FunctionName, Result]};
+            {"~s:~s(~ts)", [ServiceName, FunctionName, Result]};
         _Other ->
-            {"~s:~s(~p)", [Service, Function, Arguments]}
+            {"~s:~s(~tp)", [Service, Function, Arguments]}
     end.
 
 format_call_([], [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
@@ -103,17 +103,17 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     format(ReplyType, Value, normalize_options(Opts));
 format_exception(_Module, _Service, _Function, Value, Opts) ->
     #{max_length := ML} = normalize_options(Opts),
-    {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
+    {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}.
 
 format(ReplyType, Value, #{max_length := ML} = Opts) ->
     try
         {ReplyFmt, _} = format_thrift_value(ReplyType, Value, 0, 0, Opts),
-        {"~s", [ReplyFmt]}
+        {"~ts", [ReplyFmt]}
     catch
         E:R:S ->
             WarningDetails = genlib_format:format_exception({E, R, S}),
-            logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
-            {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}
+            logger:warning("EVENT FORMATTER ERROR: ~tp", [WarningDetails]),
+            {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}
     end.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
@@ -122,7 +122,7 @@ format_thrift_value({struct, struct, []}, Value, _CurDepth, CL, Opts) ->
     %% {struct,struct,[]} === thrift's void
     %% so just return Value
     #{max_length := ML} = normalize_options(Opts),
-    ValueString = io_lib:format("~w", [Value], [{chars_limit, ML}]),
+    ValueString = io_lib:format("~0tp", [Value], [{chars_limit, ML}]),
     Length = length(ValueString),
     {ValueString, CL + Length};
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
@@ -358,7 +358,7 @@ maybe_escape(C) ->
 to_string(Value) when is_list(Value) ->
     Value;
 to_string(Value) when is_binary(Value) ->
-    binary_to_list(Value);
+    unicode:characters_to_list(Value);
 to_string(Value) when is_atom(Value) ->
     atom_to_list(Value);
 to_string(_) ->
