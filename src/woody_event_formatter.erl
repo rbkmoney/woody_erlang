@@ -352,7 +352,7 @@ value_to_string(S) ->
     [maybe_replace(C) || C <- string:to_graphemes(to_string(S))].
 
 maybe_replace($\') ->
-    [$\\,$\'];
+    [$\\, $\'];
 maybe_replace(C) ->
     case unicode_util:is_whitespace(C) of
         true -> $\s;
