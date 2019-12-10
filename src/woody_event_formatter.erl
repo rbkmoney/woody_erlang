@@ -355,7 +355,7 @@ maybe_replace($\') ->
     [$\\,$\'];
 maybe_replace(C) ->
     case unicode_util:is_whitespace(C) of
-        true -> " ";
+        true -> $\s;
         false -> C
     end.
 
