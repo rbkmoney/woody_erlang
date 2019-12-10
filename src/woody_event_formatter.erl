@@ -10,11 +10,12 @@
 
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
 %% Binaries under size below will log as-is.
--define(MAX_BIN_SIZE, 10).
+-define(MAX_BIN_SIZE, 40).
 
 -type opts():: #{
     max_depth  => integer(),
-    max_length => integer()
+    max_length => integer(),
+    max_pritable_string_length => non_neg_integer()
 }.
 
 -export_type([opts/0]).
@@ -38,9 +39,9 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             NewCL = ServiceLength + FunctionLength + 3,
             {Result, _} =
                 format_call_(ArgTypes, Arguments, "", 0, NewCL, Opts1, false),
-            {"~s:~s(~s)", [ServiceName, FunctionName, Result]};
+            {"~s:~s(~ts)", [ServiceName, FunctionName, Result]};
         _Other ->
-            {"~s:~s(~p)", [Service, Function, Arguments]}
+            {"~s:~s(~0tp)", [Service, Function, Arguments]}
     end.
 
 format_call_([], [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
@@ -103,17 +104,17 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     format(ReplyType, Value, normalize_options(Opts));
 format_exception(_Module, _Service, _Function, Value, Opts) ->
     #{max_length := ML} = normalize_options(Opts),
-    {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}.
+    {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}.
 
 format(ReplyType, Value, #{max_length := ML} = Opts) ->
     try
         {ReplyFmt, _} = format_thrift_value(ReplyType, Value, 0, 0, Opts),
-        {"~s", [ReplyFmt]}
+        {"~ts", [ReplyFmt]}
     catch
         E:R:S ->
             WarningDetails = genlib_format:format_exception({E, R, S}),
-            logger:warning("EVENT FORMATTER ERROR: ~p", [WarningDetails]),
-            {"~s", [io_lib:format("~w", [Value], [{chars_limit, ML}])]}
+            logger:warning("EVENT FORMATTER ERROR: ~tp", [WarningDetails]),
+            {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}
     end.
 
 -spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
@@ -122,7 +123,7 @@ format_thrift_value({struct, struct, []}, Value, _CurDepth, CL, Opts) ->
     %% {struct,struct,[]} === thrift's void
     %% so just return Value
     #{max_length := ML} = normalize_options(Opts),
-    ValueString = io_lib:format("~w", [Value], [{chars_limit, ML}]),
+    ValueString = io_lib:format("~0tp", [Value], [{chars_limit, ML}]),
     Length = length(ValueString),
     {ValueString, CL + Length};
 format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
@@ -135,13 +136,13 @@ format_thrift_value({enum, {_Module, _Struct}}, Value, _CurDepth, CL, _Opts) ->
     ValueString = to_string(Value),
     Length = length(ValueString),
     {ValueString, CL + Length};
-format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) ->
-    case is_printable(Value) of
-        true ->
-            ValueString = value_to_string(Value),
+format_thrift_value(string, Value, _CurDepth, CL, Opts) when is_binary(Value) ->
+    case is_printable(Value, Opts) of
+        {ok, Slice} ->
+            ValueString = value_to_string(Slice),
             Length = length(ValueString),
             {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
-        false ->
+        {error, not_printable} ->
             Fmt = format_non_printable_string(Value),
             Length = length(Fmt),
             {Fmt, CL + Length}
@@ -322,50 +323,59 @@ format_union(Module, Struct, {Type, UnionValue}, CurDepth, CL, Opts) ->
     {[StructName, "{", Argument, "}"], CL1}.
 
 format_non_printable_string(Value) ->
-    case size(Value) =< ?MAX_BIN_SIZE of
-        true ->
-            io_lib:format("~w", [Value]);
-        false ->
-            "<<...>>"
-    end.
+    Size = byte_size(Value),
+    ["<<", integer_to_list(Size), " bytes>>"].
 
-is_printable(<<>>) ->
-    true;
-is_printable(Value) ->
-    %% Try to get slice of first ?MAX_BIN_SIZE from Value,
+is_printable(<<>> = Slice, _Opts) ->
+    {ok, Slice};
+is_printable(Value, #{max_pritable_string_length := MPSL}) ->
+    %% Try to get slice of first MPSL bytes from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
-    try
-        <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE)
+    ValueSize = byte_size(Value),
+    try string:slice(Value, 0, MPSL) of
+        <<>> ->
+            {error, not_printable};
+        Slice when byte_size(Slice) < ValueSize ->
+            {ok, [Slice, "..."]};
+        Slice ->
+            {ok, Slice}
     catch
         _:_ ->
             %% Completely wrong binary data drives to crash in string internals,
             %% mark such data as non-printable instead
-            false
+            {error, not_printable}
     end.
 
 -spec value_to_string(list() | binary() | atom()) -> list().
 value_to_string(S) ->
-    [maybe_escape(C) || C <- to_string(S)].
+    [maybe_replace(C) || C <- string:to_graphemes(to_string(S))].
 
-maybe_escape($') ->
-    [$\\, $'];
-maybe_escape(C) ->
-    C.
+maybe_replace($\') ->
+    [$\\, $\'];
+maybe_replace(C) ->
+    case unicode_util:is_whitespace(C) of
+        true -> $\s;
+        false -> C
+    end.
 
 -spec to_string(list() | binary() | atom()) -> list().
 %% NOTE: Must match to supported types for `~s`
 to_string(Value) when is_list(Value) ->
     Value;
 to_string(Value) when is_binary(Value) ->
-    binary_to_list(Value);
+    unicode:characters_to_list(Value);
 to_string(Value) when is_atom(Value) ->
     atom_to_list(Value);
 to_string(_) ->
     error(badarg).
 
 normalize_options(Opts) ->
-    maps:merge(#{max_depth => -1, max_length => -1}, Opts).
+    maps:merge(#{
+        max_depth => -1,
+        max_length => -1,
+        max_pritable_string_length => ?MAX_BIN_SIZE
+    }, Opts).
 
 maybe_add_delimiter(false) ->
     "";
@@ -586,7 +596,7 @@ depth_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -686,7 +696,7 @@ depth_test_() -> [
         end
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
         "aux_state_legacy = Value{...}}})",
         format_msg(
@@ -700,7 +710,7 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, direction = "
         "backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = #{Value{...} => "
         "Value{...}, Value{...} => Value{...}}}}})",
@@ -725,7 +735,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -749,7 +759,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -773,7 +783,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
         "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
@@ -806,7 +816,7 @@ length_test_() -> [
         "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
         "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
         "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
-        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 06082, MEXICO', ...}}}}}}}, ...])",
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060...', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -818,13 +828,14 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{"
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{"
         "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
         "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
+        "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
-        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, Value{str = 'ct'} "
         "=> Value{str = 'application/x-erlang-binary'}}}}})",
         format_msg(
             format_call(
@@ -837,12 +848,13 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
         "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
+        "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -854,7 +866,7 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
         "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, "
         "...]}}], ...}})",
@@ -869,7 +881,7 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', ...}})",
         format_msg(
             format_call(
@@ -919,7 +931,7 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
         "aux_state_legacy = Value{...}}})",
         format_msg(
@@ -933,7 +945,7 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = "
         "#{Value{...} => Value{...}, Value{...} => Value{...}}}}})",
