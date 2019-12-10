@@ -14,7 +14,8 @@
 
 -type opts():: #{
     max_depth  => integer(),
-    max_length => integer()
+    max_length => integer(),
+    max_pritable_string_length => non_neg_integer()
 }.
 
 -export_type([opts/0]).
@@ -135,8 +136,8 @@ format_thrift_value({enum, {_Module, _Struct}}, Value, _CurDepth, CL, _Opts) ->
     ValueString = to_string(Value),
     Length = length(ValueString),
     {ValueString, CL + Length};
-format_thrift_value(string, Value, _CurDepth, CL, _Opts) when is_binary(Value) ->
-    case is_printable(Value) of
+format_thrift_value(string, Value, _CurDepth, CL, Opts) when is_binary(Value) ->
+    case is_printable(Value, Opts) of
         true ->
             ValueString = value_to_string(Value),
             Length = length(ValueString),
@@ -322,21 +323,17 @@ format_union(Module, Struct, {Type, UnionValue}, CurDepth, CL, Opts) ->
     {[StructName, "{", Argument, "}"], CL1}.
 
 format_non_printable_string(Value) ->
-    case size(Value) =< ?MAX_BIN_SIZE of
-        true ->
-            io_lib:format("~w", [Value]);
-        false ->
-            "<<...>>"
-    end.
+    Size = byte_size(Value),
+    ["<<", integer_to_list(Size), " bytes>>"].
 
-is_printable(<<>>) ->
+is_printable(<<>>, _Opts) ->
     true;
-is_printable(Value) ->
+is_printable(Value, #{max_pritable_string_length := MPSL}) ->
     %% Try to get slice of first ?MAX_BIN_SIZE from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
     try
-        <<>> =/= string:slice(Value, 0, ?MAX_BIN_SIZE)
+        <<>> =/= string:slice(Value, 0, MPSL)
     catch
         _:_ ->
             %% Completely wrong binary data drives to crash in string internals,
@@ -365,7 +362,11 @@ to_string(_) ->
     error(badarg).
 
 normalize_options(Opts) ->
-    maps:merge(#{max_depth => -1, max_length => -1}, Opts).
+    maps:merge(#{
+        max_depth => -1,
+        max_length => -1,
+        max_pritable_string_length => ?MAX_BIN_SIZE
+    }, Opts).
 
 maybe_add_delimiter(false) ->
     "";
@@ -686,7 +687,7 @@ depth_test_() -> [
         end
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
         "aux_state_legacy = Value{...}}})",
         format_msg(
@@ -700,7 +701,7 @@ depth_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, direction = "
         "backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = #{Value{...} => "
         "Value{...}, Value{...} => Value{...}}}}})",
@@ -818,13 +819,14 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{"
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{"
         "ns = 'party', id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
         "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
+        "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
-        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, Value{str = 'ct'} "
         "=> Value{str = 'application/x-erlang-binary'}}}}})",
         format_msg(
             format_call(
@@ -837,12 +839,13 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
         "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{limit = 10, "
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
+        "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -854,7 +857,7 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', data = "
         "Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, ...}}, "
         "...]}}], ...}})",
@@ -869,7 +872,7 @@ length_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', ...}})",
         format_msg(
             format_call(
@@ -919,7 +922,7 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [...], history_range = HistoryRange{...}, aux_state = Content{...}, "
         "aux_state_legacy = Value{...}}})",
         format_msg(
@@ -933,7 +936,7 @@ depth_and_lenght_test_() -> [
         )
     ),
     ?_assertEqual(
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{...}], history_range = HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{...}}, aux_state_legacy = Value{obj = "
         "#{Value{...} => Value{...}, Value{...} => Value{...}}}}})",

@@ -652,7 +652,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, "
+        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<30 bytes>>}}}, "
         "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{"
         "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})",
         format_msg_limited(
@@ -760,13 +760,13 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<...>>}, machine = Machine{ns = 'party', "
+        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
         "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
         "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<...>>}]}}], history_range = HistoryRange{"
+        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = HistoryRange{"
         "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} "
-        "=> Value{bin = <<...>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
-        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} "
+        "=> Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
+        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, Value{str = 'ct'} "
         "=> Value{str = 'application/x-erlang-binary'}}}}})",
         format_msg_limited(
             format_event(
@@ -959,11 +959,11 @@ format_service_request_with_limit_test_() -> [
 result_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
-        "CallResult{response = Value{bin = <<131,100,0,2,111,107>>}, change = MachineStateChange{aux_state = "
-        "Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<...>>}, Value{str = 'ct'} => "
+        "CallResult{response = Value{bin = <<6 bytes>>}, change = MachineStateChange{aux_state = "
+        "Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<108 bytes>>}, Value{str = 'ct'} => "
         "Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{arr = [Value{obj = "
         "#{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, Value{str = 'vsn'} => Value{i = 6}}}, "
-        "Value{bin = <<...>>}]}}]}, action = ComplexAction{}}",
+        "Value{bin = <<240 bytes>>}]}}]}, action = ComplexAction{}}",
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
@@ -1188,7 +1188,7 @@ result_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<...>>}}}, "
+        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<77 bytes>>}}}, "
         "machine = Machine{ns = 'customer', id = '1CSWGJ3N8Ns', history = [], history_range = "
         "HistoryRange{direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy "
         "= Value{bin = ''}}})",
