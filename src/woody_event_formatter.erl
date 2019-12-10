@@ -349,7 +349,15 @@ is_printable(Value, #{max_pritable_string_length := MPSL}) ->
 
 -spec value_to_string(list() | binary() | atom()) -> list().
 value_to_string(S) ->
-    string:replace(S, "'", "\\'").
+    [maybe_replace(C) || C <- string:to_graphemes(to_string(S))].
+
+maybe_replace($\') ->
+    [$\\,$\'];
+maybe_replace(C) ->
+    case unicode_util:is_whitespace(C) of
+        true -> " ";
+        false -> C
+    end.
 
 -spec to_string(list() | binary() | atom()) -> list().
 %% NOTE: Must match to supported types for `~s`
@@ -778,10 +786,7 @@ length_test_() -> [
         "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
-        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
-        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
-        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{symbolic_code = "
-        "'RUB'}}}}}])",
+        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -811,8 +816,7 @@ length_test_() -> [
         "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
         "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
         "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
-        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060...', post_address = 'NaN', "
-        "representative_position = 'Director', ...}}}}}}}, ...])",
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060...', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -850,8 +854,7 @@ length_test_() -> [
         "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
         "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}"
-        ", aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, ...}}}})",
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -879,7 +882,7 @@ length_test_() -> [
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
-        "id = '1CSHThTEJ84', history = [Event{...}], ...}})",
+        "id = '1CSHThTEJ84', ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,

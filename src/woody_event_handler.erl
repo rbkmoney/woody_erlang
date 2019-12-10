@@ -699,8 +699,7 @@ format_service_request_test_() -> [
         "Centro, 06082...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, "
-        "...2 more..., PartyModification{shop_modification = ShopModificationUnit{id...)",
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
