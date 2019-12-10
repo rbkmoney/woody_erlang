@@ -332,9 +332,12 @@ is_printable(Value, #{max_pritable_string_length := MPSL}) ->
     %% Try to get slice of first MPSL bytes from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
+    ValueSize = byte_size(Value),
     try string:slice(Value, 0, MPSL) of
         <<>> ->
             {error, not_printable};
+        Slice when byte_size(Slice) < ValueSize ->
+            {ok, [Slice, "..."]};
         Slice ->
             {ok, Slice}
     catch
@@ -585,7 +588,7 @@ depth_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -724,7 +727,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -748,7 +751,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -772,7 +775,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060...', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
         "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -808,7 +811,7 @@ length_test_() -> [
         "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
         "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
         "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
-        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060', post_address = 'NaN', "
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060...', post_address = 'NaN', "
         "representative_position = 'Director', ...}}}}}}}, ...])",
         format_msg(
             format_call(
