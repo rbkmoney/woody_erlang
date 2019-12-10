@@ -10,7 +10,7 @@
 
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
 %% Binaries under size below will log as-is.
--define(MAX_BIN_SIZE, 10).
+-define(MAX_BIN_SIZE, 40).
 
 -type opts():: #{
     max_depth  => integer(),
@@ -138,11 +138,11 @@ format_thrift_value({enum, {_Module, _Struct}}, Value, _CurDepth, CL, _Opts) ->
     {ValueString, CL + Length};
 format_thrift_value(string, Value, _CurDepth, CL, Opts) when is_binary(Value) ->
     case is_printable(Value, Opts) of
-        true ->
-            ValueString = value_to_string(Value),
+        {ok, Slice} ->
+            ValueString = value_to_string(Slice),
             Length = length(ValueString),
             {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
-        false ->
+        {error, not_printable} ->
             Fmt = format_non_printable_string(Value),
             Length = length(Fmt),
             {Fmt, CL + Length}
@@ -326,29 +326,27 @@ format_non_printable_string(Value) ->
     Size = byte_size(Value),
     ["<<", integer_to_list(Size), " bytes>>"].
 
-is_printable(<<>>, _Opts) ->
-    true;
+is_printable(<<>> = Slice, _Opts) ->
+    {ok, Slice};
 is_printable(Value, #{max_pritable_string_length := MPSL}) ->
-    %% Try to get slice of first ?MAX_BIN_SIZE from Value,
+    %% Try to get slice of first MPSL bytes from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
-    try
-        <<>> =/= string:slice(Value, 0, MPSL)
+    try string:slice(Value, 0, MPSL) of
+        <<>> ->
+            {error, not_printable};
+        Slice ->
+            {ok, Slice}
     catch
         _:_ ->
             %% Completely wrong binary data drives to crash in string internals,
             %% mark such data as non-printable instead
-            false
+            {error, not_printable}
     end.
 
 -spec value_to_string(list() | binary() | atom()) -> list().
 value_to_string(S) ->
-    [maybe_escape(C) || C <- to_string(S)].
-
-maybe_escape($') ->
-    [$\\, $'];
-maybe_escape(C) ->
-    C.
+    string:replace(S, "'", "\\'").
 
 -spec to_string(list() | binary() | atom()) -> list().
 %% NOTE: Must match to supported types for `~s`
@@ -587,7 +585,7 @@ depth_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -726,7 +724,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -750,7 +748,7 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
@@ -774,10 +772,13 @@ length_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "O\\'Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "O\\'Centro, 060', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = "
-        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
+        "'SomeBank', bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
+        "PartyModification{shop_modification = ShopModificationUnit{id = '1CR1Y2ZcrA2', modification = "
+        "ShopModification{shop_account_creation = ShopAccountParams{currency = CurrencyRef{symbolic_code = "
+        "'RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -807,7 +808,8 @@ length_test_() -> [
         "ContractParams{template = ContractTemplateRef{id = 1}, payment_institution = PaymentInstitutionRef{id = 1}, "
         "contractor = Contractor{legal_entity = LegalEntity{russian_legal_entity = RussianLegalEntity{"
         "registered_name = 'Hoofs & Horns OJSC', registered_number = '1234509876', inn = '1213456789012', "
-        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 06082, MEXICO', ...}}}}}}}, ...])",
+        "actual_address = 'Nezahualcoyotl 109 Piso 8, O\\'Centro, 060', post_address = 'NaN', "
+        "representative_position = 'Director', ...}}}}}}}, ...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -845,7 +847,8 @@ length_test_() -> [
         "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = "
         "HistoryRange{limit = 10, "
         "direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} => "
-        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, ...}})",
+        "Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}"
+        ", aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, ...}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -873,7 +876,7 @@ length_test_() -> [
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
-        "id = '1CSHThTEJ84', ...}})",
+        "id = '1CSHThTEJ84', history = [Event{...}], ...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,

@@ -696,10 +696,11 @@ format_service_request_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "Centro, 06082', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
+        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, "
+        "...2 more..., PartyModification{shop_modification = ShopModificationUnit{id = ...)",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -889,11 +890,11 @@ format_service_request_with_limit_test_() -> [
         "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
         "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
         "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082, MEXICO', post_address = 'NaN', representative_position = 'Director', "
+        "Centro, 06082', post_address = 'NaN', representative_position = 'Director', "
         "representative_full_name = 'Someone', representative_document = '100$ banknote', "
         "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
         "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
-        "PartyModification{shop_modification = ShopModificationUn...)",
+        "PartyModification{shop_modification = ShopModificationUnit{id = ...)",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
