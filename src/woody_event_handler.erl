@@ -201,18 +201,18 @@ handle_event(Handler, Event, RpcId, Meta) ->
 -spec format_rpc_id(woody:rpc_id() | undefined) ->
     msg().
 format_rpc_id(#{span_id:=Span, trace_id:=Trace, parent_id:=Parent}) ->
-    {"[~s ~s ~s]", [Trace, Parent, Span]};
+    FormattedRpcId = ["[", genlib_string:join([Trace, Parent, Span]), "]"],
+    {"~s", [FormattedRpcId]};
 format_rpc_id(undefined) ->
-    {"undefined", []}.
+    {"~s", ["undefined"]}.
 
 -spec format_event(event(), event_meta(), woody:rpc_id() | undefined, options()) ->
     log_msg().
 format_event(Event, Meta, RpcId, Opts) ->
-    {RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
-    RpcIdMsg = io_lib:format(RpcIdFmt, RpcIdParams),
-    RpcIdLen = length(RpcIdMsg),
+    RpcIdMsg = {_RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
+    RpcIdLen = erlang:iolist_size(RpcIdParams),
     {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
-    {Severity, append_msg({"~s", [RpcIdMsg]}, Msg)}.
+    {Severity, append_msg(RpcIdMsg, Msg)}.
 
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) ->
     {severity(), msg(), meta()}.
