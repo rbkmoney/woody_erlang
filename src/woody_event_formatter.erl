@@ -193,8 +193,8 @@ format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = 
     case FirstEntryCL < ML orelse ML < 0 of
         true ->
             SkippedLength = length(OriginalValueList) - 2,
-            SkippedMsg = io_lib:format("...~b more...", [SkippedLength]),
-            SkippedMsgLength = length(SkippedMsg),
+            SkippedMsg = ["...", integer_to_list(SkippedLength), " more..."],
+            SkippedMsgLength = erlang:iolist_size(SkippedMsg),
             case FirstEntryCL + SkippedMsgLength + 2 < ML orelse ML < 0 of
                 true ->
                     {LastEntryFmt, LastEntryCL} =
