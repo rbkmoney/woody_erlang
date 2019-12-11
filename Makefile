@@ -53,3 +53,5 @@ distclean:
 dialyze:
 	$(REBAR) as test dialyzer
 
+bench:
+	$(REBAR) as test bench -n 1000
