@@ -418,8 +418,8 @@ format_msg_limited({_Severity, {Fmt, Params}}) ->
 format_service_request_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Create(party_id = '1CQdDqPROyW', params = PartyParams{"
-        "contact_info = PartyContactInfo{email = 'hg_ct_helper'}})",
+        "PartyManagement:Create(party_id='1CQdDqPROyW',params=PartyParams{"
+        "contact_info=PartyContactInfo{email='hg_ct_helper'}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -444,9 +444,9 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Create(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
-        "external_user = ExternalUser{}}}, params = PartyParams{contact_info = PartyContactInfo{"
-        "email = 'hg_ct_helper'}})",
+        "PartyManagement:Create(user=UserInfo{id='1CQdDqPROyW',type=UserType{"
+        "external_user=ExternalUser{}}},params=PartyParams{contact_info=PartyContactInfo{"
+        "email='hg_ct_helper'}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -472,7 +472,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Get(party_id = '1CQdDqPROyW')",
+        "PartyManagement:Get(party_id='1CQdDqPROyW')",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -495,7 +495,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Get(party_id = '~s')",
+        "PartyManagement:Get(party_id='~s')",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -518,8 +518,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "CustomerManagement:Create(params = CustomerParams{party_id = '1CQdDqPROyW', shop_id = '1CQdDwgt3R3', "
-        "contact_info = ContactInfo{email = 'invalid_shop'}, metadata = Value{nl = Null{}}})",
+        "CustomerManagement:Create(params=CustomerParams{party_id='1CQdDqPROyW',shop_id='1CQdDwgt3R3',"
+        "contact_info=ContactInfo{email='invalid_shop'},metadata=Value{nl=Null{}}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -546,8 +546,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:GetRevision(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
-        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW')",
+        "PartyManagement:GetRevision(user=UserInfo{id='1CQdDqPROyW',type=UserType{"
+        "external_user=ExternalUser{}}},party_id='1CQdDqPROyW')",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -573,8 +573,8 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Checkout(user = UserInfo{id = '1CQdDqPROyW', type = UserType{"
-        "external_user = ExternalUser{}}}, party_id = '1CQdDqPROyW', revision = PartyRevisionParam{revision = 1})",
+        "PartyManagement:Checkout(user=UserInfo{id='1CQdDqPROyW',type=UserType{"
+        "external_user=ExternalUser{}}},party_id='1CQdDqPROyW',revision=PartyRevisionParam{revision=1})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -602,7 +602,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Block(party_id = '1CQdDqPROyW', reason = '')",
+        "PartyManagement:Block(party_id='1CQdDqPROyW',reason='')",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -627,7 +627,7 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:Unblock(party_id = '1CQdDqPROyW', reason = '')",
+        "PartyManagement:Unblock(party_id='1CQdDqPROyW',reason='')",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -652,9 +652,9 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<30 bytes>>}}}, "
-        "machine = Machine{ns = 'party', id = '1CQxZsCgLJY', history = [], history_range = HistoryRange{"
-        "direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy = Value{bin = ''}}})",
+        "Processor:ProcessSignal(a=SignalArgs{signal=Signal{init=InitSignal{arg=Value{bin=<<30 bytes>>}}},"
+        "machine=Machine{ns='party',id='1CQxZsCgLJY',history=[],history_range=HistoryRange{"
+        "direction=forward},aux_state=Content{data=Value{bin=''}},aux_state_legacy=Value{bin=''}}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -690,16 +690,16 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
-        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
-        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
-        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
-        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
-        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082...', post_address = 'NaN', representative_position = 'Director', "
-        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
-        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...])",
+        "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{"
+        "contract_modification=ContractModificationUnit{id='1CR1Y2ZcrA0',modification="
+        "ContractModification{creation=ContractParams{template=ContractTemplateRef{id=1},"
+        "payment_institution=PaymentInstitutionRef{id=1},contractor=Contractor{legal_entity="
+        "LegalEntity{russian_legal_entity=RussianLegalEntity{registered_name='Hoofs & Horns OJSC',"
+        "registered_number='1234509876',inn='1213456789012',actual_address='Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082...',post_address='NaN',representative_position='Director',"
+        "representative_full_name='Someone',representative_document='100$ banknote',"
+        "russian_bank_account=RussianBankAccount{account='4276300010908312893',bank_name='SomeBank',"
+        "bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...])",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -760,14 +760,14 @@ format_service_request_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessCall(a = CallArgs{arg = Value{bin = <<732 bytes>>}, machine = Machine{ns = 'party', "
-        "id = '1CSHThTEJ84', history = [Event{id = 1, created_at = '2019-08-13T07:52:11.080519Z', "
-        "data = Value{arr = [Value{obj = #{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, "
-        "Value{str = 'vsn'} => Value{i = 6}}}, Value{bin = <<249 bytes>>}]}}], history_range = HistoryRange{"
-        "limit = 10, direction = backward}, aux_state = Content{data = Value{obj = #{Value{str = 'aux_state'} "
-        "=> Value{bin = <<52 bytes>>}, Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}}}}, "
-        "aux_state_legacy = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<52 bytes>>}, Value{str = 'ct'} "
-        "=> Value{str = 'application/x-erlang-binary'}}}}})",
+        "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
+        "id='1CSHThTEJ84',history=[Event{id=1,created_at='2019-08-13T07:52:11.080519Z',"
+        "data=Value{arr=[Value{obj=#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},"
+        "Value{str='vsn'}=>Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range=HistoryRange{"
+        "limit=10,direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}"
+        "=>Value{bin=<<52 bytes>>},Value{str='ct'}=>Value{str='application/x-erlang-binary'}}}},"
+        "aux_state_legacy=Value{obj=#{Value{str='aux_state'}=>Value{bin=<<52 bytes>>},Value{str='ct'}"
+        "=>Value{str='application/x-erlang-binary'}}}}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -883,17 +883,18 @@ format_service_request_test_() -> [
 format_service_request_with_limit_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "PartyManagement:CreateClaim(party_id = '1CR1Xziml7o', changeset = [PartyModification{"
-        "contract_modification = ContractModificationUnit{id = '1CR1Y2ZcrA0', modification = "
-        "ContractModification{creation = ContractParams{template = ContractTemplateRef{id = 1}, "
-        "payment_institution = PaymentInstitutionRef{id = 1}, contractor = Contractor{legal_entity = "
-        "LegalEntity{russian_legal_entity = RussianLegalEntity{registered_name = 'Hoofs & Horns OJSC', "
-        "registered_number = '1234509876', inn = '1213456789012', actual_address = 'Nezahualcoyotl 109 Piso 8, "
-        "Centro, 06082...', post_address = 'NaN', representative_position = 'Director', "
-        "representative_full_name = 'Someone', representative_document = '100$ banknote', "
-        "russian_bank_account = RussianBankAccount{account = '4276300010908312893', bank_name = 'SomeBank', "
-        "bank_post_account = '123129876', bank_bik = '66642666'}}}}}}}}, ...2 more..., "
-        "PartyModification{shop_modification = ShopModificationUnit{id...)",
+        "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{"
+        "contract_modification=ContractModificationUnit{id='1CR1Y2ZcrA0',modification="
+        "ContractModification{creation=ContractParams{template=ContractTemplateRef{id=1},"
+        "payment_institution=PaymentInstitutionRef{id=1},contractor=Contractor{legal_entity="
+        "LegalEntity{russian_legal_entity=RussianLegalEntity{registered_name='Hoofs & Horns OJSC',"
+        "registered_number='1234509876',inn='1213456789012',actual_address='Nezahualcoyotl 109 Piso 8, "
+        "Centro, 06082...',post_address='NaN',representative_position='Director',"
+        "representative_full_name='Someone',representative_document='100$ banknote',"
+        "russian_bank_account=RussianBankAccount{account='4276300010908312893',bank_name='SomeBank',"
+        "bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...2 more...,"
+        "PartyModification{shop_modification=ShopModificationUnit{id='1CR1Y2ZcrA2',modification=ShopModification"
+        "{shop_account_creation=Shop...)",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -959,11 +960,11 @@ format_service_request_with_limit_test_() -> [
 result_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
-        "CallResult{response = Value{bin = <<6 bytes>>}, change = MachineStateChange{aux_state = "
-        "Content{data = Value{obj = #{Value{str = 'aux_state'} => Value{bin = <<108 bytes>>}, Value{str = 'ct'} => "
-        "Value{str = 'application/x-erlang-binary'}}}}, events = [Content{data = Value{arr = [Value{obj = "
-        "#{Value{str = 'ct'} => Value{str = 'application/x-erlang-binary'}, Value{str = 'vsn'} => Value{i = 6}}}, "
-        "Value{bin = <<240 bytes>>}]}}]}, action = ComplexAction{}}",
+        "CallResult{response=Value{bin=<<6 bytes>>},change=MachineStateChange{aux_state="
+        "Content{data=Value{obj=#{Value{str='aux_state'}=>Value{bin=<<108 bytes>>},Value{str='ct'}=>"
+        "Value{str='application/x-erlang-binary'}}}},events=[Content{data=Value{arr=[Value{obj="
+        "#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},Value{str='vsn'}=>Value{i=6}}},"
+        "Value{bin=<<240 bytes>>}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
@@ -1041,17 +1042,18 @@ result_test_() -> [
     %% In such case it will cut by formatter, as shown below
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
-        "Party{id = '1CSWG2vduGe', contact_info = PartyContactInfo{email = 'hg_ct_helper'}, created_at = "
-        "'2019-08-13T11:19:01.249440Z', blocking = Blocking{unblocked = Unblocked{reason = '', since = "
-        "'2019-08-13T11:19:02.655869Z'}}, suspension = Suspension{active = Active{since = "
-        "'2019-08-13T11:19:02.891892Z'}}, contractors = #{}, contracts = #{'1CSWG8j04wK' => Contract{id = "
-        "'1CSWG8j04wK', payment_institution = PaymentInstitutionRef{id = 1}, created_at = "
-        "'2019-08-13T11:19:01.387269Z', status = ContractStatus{active = ContractActive{}}, terms = "
-        "TermSetHierarchyRef{id = 1}, adjustments = [], payout_tools = [PayoutTool{id = '1CSWG8j04wL', "
-        "created_at = '2019-08-13T11:19:01.387269Z', currency = CurrencyRef{symbolic_code = 'RUB'}, "
-        "payout_tool_info = PayoutToolInfo{russian_bank_account = RussianBankAccount{account = "
-        "'4276300010908312893', bank_name = 'SomeBank', bank_post_account = '123129876', bank_bik = "
-        "'66642666'}}}], con...",
+        "Party{id='1CSWG2vduGe',contact_info=PartyContactInfo{email='hg_ct_helper'},created_at="
+        "'2019-08-13T11:19:01.249440Z',blocking=Blocking{unblocked=Unblocked{reason='',since="
+        "'2019-08-13T11:19:02.655869Z'}},suspension=Suspension{active=Active{since="
+        "'2019-08-13T11:19:02.891892Z'}},contractors=#{},contracts=#{'1CSWG8j04wK'=>Contract{id="
+        "'1CSWG8j04wK',payment_institution=PaymentInstitutionRef{id=1},created_at="
+        "'2019-08-13T11:19:01.387269Z',status=ContractStatus{active=ContractActive{}},terms="
+        "TermSetHierarchyRef{id=1},adjustments=[],payout_tools=[PayoutTool{id='1CSWG8j04wL',"
+        "created_at='2019-08-13T11:19:01.387269Z',currency=CurrencyRef{symbolic_code='RUB'},"
+        "payout_tool_info=PayoutToolInfo{russian_bank_account=RussianBankAccount{account="
+        "'4276300010908312893',bank_name='SomeBank',bank_post_account='123129876',bank_bik="
+        "'66642666'}}}],contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity=RussianLegalEntity{...}"
+        "...",
         format_msg_limited(
             format_event(
             ?EV_SERVICE_RESULT,
@@ -1122,13 +1124,13 @@ result_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled "
         "successfully: "
-        "SignalResult{change = MachineStateChange{aux_state = Content{data = Value{obj = #{}}}, "
-        "events = [Content{data = Value{arr = [Value{arr = [Value{i = 2}, Value{obj = #{Value{"
-        "str = 'change'} => Value{str = 'created'}, Value{str = 'contact_info'} => Value{obj = #{Value{"
-        "str = 'email'} => Value{str = 'create_customer'}}}, Value{str = 'created_at'} => Value{"
-        "str = '2019-08-13T11:19:03.714218Z'}, Value{str = 'customer_id'} => Value{str = '1CSWGJ3N8Ns'}, "
-        "Value{str = 'metadata'} => Value{nl = Nil{}}, Value{str = 'owner_id'} => Value{str = '1CSWG2vduGe'}, "
-        "Value{str = 'shop_id'} => Value{str = '1CSWG8j04wM'}}}]}]}}]}, action = ComplexAction{}}",
+        "SignalResult{change=MachineStateChange{aux_state=Content{data=Value{obj=#{}}},"
+        "events=[Content{data=Value{arr=[Value{arr=[Value{i=2},Value{obj=#{Value{"
+        "str='change'}=>Value{str='created'},Value{str='contact_info'}=>Value{obj=#{Value{"
+        "str='email'}=>Value{str='create_customer'}}},Value{str='created_at'}=>Value{"
+        "str='2019-08-13T11:19:03.714218Z'},Value{str='customer_id'}=>Value{str='1CSWGJ3N8Ns'},"
+        "Value{str='metadata'}=>Value{nl=Nil{}},Value{str='owner_id'}=>Value{str='1CSWG2vduGe'},"
+        "Value{str='shop_id'}=>Value{str='1CSWG8j04wM'}}}]}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
@@ -1188,10 +1190,10 @@ result_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
-        "Processor:ProcessSignal(a = SignalArgs{signal = Signal{init = InitSignal{arg = Value{bin = <<77 bytes>>}}}, "
-        "machine = Machine{ns = 'customer', id = '1CSWGJ3N8Ns', history = [], history_range = "
-        "HistoryRange{direction = forward}, aux_state = Content{data = Value{bin = ''}}, aux_state_legacy "
-        "= Value{bin = ''}}})",
+        "Processor:ProcessSignal(a=SignalArgs{signal=Signal{init=InitSignal{arg=Value{bin=<<77 bytes>>}}},"
+        "machine=Machine{ns='customer',id='1CSWGJ3N8Ns',history=[],history_range="
+        "HistoryRange{direction=forward},aux_state=Content{data=Value{bin=''}},aux_state_legacy"
+        "=Value{bin=''}}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -1304,7 +1306,7 @@ exception_test_() -> [
     ),
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
-        "InvalidRecurrentParentPayment{details = 'Parent payment refer to another shop'}",
+        "InvalidRecurrentParentPayment{details='Parent payment refer to another shop'}",
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
