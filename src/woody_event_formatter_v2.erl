@@ -131,10 +131,6 @@ format_thrift_value(string, Value, Result0, _MD, ML, MPSL) ->
         not_printable ->
             format_non_printable_string(Value, Result0)
     end;
-% format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
-%     ValueString = value_to_string(Value),
-%     Length = length(ValueString),
-%     {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
 format_thrift_value({list, _}, _, Result, 0, _ML, _MPSL) ->
     <<Result/binary, "[...]">>;
 format_thrift_value({list, Type}, ValueList, Result0, MD, ML, MPSL) ->
