@@ -361,10 +361,10 @@ maybe_add_more_marker(false, Result) ->
 maybe_add_more_marker(true, Result) ->
     <<Result/binary, "...">>.
 
-format_list(_Type, [], Result, _MD, _ML, _MPSL, _IsFirst) ->
+format_list(_Type, [], Result, _MD, _ML, _MPSL, _AD) ->
     Result;
-format_list(Type, [Entry | ValueList], Result0, MD, ML, MPSL, IsFirst) ->
-    Result1 = maybe_add_delimiter(IsFirst, Result0),
+format_list(Type, [Entry | ValueList], Result0, MD, ML, MPSL, AD) ->
+    Result1 = maybe_add_delimiter(AD, Result0),
     Result2 = format_thrift_value(Type, Entry, Result1, MD, ML, MPSL),
     case byte_size(Result2) of
         CL when ML > CL ->
