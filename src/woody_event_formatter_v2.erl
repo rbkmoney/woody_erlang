@@ -628,19 +628,16 @@ depth_test_() -> [
             )
         )
     ),
-    ?_test(
-        begin
-            Result =
-                format_thrift_value(
-                    {set, string},
-                    ordsets:from_list([<<"a">>, <<"2">>, <<"ddd">>]),
-                    <<>>,
-                    0,
-                    unlimited,
-                    #{max_length => unlimited, max_depth => unlimited, max_pritable_string_length => ?MAX_BIN_SIZE}
-                ),
-            ?_assertEqual( "{'a', '2', 'ddd'}", Result)
-        end
+    ?_assertEqual(
+        <<"{'2','a','ddd'}">>,
+        format_thrift_value(
+            {set, string},
+            ordsets:from_list([<<"a">>, <<"2">>, <<"ddd">>]),
+            <<>>,
+            unlimited,
+            unlimited,
+            ?MAX_PRINTABLE_LIST_LENGTH
+        )
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
