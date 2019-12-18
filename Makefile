@@ -23,10 +23,7 @@ $(SUBTARGETS): %/.git: %
 
 submodules: $(SUBTARGETS)
 
-rebar-update:
-	$(REBAR) update
-
-compile: submodules rebar-update
+compile: submodules
 	$(REBAR) compile
 
 test: submodules
