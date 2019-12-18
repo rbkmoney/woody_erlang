@@ -598,7 +598,7 @@ depth_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_depth => 2}
+                #{max_depth => 3}
             )
         )
     ),
@@ -613,7 +613,7 @@ depth_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_depth => 3}
+                #{max_depth => 4}
             )
         )
     ),
@@ -645,7 +645,7 @@ depth_test_() -> [
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
-        "id='1CSHThTEJ84',history=[...],history_range=HistoryRange{...},aux_state=Content{...},"
+        "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{...},aux_state=Content{...},"
         "aux_state_legacy=Value{...}}})",
         format_msg(
             format_call(
@@ -653,7 +653,7 @@ depth_test_() -> [
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_depth => 4}
+                #{max_depth => 3}
             )
         )
     ),
@@ -668,7 +668,7 @@ depth_test_() -> [
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_depth => 5}
+                #{max_depth => 4}
             )
         )
     )
@@ -846,8 +846,8 @@ length_test_() -> [
     )
 ].
 
--spec depth_and_lenght_test_() -> _.
-depth_and_lenght_test_() -> [
+-spec depth_and_length_test_() -> _.
+depth_and_length_test_() -> [
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{contract_modification"
         "=ContractModificationUnit{id='1CR1Y2ZcrA0',modification=ContractModification{creation="
@@ -877,13 +877,13 @@ depth_and_lenght_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_length => 2048, max_depth => 7}
+                #{max_length => 2048, max_depth => 6}
             )
         )
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
-        "id='1CSHThTEJ84',history=[...],history_range=HistoryRange{...},aux_state=Content{...},"
+        "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{...},aux_state=Content{...},"
         "aux_state_legacy=Value{...}}})",
         format_msg(
             format_call(
