@@ -9,6 +9,7 @@
 ]).
 
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
+-define(MAX_FLOAT_DECIMALS, 8).
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 40).
 
@@ -157,7 +158,7 @@ format_thrift_value(_Type, Value, Result, _MD, _ML, _MPSL) when is_integer(Value
     ValueStr = erlang:integer_to_binary(Value),
     <<Result/binary, ValueStr/binary>>;
 format_thrift_value(_Type, Value, Result, _MD, _ML, _MPSL) when is_float(Value) ->
-    ValueStr = erlang:float_to_binary(Value),
+    ValueStr = erlang:float_to_binary(Value, [{decimals, ?MAX_FLOAT_DECIMALS}, compact]),
     <<Result/binary, ValueStr/binary>>.
 
 format_thrift_list(Type, ValueList, Result, MD, ML, MPSL) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
