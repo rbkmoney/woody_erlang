@@ -13,9 +13,11 @@
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 40).
 
+-type limit() :: non_neg_integer() | unlimited.
+
 -type opts():: #{
-    max_depth  => integer(),
-    max_length => integer(),
+    max_depth  => limit(),
+    max_length => limit(),
     max_pritable_string_length => non_neg_integer()
 }.
 
@@ -103,7 +105,7 @@ format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_strin
     %         {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}
     % end.
 
--spec format_thrift_value(term(), term(), binary(), non_neg_integer(), non_neg_integer(), opts()) ->
+-spec format_thrift_value(term(), term(), binary(), limit(), limit(), non_neg_integer()) ->
     binary().
 format_thrift_value({struct, struct, []}, Value, Result, _MD, ML, _MPSL) ->
     %% {struct,struct,[]} === thrift's void
