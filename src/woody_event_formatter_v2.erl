@@ -32,21 +32,22 @@ format_call(Module, Service, Function, Arguments) ->
 -spec format_call(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
 format_call(Module, Service, Function, Arguments, Opts) ->
-    case Module:function_info(Service, Function, params_type) of
+    Opts1 = normalize_options(Opts),
+    ServiceName = to_string(Service),
+    FunctionName = to_string(Function),
+    Result0 = <<ServiceName/binary, ":", FunctionName/binary, "(">>,
+    Result = try Module:function_info(Service, Function, params_type) of
         {struct, struct, ArgTypes} ->
-            Opts1 = normalize_options(Opts),
-            ServiceName = to_string(Service),
-            FunctionName = to_string(Function),
             ML = maps:get(max_length, Opts1),
             MD = maps:get(max_depth, Opts1),
             MPSL = maps:get(max_pritable_string_length, Opts1),
-            Result0 = <<ServiceName/binary, ":", FunctionName/binary, "(">>,
-            Result1 = format_call_(ArgTypes, Arguments, Result0, inc(MD), dec(ML), MPSL, false),
-            Result2 = <<Result1/binary, ")">>,
-            {"~ts", [Result2]}
-        % _Other ->
-        %     {"~s:~s(~0tp)", [Service, Function, Arguments]}
-    end.
+            Result1 = format_call_(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
+            <<Result1/binary, ")">>
+    catch error:badarg ->
+        Result1 = format_verbatim(Arguments, Result0, Opts1),
+        <<Result1/binary, ")">>
+    end,
+    {"~ts", [Result]}.
 
 format_call_([], [], Result, _MD, _ML, _MPSL, _AD) ->
     Result;
@@ -89,30 +90,27 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     {struct, struct, ExceptionTypeList} = Module:function_info(Service, Function, exceptions),
     Exception = element(1, Value),
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
-    format(ReplyType, Value, normalize_options(Opts)).
-% format_exception(_Module, _Service, _Function, Value, Opts) ->
-%     #{max_length := ML} = normalize_options(Opts),
-%     {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}.
+    format(ReplyType, Value, normalize_options(Opts));
+format_exception(_Module, _Service, _Function, Value, Opts) ->
+    {"~ts", [format_verbatim(Value, <<>>, normalize_options(Opts))]}.
 
 format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_string_length := MPSL}) ->
-    % try
+    try
         ReplyFmt = format_thrift_value(ReplyType, Value, <<>>, MD, ML, MPSL),
-        {"~ts", [ReplyFmt]}.
-    % catch
-    %     E:R:S ->
-    %         WarningDetails = genlib_format:format_exception({E, R, S}),
-    %         logger:warning("EVENT FORMATTER ERROR: ~tp", [WarningDetails]),
-    %         {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}
-    % end.
+        {"~ts", [ReplyFmt]}
+    catch
+        E:R:S ->
+            Details = genlib_format:format_exception({E, R, S}),
+            _ = logger:warning("EVENT FORMATTER ERROR: ~ts", [Details]),
+            {"~ts", [format_verbatim(Value, <<>>, MD, ML)]}
+    end.
 
 -spec format_thrift_value(term(), term(), binary(), limit(), limit(), non_neg_integer()) ->
     binary().
-format_thrift_value({struct, struct, []}, Value, Result, _MD, ML, _MPSL) ->
+format_thrift_value({struct, struct, []}, Value, Result, MD, ML, _MPSL) ->
     %% {struct,struct,[]} === thrift's void
     %% so just return Value
-    FmtOpts = compute_format_opts(ML, byte_size(Result)),
-    ValueString = iolist_to_binary(io_lib:format("~0tp", [Value], FmtOpts)),
-    <<Result/binary, ValueString/binary>>;
+    format_verbatim(Value, Result, MD, ML);
 format_thrift_value({struct, struct, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
     format_struct(Module, Struct, Value, Result, dec(MD), ML, MPSL);
 format_thrift_value({struct, union, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
@@ -226,12 +224,10 @@ format_struct(Module, Struct, StructValue, Result0, MD, ML, MPSL) ->
                 MPSL,
                 false
             ),
-            <<Result1/binary, "}">>
-        % false ->
-        %     % TODO when is this possible?
-        %     FmtOpts = compute_format_opts(ML, byte_size(Result0)),
-        %     Params = erlang:iolist_to_binary(io_lib:format("~0tp", [StructValue], FmtOpts)),
-        %     <<Result0/binary, Params/binary>>
+            <<Result1/binary, "}">>;
+        false ->
+            % TODO when is this possible?
+            format_verbatim(StructValue, Result0, MD, ML)
     end.
 
 format_struct_([], S, I, Result, _MD, _ML, _MPSL, _AD) when I > tuple_size(S) ->
@@ -305,13 +301,18 @@ dec(unlimited) -> unlimited;
 dec(0) -> 0;
 dec(N) -> N - 1.
 
-inc(unlimited) -> unlimited;
-inc(N) -> N + 1.
+format_verbatim(Term, Result, #{max_length := ML, max_depth := MD}) ->
+    format_verbatim(Term, Result, MD, ML).
 
-compute_format_opts(unlimited, _CL) ->
-    [];
-compute_format_opts(ML, CL) ->
-    [{chars_limit, max_(0, ML - CL)}].
+format_verbatim(Term, Result, MD, ML) ->
+    Opts = [
+        {line_length , 0},
+        {depth       , case MD of unlimited -> -1; _ -> MD end},
+        {chars_limit , case ML of unlimited -> -1; _ -> max_(0, ML - byte_size(Result)) end},
+        {encoding    , unicode}
+    ],
+    Printout = erlang:iolist_to_binary(io_lib_pretty:print(Term, Opts)),
+    <<Result/binary, Printout/binary>>.
 
 compute_slice_length(unlimited, _CL, MPSL) ->
     MPSL;
@@ -905,7 +906,27 @@ depth_and_lenght_test_() -> [
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_length => 512, max_depth => 5}
+                #{max_length => 512, max_depth => 4}
+            )
+        )
+    )
+].
+
+-spec verbatim_test_() -> _.
+verbatim_test_() -> [
+    ?_assertEqual(
+        "PartyManagement:CallMissingFunction("
+        "[undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
+        "<<\"1CR1\"...>>,{...}}},{contract_modification,{payproc_ContractModificationUnit,<<...>>,"
+        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]]"
+        ")",
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CallMissingFunction',
+                ?ARGS,
+                #{max_length => 256}
             )
         )
     )
