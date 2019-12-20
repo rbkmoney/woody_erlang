@@ -13,30 +13,38 @@
 -export([measure/2]).
 -export([export/3]).
 
+-export_type([metrics/0]).
+
 %%
 
 -type runner() :: fun(() -> _).
 -type opts() :: #{
-    iterations => pos_integer()
+    iterations  => pos_integer(),
+    spawn_opts  => [{atom(), _}],
+    dump_traces => file:filename()
 }.
+
+-export_type([runner/0]).
+-export_type([opts/0]).
 
 -spec measure(runner(), opts()) ->
     metrics().
 measure(Runner, Opts0) ->
     Opts = maps:merge(get_default_opts(), Opts0),
     Token = make_ref(),
-    Tracer = start_tracer(Token),
+    Tracer = start_tracer(Token, Opts),
     ok = run(Runner, Tracer, Opts),
     Metrics = collect_metrics(Tracer, Token),
     Metrics.
 
 get_default_opts() ->
     #{
-        iterations => 100
+        iterations => 100,
+        spawn_opts => [{fullsweep_after, 0}]
     }.
 
 run(Runner, Tracer, Opts) ->
-    SpawnOpts = [monitor, {priority, high}, {fullsweep_after, 0}], % TODO
+    SpawnOpts = [monitor, {priority, high}] ++ maps:get(spawn_opts, Opts),
     {Staging, MRef} = erlang:spawn_opt(
         fun () -> run_staging(Runner, Tracer, Opts) end,
         SpawnOpts
@@ -60,9 +68,9 @@ iterate(_Runner, 0) ->
 
 %%
 
-start_tracer(Token) ->
+start_tracer(Token, Opts) ->
     Self = self(),
-    erlang:spawn_link(fun () -> run_tracer(Self, Token) end).
+    erlang:spawn_link(fun () -> run_tracer(Self, Token, Opts) end).
 
 collect_metrics(Tracer, Token) ->
     _ = Tracer ! Token,
@@ -71,10 +79,11 @@ collect_metrics(Tracer, Token) ->
             Metrics
     end.
 
-run_tracer(MeterPid, Token) ->
+run_tracer(MeterPid, Token, Opts) ->
     _ = receive Token -> ok end,
     Traces = collect_traces(),
     Metrics = analyze_traces(Traces),
+    ok = maybe_dump_traces(Traces, Opts),
     MeterPid ! {?MODULE, {metrics, Metrics}}.
 
 collect_traces() ->
@@ -90,8 +99,12 @@ collect_traces(Acc) ->
             lists:reverse(Acc)
     end.
 
+maybe_dump_traces(Traces, #{dump_traces := Filename}) ->
+    file:write_file(Filename, erlang:term_to_binary(Traces));
+maybe_dump_traces(_, #{}) ->
+    ok.
+
 analyze_traces(Traces) ->
-    ok = file:write_file("gc.trace", erlang:term_to_binary(Traces)), % TODO
     analyze_traces(undefined, Traces, #{
         minor_gcs => 0,
         major_gcs => 0,
