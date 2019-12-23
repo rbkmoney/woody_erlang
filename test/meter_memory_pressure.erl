@@ -1,9 +1,12 @@
 -module(meter_memory_pressure).
 
+-type microseconds() :: non_neg_integer().
 -type words() :: non_neg_integer().
 -type metrics() :: #{
     minor_gcs := non_neg_integer(),
+    minor_gcs_duration := microseconds(),
     major_gcs := non_neg_integer(),
+    minor_gcs_duration := microseconds(),
     heap_reclaimed := words(),
     offheap_bin_reclaimed := words(),
     stack_min := words(),
@@ -105,22 +108,24 @@ maybe_dump_traces(_, #{}) ->
     ok.
 
 analyze_traces(Traces) ->
-    analyze_traces(undefined, Traces, #{
+    analyze_traces(Traces, #{
         minor_gcs => 0,
+        minor_gcs_duration => 0,
         major_gcs => 0,
+        major_gcs_duration => 0,
         heap_reclaimed => 0,
         offheap_bin_reclaimed => 0
     }).
 
-analyze_traces(undefined, [Trace = {gc_minor_start, _, _} | Rest], M) ->
-    analyze_traces(Trace, Rest, M);
-analyze_traces(undefined, [Trace = {gc_major_start, _, _} | Rest], M) ->
-    analyze_traces(Trace, Rest, M);
-analyze_traces({gc_minor_start, InfoStart, _}, [{gc_minor_end, InfoEnd, _} | Rest], M) ->
-    analyze_traces(undefined, Rest, analyze_gc(InfoStart, InfoEnd, increment(minor_gcs, M)));
-analyze_traces({gc_major_start, InfoStart, _}, [{gc_major_end, InfoEnd, _} | Rest], M) ->
-    analyze_traces(undefined, Rest, analyze_gc(InfoStart, InfoEnd, increment(major_gcs, M)));
-analyze_traces(_, [], M) ->
+analyze_traces([{gc_minor_start, InfoStart, C1}, {gc_minor_end, InfoEnd, C2} | Rest], M0) ->
+    M1 = increment(minor_gcs, M0),
+    M2 = increment(minor_gcs_duration, timer:now_diff(C2, C1), M1),
+    analyze_traces(Rest, analyze_gc(InfoStart, InfoEnd, M2));
+analyze_traces([{gc_major_start, InfoStart, C1}, {gc_major_end, InfoEnd, C2} | Rest], M0) ->
+    M1 = increment(major_gcs, M0),
+    M2 = increment(major_gcs_duration, timer:now_diff(C2, C1), M1),
+    analyze_traces(Rest, analyze_gc(InfoStart, InfoEnd, M2));
+analyze_traces([], M) ->
     M.
 
 analyze_gc(InfoStart, InfoEnd, M0) ->

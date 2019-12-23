@@ -24,7 +24,9 @@ run(Name, Runner, Opts) ->
         end,
         [
             minor_gcs,
+            minor_gcs_duration,
             major_gcs,
+            major_gcs_duration,
             heap_reclaimed,
             offheap_bin_reclaimed,
             stack_min,
