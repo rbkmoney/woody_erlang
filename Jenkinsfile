@@ -41,8 +41,6 @@ build('woody_erlang', 'docker-host', finalHook) {
     runStage('test') {
       sh "make wc_test"
     }
-    runStage('bench') {
-      sh "make wc_bench"
-    }
   }
 }
+
