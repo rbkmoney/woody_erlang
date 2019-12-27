@@ -107,20 +107,25 @@ format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_strin
 
 -spec format_thrift_value(term(), term(), binary(), limit(), limit(), non_neg_integer()) ->
     binary().
-format_thrift_value({struct, struct, []}, Value, Result, MD, ML, _MPSL) ->
+format_thrift_value(Type, Value, Result, MD, ML, MPSL) ->
+    try format_thrift_value_(Type, Value, Result, MD, ML, MPSL) catch
+        error:_ -> format_verbatim(Value, Result, MD, ML)
+    end.
+
+format_thrift_value_({struct, struct, []}, Value, Result, MD, ML, _MPSL) ->
     %% {struct,struct,[]} === thrift's void
     %% so just return Value
     format_verbatim(Value, Result, MD, ML);
-format_thrift_value({struct, struct, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+format_thrift_value_({struct, struct, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
     format_struct(Module, Struct, Value, Result, dec(MD), ML, MPSL);
-format_thrift_value({struct, union, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+format_thrift_value_({struct, union, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
     format_union(Module, Struct, Value, Result, dec(MD), ML, MPSL);
-format_thrift_value({struct, exception, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+format_thrift_value_({struct, exception, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
     format_struct(Module, Struct, Value, Result, dec(MD), ML, MPSL);
-format_thrift_value({enum, {_Module, _Struct}}, Value, Result, _MD, _ML, _MPSL) ->
+format_thrift_value_({enum, {_Module, _Struct}}, Value, Result, _MD, _ML, _MPSL) ->
     ValueString = to_string(Value),
     <<Result/binary, ValueString/binary>>;
-format_thrift_value(string, Value, Result0, _MD, ML, MPSL) ->
+format_thrift_value_(string, Value, Result0, _MD, ML, MPSL) when is_binary(Value) ->
     case is_printable(Value, ML, byte_size(Result0), MPSL) of
         Slice when is_binary(Slice) ->
             Result1 = escape_printable_string(Slice, <<Result0/binary, "'">>),
@@ -131,29 +136,29 @@ format_thrift_value(string, Value, Result0, _MD, ML, MPSL) ->
         not_printable ->
             format_non_printable_string(Value, Result0)
     end;
-format_thrift_value({list, _}, _, Result, 0, _ML, _MPSL) ->
+format_thrift_value_({list, _}, _, Result, 0, _ML, _MPSL) ->
     <<Result/binary, "[...]">>;
-format_thrift_value({list, Type}, ValueList, Result0, MD, ML, MPSL) ->
+format_thrift_value_({list, Type}, ValueList, Result0, MD, ML, MPSL) ->
     Result1 = format_thrift_list(Type, ValueList, <<Result0/binary, "[">>, dec(MD), dec(ML), MPSL),
     <<Result1/binary, "]">>;
-format_thrift_value({set, _}, _, Result, 0, _ML, _MPSL) ->
+format_thrift_value_({set, _}, _, Result, 0, _ML, _MPSL) ->
     <<Result/binary, "{...}">>;
-format_thrift_value({set, Type}, SetofValues, Result0, MD, ML, MPSL) ->
+format_thrift_value_({set, Type}, SetofValues, Result0, MD, ML, MPSL) ->
     Result1 = format_thrift_set(Type, SetofValues, <<Result0/binary, "{">>, dec(MD), dec(ML), MPSL),
     <<Result1/binary, "}">>;
-format_thrift_value({map, _}, _, Result, 0, _ML, _MPSL) ->
+format_thrift_value_({map, _}, _, Result, 0, _ML, _MPSL) ->
     <<Result/binary, "#{...}">>;
-format_thrift_value({map, KeyType, ValueType}, Map, Result0, MD, ML, MPSL) ->
+format_thrift_value_({map, KeyType, ValueType}, Map, Result0, MD, ML, MPSL) ->
     Result1 = format_map(KeyType, ValueType, Map, <<Result0/binary, "#{">>, dec(MD), dec(ML), MPSL, false),
     <<Result1/binary, "}">>;
-format_thrift_value(bool, false, Result, _MD, _ML, _MPSL) ->
+format_thrift_value_(bool, false, Result, _MD, _ML, _MPSL) ->
     <<Result/binary, "false">>;
-format_thrift_value(bool, true, Result, _MD, _ML, _MPSL) ->
+format_thrift_value_(bool, true, Result, _MD, _ML, _MPSL) ->
     <<Result/binary, "true">>;
-format_thrift_value(_Type, Value, Result, _MD, _ML, _MPSL) when is_integer(Value) ->
+format_thrift_value_(_Type, Value, Result, _MD, _ML, _MPSL) when is_integer(Value) ->
     ValueStr = erlang:integer_to_binary(Value),
     <<Result/binary, ValueStr/binary>>;
-format_thrift_value(_Type, Value, Result, _MD, _ML, _MPSL) when is_float(Value) ->
+format_thrift_value_(_Type, Value, Result, _MD, _ML, _MPSL) when is_float(Value) ->
     ValueStr = erlang:float_to_binary(Value, [{decimals, ?MAX_FLOAT_DECIMALS}, compact]),
     <<Result/binary, ValueStr/binary>>.
 
@@ -161,14 +166,14 @@ format_thrift_list(Type, ValueList, Result, MD, ML, MPSL) when length(ValueList)
     format_list(Type, ValueList, Result, MD, ML, MPSL, false);
 format_thrift_list(Type, [FirstEntry | Rest], Result0, MD, ML, MPSL) ->
     LastEntry = lists:last(Rest),
-    Result1 = format_thrift_value(Type, FirstEntry, Result0, MD, ML, MPSL),
+    Result1 = format_thrift_value_(Type, FirstEntry, Result0, MD, ML, MPSL),
     case byte_size(Result1) < ML of
         true ->
             SkippedLength = erlang:integer_to_binary(length(Rest) - 1),
             Result2 = <<Result1/binary, ",...", SkippedLength/binary, " more...,">>,
             case byte_size(Result2) < ML of
                 true ->
-                    format_thrift_value(Type, LastEntry, Result2, MD, ML, MPSL);
+                    format_thrift_value_(Type, LastEntry, Result2, MD, ML, MPSL);
                 false ->
                     <<Result2/binary, "...">>
             end;
@@ -361,7 +366,7 @@ format_list(_Type, [], Result, _MD, _ML, _MPSL, _AD) ->
     Result;
 format_list(Type, [Entry | ValueList], Result0, MD, ML, MPSL, AD) ->
     Result1 = maybe_add_delimiter(AD, Result0),
-    Result2 = format_thrift_value(Type, Entry, Result1, MD, ML, MPSL),
+    Result2 = format_thrift_value_(Type, Entry, Result1, MD, ML, MPSL),
     case byte_size(Result2) of
         CL when ML > CL ->
             format_list(Type, ValueList, Result2, MD, ML, MPSL, true);
@@ -378,8 +383,8 @@ format_map(KeyType, ValueType, Map, Result0, MD, ML, MPSL, AD) ->
 
 format_map_(KeyType, ValueType, {Key, Value, MapIterator}, Result0, MD, ML, MPSL, AD) ->
     Result1 = maybe_add_delimiter(AD, Result0),
-    Result2 = format_thrift_value(KeyType, Key, Result1, MD, ML, MPSL),
-    Result3 = format_thrift_value(ValueType, Value, <<Result2/binary, "=">>, MD, ML, MPSL),
+    Result2 = format_thrift_value_(KeyType, Key, Result1, MD, ML, MPSL),
+    Result3 = format_thrift_value_(ValueType, Value, <<Result2/binary, "=">>, MD, ML, MPSL),
     Next = maps:next(MapIterator),
     case byte_size(Result3) of
         CL when ML > CL ->
