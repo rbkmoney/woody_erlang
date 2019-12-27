@@ -8,8 +8,7 @@ run() ->
     Input = input(),
     Opts = #{iterations => 10},
     _ = run(iolib, mk_iolib_runner(Input), Opts),
-    _ = run(thrift_v1, mk_thrift_v1_runner(Input), Opts),
-    _ = run(thrift_v2, mk_thrift_v2_runner(Input), Opts),
+    _ = run(thrift, mk_thrift_runner(Input), Opts),
     ok.
 
 -spec run(atom(), meter_memory_pressure:runner(), meter_memory_pressure:opts()) ->
@@ -49,16 +48,9 @@ mk_iolib_runner(Snapshot) ->
         bench_woody_formatter:bench_iolib_formatter(Snapshot, [])
     end.
 
--spec mk_thrift_v1_runner(term()) ->
+-spec mk_thrift_runner(term()) ->
     meter_memory_pressure:runner().
-mk_thrift_v1_runner(Snapshot) ->
+mk_thrift_runner(Snapshot) ->
     fun () ->
         bench_woody_formatter:bench_thrift_formatter(Snapshot, [])
-    end.
-
--spec mk_thrift_v2_runner(term()) ->
-    meter_memory_pressure:runner().
-mk_thrift_v2_runner(Snapshot) ->
-    fun () ->
-        bench_woody_formatter:bench_thrift_v2_formatter(Snapshot, [])
     end.

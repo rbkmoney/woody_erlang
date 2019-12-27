@@ -5,9 +5,7 @@
     iolib_formatter/1,
     bench_iolib_formatter/2,
     thrift_formatter/1,
-    bench_thrift_formatter/2,
-    thrift_v2_formatter/1,
-    bench_thrift_v2_formatter/2
+    bench_thrift_formatter/2
 ]).
 
 -type input() :: {woody_thrift_formatter:event_meta(), woody:rpc_id()}.
@@ -131,11 +129,6 @@ iolib_formatter({input, _}) ->
 thrift_formatter({input, _}) ->
     input().
 
--spec thrift_v2_formatter({input, _State}) ->
-    input().
-thrift_v2_formatter({input, _}) ->
-    input().
-
 -spec bench_iolib_formatter(input(), _State) ->
     term().
 bench_iolib_formatter({Meta, RpcID}, _) ->
@@ -148,12 +141,6 @@ format_event_iolib(#{service := Service, function := Function, args := Args}, _R
     term().
 bench_thrift_formatter({Meta, RpcID}, _) ->
     format_msg(woody_event_handler:format_event('call service', Meta, RpcID)).
-
--spec bench_thrift_v2_formatter(input(), _State) ->
-    term().
-bench_thrift_v2_formatter({#{service_schema := {Module, Service}, function := Function, args := Args}, _RpcID}, _) ->
-    {Format, Params} = woody_event_formatter_v2:format_call(Module, Service, Function, Args, #{}),
-    format_msg({info, {"[client] calling " ++ Format, Params}}).
 
 format_msg({_Severity, {Format, Params}}) ->
     io_lib:format(Format, Params).
