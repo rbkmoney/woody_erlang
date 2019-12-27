@@ -699,7 +699,9 @@ format_service_request_test_() -> [
         "Centro, 06082...',post_address='NaN',representative_position='Director',"
         "representative_full_name='Someone',representative_document='100$ banknote',"
         "russian_bank_account=RussianBankAccount{account='4276300010908312893',bank_name='SomeBank',"
-        "bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...])",
+        "bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...2 more...,"
+        "PartyModification{shop_modification=ShopModificationUnit{id='1CR1Y2ZcrA2',"
+        "modification=ShopModification{shop_account_creation=ShopA...",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -762,12 +764,12 @@ format_service_request_test_() -> [
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] calling "
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
         "id='1CSHThTEJ84',history=[Event{id=1,created_at='2019-08-13T07:52:11.080519Z',"
-        "data=Value{arr=[Value{obj=#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},"
-        "Value{str='vsn'}=>Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range=HistoryRange{"
+        "data=Value{arr=[Value{obj=#{Value{str='ct'}=Value{str='application/x-erlang-binary'},"
+        "Value{str='vsn'}=Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range=HistoryRange{"
         "limit=10,direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}"
-        "=>Value{bin=<<52 bytes>>},Value{str='ct'}=>Value{str='application/x-erlang-binary'}}}},"
-        "aux_state_legacy=Value{obj=#{Value{str='aux_state'}=>Value{bin=<<52 bytes>>},Value{str='ct'}"
-        "=>Value{str='application/x-erlang-binary'}}}}})",
+        "=Value{bin=<<52 bytes>>},Value{str='ct'}=Value{str='application/x-erlang-binary'}}}},"
+        "aux_state_legacy=Value{obj=#{Value{str='aux_state'}=Value{bin=<<52 bytes>>},Value{str='ct'}"
+        "=Value{str='application/x-erlang-binary'}}}}})",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -894,7 +896,7 @@ format_service_request_with_limit_test_() -> [
         "russian_bank_account=RussianBankAccount{account='4276300010908312893',bank_name='SomeBank',"
         "bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...2 more...,"
         "PartyModification{shop_modification=ShopModificationUnit{id='1CR1Y2ZcrA2',modification=ShopModification"
-        "{shop_account_creation=Shop...)",
+        "{shop_account_creation=ShopA...",
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
@@ -961,9 +963,9 @@ result_test_() -> [
     ?_assertEqual(
         "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
         "CallResult{response=Value{bin=<<6 bytes>>},change=MachineStateChange{aux_state="
-        "Content{data=Value{obj=#{Value{str='aux_state'}=>Value{bin=<<108 bytes>>},Value{str='ct'}=>"
+        "Content{data=Value{obj=#{Value{str='aux_state'}=Value{bin=<<108 bytes>>},Value{str='ct'}="
         "Value{str='application/x-erlang-binary'}}}},events=[Content{data=Value{arr=[Value{obj="
-        "#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},Value{str='vsn'}=>Value{i=6}}},"
+        "#{Value{str='ct'}=Value{str='application/x-erlang-binary'},Value{str='vsn'}=Value{i=6}}},"
         "Value{bin=<<240 bytes>>}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
@@ -1045,15 +1047,15 @@ result_test_() -> [
         "Party{id='1CSWG2vduGe',contact_info=PartyContactInfo{email='hg_ct_helper'},created_at="
         "'2019-08-13T11:19:01.249440Z',blocking=Blocking{unblocked=Unblocked{reason='',since="
         "'2019-08-13T11:19:02.655869Z'}},suspension=Suspension{active=Active{since="
-        "'2019-08-13T11:19:02.891892Z'}},contractors=#{},contracts=#{'1CSWG8j04wK'=>Contract{id="
+        "'2019-08-13T11:19:02.891892Z'}},contractors=#{},contracts=#{'1CSWG8j04wK'=Contract{id="
         "'1CSWG8j04wK',payment_institution=PaymentInstitutionRef{id=1},created_at="
         "'2019-08-13T11:19:01.387269Z',status=ContractStatus{active=ContractActive{}},terms="
         "TermSetHierarchyRef{id=1},adjustments=[],payout_tools=[PayoutTool{id='1CSWG8j04wL',"
         "created_at='2019-08-13T11:19:01.387269Z',currency=CurrencyRef{symbolic_code='RUB'},"
         "payout_tool_info=PayoutToolInfo{russian_bank_account=RussianBankAccount{account="
         "'4276300010908312893',bank_name='SomeBank',bank_post_account='123129876',bank_bik="
-        "'66642666'}}}],contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity=RussianLegalEntity{...}"
-        "...",
+        "'66642666'}}}],contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity="
+        "RussianLegalEntity{regis...",
         format_msg_limited(
             format_event(
             ?EV_SERVICE_RESULT,
@@ -1126,11 +1128,11 @@ result_test_() -> [
         "successfully: "
         "SignalResult{change=MachineStateChange{aux_state=Content{data=Value{obj=#{}}},"
         "events=[Content{data=Value{arr=[Value{arr=[Value{i=2},Value{obj=#{Value{"
-        "str='change'}=>Value{str='created'},Value{str='contact_info'}=>Value{obj=#{Value{"
-        "str='email'}=>Value{str='create_customer'}}},Value{str='created_at'}=>Value{"
-        "str='2019-08-13T11:19:03.714218Z'},Value{str='customer_id'}=>Value{str='1CSWGJ3N8Ns'},"
-        "Value{str='metadata'}=>Value{nl=Nil{}},Value{str='owner_id'}=>Value{str='1CSWG2vduGe'},"
-        "Value{str='shop_id'}=>Value{str='1CSWG8j04wM'}}}]}]}}]},action=ComplexAction{}}",
+        "str='change'}=Value{str='created'},Value{str='contact_info'}=Value{obj=#{Value{"
+        "str='email'}=Value{str='create_customer'}}},Value{str='created_at'}=Value{"
+        "str='2019-08-13T11:19:03.714218Z'},Value{str='customer_id'}=Value{str='1CSWGJ3N8Ns'},"
+        "Value{str='metadata'}=Value{nl=Nil{}},Value{str='owner_id'}=Value{str='1CSWG2vduGe'},"
+        "Value{str='shop_id'}=Value{str='1CSWG8j04wM'}}}]}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
