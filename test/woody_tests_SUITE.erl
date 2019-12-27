@@ -1,6 +1,7 @@
 -module(woody_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 -include_lib("hackney/include/hackney_lib.hrl").
 
 -include("woody_test_thrift.hrl").
@@ -617,10 +618,10 @@ call_ok_test(_) ->
 
 call_resolver_nxdomain(_) ->
     Context = make_context(<<"nxdomain">>),
-    try call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
-    catch
-        error:{woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}} -> ok
-    end.
+    ?assertError(
+        {woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}},
+        call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
+    ).
 
 call3_ok_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
@@ -647,37 +648,35 @@ call_throw_unexpected_test(_) ->
     Id      = <<"call_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
-    try call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
-    catch
-        error:{woody_error, {external, result_unexpected, _}} -> ok
-    end,
-    {ok, _} = receive_msg(Current, Context).
+    ?assertError(
+        {woody_error, {external, result_unexpected, _}},
+        call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
+    ).
 
 call_system_external_error_test(_) ->
     Id  = <<"call_system_external_error">>,
     Gun = <<"The Ultimate Super Mega Destroyer">>,
     Context = make_context(Id),
-    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
-    catch
-        error:{woody_error, {external, result_unexpected, _}} -> ok
-    end,
-    {ok, _} = receive_msg(Gun, Context).
+    ?assertError(
+        {woody_error, {external, result_unexpected, _}},
+        call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+    ).
 
 call_client_error_test(_) ->
     Gun     = 'Wrong Type of Mega Destroyer',
     Context = make_context(<<"call_client_error">>),
-    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
-    catch
-        error:{woody_error, {internal, result_unexpected, <<"client thrift error: ", _/binary>>}} -> ok
-    end.
+    ?assertError(
+        {woody_error, {internal, result_unexpected, <<"client thrift error: ", _/binary>>}},
+        call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+    ).
 
 call_server_internal_error_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_server_internal_error">>),
-    try call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
-    catch
-        error:{woody_error, {external, result_unexpected, _}} -> ok
-    end,
+    ?assertError(
+        {woody_error, {external, result_unexpected, _}},
+        call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
+    ),
     {ok, _} = receive_msg(Armor, Context).
 
 call_oneway_void_test(_) ->
@@ -717,21 +716,19 @@ call_pass_thru_except_test(_) ->
 call_pass_thru_bad_result_test(_) ->
     Armor    = <<"AntiGrav Boots">>,
     Context  = make_context(<<"call_pass_thru_bad_result">>),
-    try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
-    catch
-        error:{woody_error, {external, result_unexpected, _}} ->
-            ok
-    end,
+    ?assertError(
+        {woody_error, {external, result_unexpected, _}},
+        call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+    ),
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_bad_except_test(_) ->
     Armor    = <<"Shield Belt">>,
     Context  = make_context(<<"call_pass_thru_bad_except">>),
-    try call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
-    catch
-        error:{woody_error, {external, result_unexpected, _}} ->
-            ok
-    end,
+    ?assertError(
+        {woody_error, {external, result_unexpected, _}},
+        call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+    ),
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_result_unexpected_test(_) ->
@@ -749,11 +746,11 @@ call_pass_thru_result_unknown_test(_) ->
 call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass) ->
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
-    try call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
-    catch
-        ExceptClass:{woody_error, {external, ErrClass, _}} ->
-            ok
-    end,
+    ?assertException(
+        ExceptClass,
+        {woody_error, {external, ErrClass, _}},
+        call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
+    ),
     {ok, _} = receive_msg(Powerup, Context).
 
 call_no_headers_404_test(_) ->
@@ -776,12 +773,11 @@ call_fail_w_no_headers(Id, Class, Code) ->
     Context = make_context(Id),
     {Url, Service} = get_service_endpoint('Weapons'),
     BinCode = integer_to_binary(Code),
-    try woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
+    ?assertError(
+        {woody_error, {external, Class, <<"got response with http code ", BinCode:3/binary, _/binary>>}},
+        woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
             #{url => Url, event_handler => ?MODULE}, Context)
-    catch
-        error:{woody_error, {external, Class, <<"got response with http code ", BinCode:3/binary, _/binary>>}} ->
-            ok
-    end.
+    ).
 
 find_multiple_pools_test(_) ->
     true = is_pid(hackney_pool:find_pool(swords)),
@@ -824,10 +820,10 @@ call_deadline_reached_on_client_test(_) ->
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(0),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"1000">>}, Deadline),
-    try woody_client:call(Request, Opts, Context)
-    catch
-        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
-    end.
+    ?assertError(
+        {woody_error, {internal, resource_unavailable, <<"deadline reached">>}},
+        woody_client:call(Request, Opts, Context)
+    ).
 
 call_deadline_timeout_test(_) ->
     Id = <<"call_deadline_timeout">>,
@@ -837,16 +833,14 @@ call_deadline_timeout_test(_) ->
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(500),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"3000">>}, Deadline),
-
-    try woody_client:call(Request, Opts, Context)
-    catch
-        error:{woody_error, {external, result_unknown, <<"timeout">>}} -> ok
-    end,
-
-    try woody_client:call(Request, Opts, Context)
-    catch
-        error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
-    end.
+    ?assertError(
+        {woody_error, {external, result_unknown, <<"timeout">>}},
+        woody_client:call(Request, Opts, Context)
+    ),
+    ?assertError(
+        {woody_error, {internal, resource_unavailable, <<"deadline reached">>}},
+        woody_client:call(Request, Opts, Context)
+    ).
 
 server_http_req_validation_test(Config) ->
     HeadersMode = proplists:get_value(client_headers_mode, Config),
