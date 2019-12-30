@@ -97,7 +97,7 @@ format_exception(_Module, _Service, _Function, Value, Opts) ->
 format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_string_length := MPSL}) ->
     try
         ReplyValue = format_thrift_value(ReplyType, Value, <<>>, MD, ML, MPSL),
-        {"~ts", [ReplyFmt]}
+        {"~ts", [ReplyValue]}
     catch
         E:R:S ->
             Details = genlib_format:format_exception({E, R, S}),
