@@ -1,7 +1,6 @@
 -module(woody_event_formatter).
 
 -export([
-    format_call/4,
     format_call/5,
     format_reply/5,
     format_exception/5,
@@ -22,12 +21,6 @@
 }.
 
 -export_type([opts/0]).
-
--spec format_call(atom(), atom(), atom(), term()) ->
-    woody_event_handler:msg().
-format_call(Module, Service, Function, Arguments) ->
-    ConfigOpts = genlib_app:env(woody, event_formatter_options, #{}),
-    format_call(Module, Service, Function, Arguments, ConfigOpts).
 
 -spec format_call(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
