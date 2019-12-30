@@ -553,7 +553,8 @@ depth_test_() -> [
                 dmsl_payment_processing_thrift,
                 'PartyManagement',
                 'CreateClaim',
-                ?ARGS
+                ?ARGS,
+                #{}
             )
         )
     ),
