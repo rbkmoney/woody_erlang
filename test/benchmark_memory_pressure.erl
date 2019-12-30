@@ -38,6 +38,10 @@ run(Name, Runner, Opts) ->
 -spec input() ->
     term().
 input() ->
+    %% NOTE
+    %% You will need some reasonably complex term following `domain_config.Snapshot` thrift schema
+    %% stored in ETF in `test/snapshot.term` for this benchmark to run. It's NOT supplied by
+    %% default.
     {ok, Binary} = file:read_file("test/snapshot.term"),
     erlang:binary_to_term(Binary).
 
