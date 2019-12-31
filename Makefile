@@ -7,9 +7,9 @@ UTILS_PATH := build_utils
 # with handling of the varriable in build_utils is fixed
 TEMPLATES_PATH := .
 SERVICE_NAME := woody
-BUILD_IMAGE_TAG := cd38c35976f3684fe7552533b6175a4c3460e88b
+BUILD_IMAGE_TAG := 4536c31941b9c27c134e8daf0fd18848809219c9
 
-CALL_W_CONTAINER := all submodules rebar-update compile xref lint test dialyze clean distclean
+CALL_W_CONTAINER := all submodules compile xref lint test bench dialyze clean distclean
 
 .PHONY: $(CALL_W_CONTAINER)
 
@@ -23,10 +23,7 @@ $(SUBTARGETS): %/.git: %
 
 submodules: $(SUBTARGETS)
 
-rebar-update:
-	$(REBAR) update
-
-compile: submodules rebar-update
+compile: submodules
 	$(REBAR) compile
 
 test: submodules
@@ -54,4 +51,8 @@ dialyze:
 	$(REBAR) as test dialyzer
 
 bench:
-	$(REBAR) as test bench -n 1000
+	$(REBAR) as test bench -m bench_woody_event_handler -n 1000
+	$(REBAR) as test bench -m bench_woody_formatter -n 10
+	erl -pa _build/test/lib/*/ebin _build/test/lib/woody/test -noshell \
+		-s benchmark_memory_pressure run \
+		-s erlang halt

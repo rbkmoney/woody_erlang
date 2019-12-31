@@ -1,7 +1,6 @@
 -module(woody_event_formatter).
 
 -export([
-    format_call/4,
     format_call/5,
     format_reply/5,
     format_exception/5,
@@ -9,85 +8,68 @@
 ]).
 
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
+-define(MAX_FLOAT_DECIMALS, 8).
 %% Binaries under size below will log as-is.
 -define(MAX_BIN_SIZE, 40).
 
+-type limit() :: non_neg_integer() | unlimited.
+
 -type opts():: #{
-    max_depth  => integer(),
-    max_length => integer(),
+    max_depth  => limit(),
+    max_length => limit(),
     max_pritable_string_length => non_neg_integer()
 }.
 
 -export_type([opts/0]).
 
--spec format_call(atom(), atom(), atom(), term()) ->
-    woody_event_handler:msg().
-format_call(Module, Service, Function, Arguments) ->
-    ConfigOpts = genlib_app:env(woody, event_formatter_options, #{}),
-    format_call(Module, Service, Function, Arguments, ConfigOpts).
-
 -spec format_call(atom(), atom(), atom(), term(), opts()) ->
     woody_event_handler:msg().
 format_call(Module, Service, Function, Arguments, Opts) ->
-    case Module:function_info(Service, Function, params_type) of
+    Opts1 = normalize_options(Opts),
+    ServiceName = to_string(Service),
+    FunctionName = to_string(Function),
+    Result0 = <<ServiceName/binary, ":", FunctionName/binary, "(">>,
+    Result = try Module:function_info(Service, Function, params_type) of
         {struct, struct, ArgTypes} ->
-            Opts1 = normalize_options(Opts),
-            ServiceName = to_string(Service),
-            ServiceLength = length(ServiceName),
-            FunctionName = to_string(Function),
-            FunctionLength = length(FunctionName),
-            NewCL = ServiceLength + FunctionLength + 3,
-            {Result, _} =
-                format_call_(ArgTypes, Arguments, "", 0, NewCL, Opts1, false),
-            {"~s:~s(~ts)", [ServiceName, FunctionName, Result]};
-        _Other ->
-            {"~s:~s(~0tp)", [Service, Function, Arguments]}
-    end.
+            ML = maps:get(max_length, Opts1),
+            MD = maps:get(max_depth, Opts1),
+            MPSL = maps:get(max_pritable_string_length, Opts1),
+            Result1 = format_call_(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
+            <<Result1/binary, ")">>
+    catch error:badarg ->
+        Result1 = format_verbatim(Arguments, Result0, Opts1),
+        <<Result1/binary, ")">>
+    end,
+    {"~ts", [Result]}.
 
-format_call_([], [], Result, _CurDepth, CL, _Opts, _AddDelimiter) ->
-    {Result, CL};
-format_call_(_, ArgumentList, Result, _CurDepth, CL, #{max_length := ML}, AddDelimiter) when ML >= 0, CL > ML ->
-    HasMoreArguments = AddDelimiter and ArgumentList =/= [],
-    Delimiter = maybe_add_delimiter(HasMoreArguments),
-    DelimiterLen = length(Delimiter),
-    MoreArguments = maybe_add_more_marker(HasMoreArguments),
-    MoreArgumentsLen = length(MoreArguments),
-    {[Result | [Delimiter, MoreArguments]], CL + DelimiterLen + MoreArgumentsLen};
-format_call_([Type | RestType], [Argument | RestArgs], Acc, CurDepth, CL, Opts, AddDelimiter) ->
-    Delimiter = maybe_add_delimiter(AddDelimiter),
-    DelimiterLen = length(Delimiter),
-    case format_argument(Type, Argument, CurDepth, CL + DelimiterLen, Opts) of
-        {undefined, NewCL} ->
-            format_call_(
-                RestType,
-                RestArgs,
-                Acc,
-                CurDepth,
-                NewCL,
-                Opts,
-                AddDelimiter
-            );
-        {Result, NewCL} ->
-            format_call_(
-                RestType,
-                RestArgs,
-                [Acc | [Delimiter, Result]],
-                CurDepth,
-                NewCL + DelimiterLen,
-                Opts,
-                true
-            )
-    end.
+format_call_([], [], Result, _MD, _ML, _MPSL, _AD) ->
+    Result;
+format_call_(_, ArgumentList, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
+    HasMoreArguments = AD and (ArgumentList =/= []),
+    Result1 = maybe_add_delimiter(HasMoreArguments, Result0),
+    Result2 = maybe_add_more_marker(HasMoreArguments, Result1),
+    Result2;
+format_call_([Type | RestType], [Argument | RestArgs], Result0, MD, ML, MPSL, AD) ->
+    {Result1, AD1} = format_argument(Type, Argument, Result0, MD, ML, MPSL, AD),
+    format_call_(
+        RestType,
+        RestArgs,
+        Result1,
+        MD,
+        ML,
+        MPSL,
+        AD1
+    ).
 
-format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, _CurDepth, CL, _Opts) ->
-    {undefined, CL};
-format_argument({Fid, Required, Type, Name, Default}, undefined, CurDepth, CL, Opts) ->
-    format_argument({Fid, Required, Type, Name, Default}, Default, CurDepth, CL, Opts);
-format_argument({_Fid, _Required, Type, Name, _Default}, Value, CurDepth, CL, Opts) ->
-    NameStr = to_string(Name),
-    NameStrLen = length(NameStr),
-    {Format, NewCL} = format_thrift_value(Type, Value, CurDepth, CL + NameStrLen + 3, Opts),
-    {[NameStr, "=", Format], NewCL}.
+format_argument({_Fid, _Required, _Type, _Name, undefined}, undefined, Result, _MD, _ML, _MPSL, AD) ->
+    {Result, AD};
+format_argument({Fid, Required, Type, Name, Default}, undefined, Result, MD, ML, MPSL, AD) ->
+    format_argument({Fid, Required, Type, Name, Default}, Default, Result, MD, ML, MPSL, AD);
+format_argument({_Fid, _Required, Type, Name, _Default}, Value, Result0, MD, ML, MPSL, AD) ->
+    NameStr = atom_to_binary(Name, unicode),
+    Result1 = maybe_add_delimiter(AD, Result0),
+    Result2 = <<Result1/binary, NameStr/binary, "=">>,
+    {format_thrift_value(Type, Value, Result2, MD, ML, MPSL), true}.
 
 -spec format_reply(atom(), atom(), atom(), term(), woody:options()) ->
     woody_event_handler:msg().
@@ -103,125 +85,99 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
     ReplyType = get_exception_type(Exception, ExceptionTypeList),
     format(ReplyType, Value, normalize_options(Opts));
 format_exception(_Module, _Service, _Function, Value, Opts) ->
-    #{max_length := ML} = normalize_options(Opts),
-    {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}.
+    {"~ts", [format_verbatim(Value, <<>>, normalize_options(Opts))]}.
 
-format(ReplyType, Value, #{max_length := ML} = Opts) ->
+format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_string_length := MPSL}) ->
     try
-        {ReplyFmt, _} = format_thrift_value(ReplyType, Value, 0, 0, Opts),
-        {"~ts", [ReplyFmt]}
+        ReplyValue = format_thrift_value(ReplyType, Value, <<>>, MD, ML, MPSL),
+        {"~ts", [ReplyValue]}
     catch
         E:R:S ->
-            WarningDetails = genlib_format:format_exception({E, R, S}),
-            logger:warning("EVENT FORMATTER ERROR: ~tp", [WarningDetails]),
-            {"~ts", [io_lib:format("~0tp", [Value], [{chars_limit, ML}])]}
+            Details = genlib_format:format_exception({E, R, S}),
+            _ = logger:warning("EVENT FORMATTER ERROR: ~ts", [Details]),
+            {"~ts", [format_verbatim(Value, <<>>, MD, ML)]}
     end.
 
--spec format_thrift_value(term(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {iolist(), non_neg_integer()}.
-format_thrift_value({struct, struct, []}, Value, _CurDepth, CL, Opts) ->
+-spec format_thrift_value(term(), term(), binary(), limit(), limit(), non_neg_integer()) ->
+    binary().
+format_thrift_value(Type, Value, Result, MD, ML, MPSL) ->
+    try format_thrift_value_(Type, Value, Result, MD, ML, MPSL) catch
+        error:_ -> format_verbatim(Value, Result, MD, ML)
+    end.
+
+format_thrift_value_({struct, struct, []}, Value, Result, MD, ML, _MPSL) ->
     %% {struct,struct,[]} === thrift's void
     %% so just return Value
-    #{max_length := ML} = normalize_options(Opts),
-    ValueString = io_lib:format("~0tp", [Value], [{chars_limit, ML}]),
-    Length = length(ValueString),
-    {ValueString, CL + Length};
-format_thrift_value({struct, struct, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
-    format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
-format_thrift_value({struct, union, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
-    format_union(Module, Struct, Value, CurDepth + 1, CL, Opts);
-format_thrift_value({struct, exception, {Module, Struct}}, Value, CurDepth, CL, Opts) ->
-    format_struct(Module, Struct, Value, CurDepth + 1, CL, Opts);
-format_thrift_value({enum, {_Module, _Struct}}, Value, _CurDepth, CL, _Opts) ->
+    format_verbatim(Value, Result, MD, ML);
+format_thrift_value_({struct, struct, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+    format_struct(Module, Struct, Value, Result, dec(MD), ML, MPSL);
+format_thrift_value_({struct, union, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+    format_union(Module, Struct, Value, Result, dec(MD), ML, MPSL);
+format_thrift_value_({struct, exception, {Module, Struct}}, Value, Result, MD, ML, MPSL) ->
+    format_struct(Module, Struct, Value, Result, dec(MD), ML, MPSL);
+format_thrift_value_({enum, {_Module, _Struct}}, Value, Result, _MD, _ML, _MPSL) ->
     ValueString = to_string(Value),
-    Length = length(ValueString),
-    {ValueString, CL + Length};
-format_thrift_value(string, Value, _CurDepth, CL, Opts) when is_binary(Value) ->
-    case is_printable(Value, Opts) of
-        {ok, Slice} ->
-            ValueString = value_to_string(Slice),
-            Length = length(ValueString),
-            {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
-        {error, not_printable} ->
-            Fmt = format_non_printable_string(Value),
-            Length = length(Fmt),
-            {Fmt, CL + Length}
+    <<Result/binary, ValueString/binary>>;
+format_thrift_value_(string, Value, Result0, _MD, ML, MPSL) when is_binary(Value) ->
+    case is_printable(Value, ML, byte_size(Result0), MPSL) of
+        Slice when is_binary(Slice) ->
+            Result1 = escape_printable_string(Slice, <<Result0/binary, "'">>),
+            case byte_size(Slice) == byte_size(Value) of
+                true -> <<Result1/binary, "'">>;
+                false -> <<Result1/binary, "...'">>
+            end;
+        not_printable ->
+            format_non_printable_string(Value, Result0)
     end;
-format_thrift_value(string, Value, _CurDepth, CL, _Opts) ->
-    ValueString = value_to_string(Value),
-    Length = length(ValueString),
-    {["'", ValueString, "'"], CL + Length + 2}; %% 2 = length("''")
-format_thrift_value({list, _}, _, CurDepth, CL, #{max_depth := MD})
-    when MD >= 0, CurDepth >= MD ->
-    {"[...]", CL + 5}; %% 5 = length("[...]")
-format_thrift_value({list, Type}, ValueList, CurDepth, CL, Opts) ->
-    {Format, CL1} = format_thrift_list(Type, ValueList, CurDepth + 1, CL + 2, Opts),
-    {["[", Format, "]"], CL1};
-format_thrift_value({set, _}, _, CurDepth, CL, #{max_depth := MD})
-    when MD >= 0, CurDepth >= MD ->
-    {"{...}", CL + 5}; %% 5 = length("{...}")
-format_thrift_value({set, Type}, SetofValues, CurDepth, CL, Opts) ->
-    {Format, CL1} = format_thrift_set(Type, SetofValues, CurDepth + 1, CL + 2, Opts),
-    {["{", Format, "}"], CL1};
-format_thrift_value({map, _}, _, CurDepth, CL, #{max_depth := MD})
-    when MD >= 0, CurDepth >= MD ->
-    {"#{...}", CL + 6}; %% 6 = length("#{...}")
-format_thrift_value({map, KeyType, ValueType}, Map, CurDepth, CL, Opts) ->
-    {Params, CL1} =
-        format_map(KeyType, ValueType, Map, "", CurDepth + 1, CL + 3, Opts, false),
-    {["#{", Params, "}"], CL1};
-format_thrift_value(bool, false, _CurDepth, CL, _Opts) ->
-    {"false", CL + 5};
-format_thrift_value(bool, true, _CurDepth, CL, _Opts) ->
-    {"true", CL + 4};
-format_thrift_value(_Type, Value, _CurDepth, CL, _Opts) when is_integer(Value) ->
-    ValueStr = integer_to_list(Value),
-    Length = length(ValueStr),
-    {ValueStr, CL + Length};
-format_thrift_value(_Type, Value, _CurDepth, CL, _Opts) when is_float(Value) ->
-    ValueStr = float_to_list(Value),
-    Length = length(ValueStr),
-    {ValueStr, CL + Length}.
+format_thrift_value_({list, _}, _, Result, 0, _ML, _MPSL) ->
+    <<Result/binary, "[...]">>;
+format_thrift_value_({list, Type}, ValueList, Result0, MD, ML, MPSL) ->
+    Result1 = format_thrift_list(Type, ValueList, <<Result0/binary, "[">>, dec(MD), dec(ML), MPSL),
+    <<Result1/binary, "]">>;
+format_thrift_value_({set, _}, _, Result, 0, _ML, _MPSL) ->
+    <<Result/binary, "{...}">>;
+format_thrift_value_({set, Type}, SetofValues, Result0, MD, ML, MPSL) ->
+    Result1 = format_thrift_set(Type, SetofValues, <<Result0/binary, "{">>, dec(MD), dec(ML), MPSL),
+    <<Result1/binary, "}">>;
+format_thrift_value_({map, _}, _, Result, 0, _ML, _MPSL) ->
+    <<Result/binary, "#{...}">>;
+format_thrift_value_({map, KeyType, ValueType}, Map, Result0, MD, ML, MPSL) ->
+    Result1 = format_map(KeyType, ValueType, Map, <<Result0/binary, "#{">>, dec(MD), dec(ML), MPSL, false),
+    <<Result1/binary, "}">>;
+format_thrift_value_(bool, false, Result, _MD, _ML, _MPSL) ->
+    <<Result/binary, "false">>;
+format_thrift_value_(bool, true, Result, _MD, _ML, _MPSL) ->
+    <<Result/binary, "true">>;
+format_thrift_value_(_Type, Value, Result, _MD, _ML, _MPSL) when is_integer(Value) ->
+    ValueStr = erlang:integer_to_binary(Value),
+    <<Result/binary, ValueStr/binary>>;
+format_thrift_value_(_Type, Value, Result, _MD, _ML, _MPSL) when is_float(Value) ->
+    ValueStr = erlang:float_to_binary(Value, [{decimals, ?MAX_FLOAT_DECIMALS}, compact]),
+    <<Result/binary, ValueStr/binary>>.
 
-format_thrift_list(Type, ValueList, CurDepth, CL, Opts) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
-    format_list(Type, ValueList, "", CurDepth, CL, Opts, false);
-format_thrift_list(Type, OriginalValueList, CurDepth, CL, #{max_length := ML} = Opts) ->
-    FirstEntry = hd(OriginalValueList),
-    LastEntry = lists:last(OriginalValueList),
-    {FirstEntryFmt, FirstEntryCL} =
-        format_thrift_value(Type, FirstEntry, CurDepth, CL, Opts),
-    case FirstEntryCL < ML orelse ML < 0 of
+format_thrift_list(Type, ValueList, Result, MD, ML, MPSL) when length(ValueList) =< ?MAX_PRINTABLE_LIST_LENGTH ->
+    format_list(Type, ValueList, Result, MD, ML, MPSL, false);
+format_thrift_list(Type, [FirstEntry | Rest], Result0, MD, ML, MPSL) ->
+    LastEntry = lists:last(Rest),
+    Result1 = format_thrift_value_(Type, FirstEntry, Result0, MD, ML, MPSL),
+    case byte_size(Result1) < ML of
         true ->
-            SkippedLength = length(OriginalValueList) - 2,
-            SkippedMsg = ["...", integer_to_list(SkippedLength), " more..."],
-            SkippedMsgLength = erlang:iolist_size(SkippedMsg),
-            case FirstEntryCL + SkippedMsgLength + 2 < ML orelse ML < 0 of
+            SkippedLength = erlang:integer_to_binary(length(Rest) - 1),
+            Result2 = <<Result1/binary, ",...", SkippedLength/binary, " more...,">>,
+            case byte_size(Result2) < ML of
                 true ->
-                    {LastEntryFmt, LastEntryCL} =
-                        format_thrift_value(Type, LastEntry, CurDepth, FirstEntryCL + SkippedMsgLength + 4, Opts),
-                    format_list_result(
-                        LastEntryCL < ML orelse ML < 0,
-                        [FirstEntryFmt, ",", SkippedMsg, ",", LastEntryFmt],
-                        LastEntryCL,
-                        [FirstEntryFmt, ",..."],
-                        FirstEntryCL + 4
-                    );
+                    format_thrift_value_(Type, LastEntry, Result2, MD, ML, MPSL);
                 false ->
-                    {[FirstEntryFmt, ",..."], FirstEntryCL + 4}
+                    <<Result2/binary, "...">>
             end;
         false ->
-            {[FirstEntryFmt, ",..."], FirstEntryCL + 4}
+            <<Result1/binary, ",...">>
     end.
 
-format_list_result(true, Fmt, CL, _, _) ->
-    {Fmt, CL};
-format_list_result(false, _, _, Fmt, CL) ->
-    {Fmt, CL}.
-
-format_thrift_set(Type, SetofValues, CurDepth, CL, Opts) ->
+format_thrift_set(Type, SetofValues, Result, MD, ML, MPSL) ->
     %% Actually ordsets is a list so leave this implementation as-is
     ValueList = ordsets:to_list(SetofValues),
-    format_list(Type, ValueList, "", CurDepth, CL, Opts, false).
+    format_list(Type, ValueList, Result, MD, ML, MPSL, false).
 
 get_exception_type(ExceptionRecord, ExceptionTypeList) ->
     Result =
@@ -241,213 +197,202 @@ get_exception_type(ExceptionRecord, ExceptionTypeList) ->
             undefined
     end.
 
--spec format_struct(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {iolist(), non_neg_integer()}.
-format_struct(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
-    when MD >= 0, CurDepth > MD ->
-    {[to_string(Struct), "{...}"], CL + 5}; %% 5 = length("{...}")
-format_struct(Module, Struct, StructValue, CurDepth, CL, Opts = #{max_length := ML}) ->
+-spec format_struct(atom(), atom(), term(), binary(), non_neg_integer(), non_neg_integer(), opts()) ->
+    binary().
+format_struct(_Module, Struct, _StructValue, Result, 0, _ML, _MPSL) ->
+    StructName = atom_to_binary(Struct, unicode),
+    <<Result/binary, StructName/binary, "{...}">>;
+format_struct(Module, Struct, StructValue, Result0, MD, ML, MPSL) ->
     %% struct and exception have same structure
     {struct, _, StructMeta} = Module:struct_info(Struct),
-    ValueList = tl(tuple_to_list(StructValue)), %% Remove record name
-    case length(StructMeta) == length(ValueList) of
+    case length(StructMeta) == tuple_size(StructValue) - 1 of
         true ->
-            StructName = to_string(Struct),
-            StructNameLength = length(StructName),
-            {Params, NewCL} =
-                format_struct_(
-                    StructMeta,
-                    ValueList,
-                    "",
-                    CurDepth + 1,
-                    CL + StructNameLength + 2,
-                    Opts,
-                    false
-                ),
-            {[StructName, "{", Params, "}"], NewCL};
+            StructName = atom_to_binary(Struct, unicode),
+            Result1 = format_struct_(
+                StructMeta,
+                StructValue,
+                2,
+                <<Result0/binary, StructName/binary, "{">>,
+                MD,
+                dec(ML),
+                MPSL,
+                false
+            ),
+            <<Result1/binary, "}">>;
         false ->
-            Length = get_length(ML, CL),
-            Params = io_lib:format("~p", [StructValue], [{chars_limit, Length}]),
-            {Params, CL + Length}
+            % TODO when is this possible?
+            format_verbatim(StructValue, Result0, MD, ML)
     end.
 
-format_struct_([], [], Acc, _CurDepth, CL, _Opts, _AddDelimiter) ->
-    {Acc, CL};
-format_struct_(_Types, _Values, Result, _CurDepth, CL, #{max_length := ML}, AddDelimiter)
-    when ML >= 0, CL > ML->
-    Delimiter = maybe_add_delimiter(AddDelimiter),
-    DelimiterLen = length(Delimiter),
-    {[Result, Delimiter, "..."], CL + 3 + DelimiterLen};
-format_struct_([Type | RestTypes], [Value | RestValues], Acc, CurDepth, CL, Opts, AddDelimiter) ->
-    case format_argument(Type, Value, CurDepth, CL, Opts) of
-        {undefined, CL} ->
-            format_struct_(
-                RestTypes,
-                RestValues,
-                Acc,
-                CurDepth,
-                CL,
-                Opts,
-                AddDelimiter
-            );
-        {F, CL1} ->
-            Delimiter = maybe_add_delimiter(AddDelimiter),
-            DelimiterLen = length(Delimiter),
-            format_struct_(
-                RestTypes,
-                RestValues,
-                [Acc | [Delimiter, F]],
-                CurDepth, CL1 + DelimiterLen,
-                Opts,
-                true
-            )
-    end.
+format_struct_([], S, I, Result, _MD, _ML, _MPSL, _AD) when I > tuple_size(S) ->
+    Result;
+format_struct_(_Types, _S, _I, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
+    Result1 = maybe_add_delimiter(AD, Result0),
+    <<Result1/binary, "...">>;
+format_struct_([Type | RestTypes], S, I, Result0, MD, ML, MPSL, AD) ->
+    Value = erlang:element(I, S),
+    {Result1, AD1} = format_argument(Type, Value, Result0, MD, ML, MPSL, AD),
+    format_struct_(
+        RestTypes,
+        S,
+        I + 1,
+        Result1,
+        MD,
+        ML,
+        MPSL,
+        AD1
+    ).
 
--spec format_union(atom(), atom(), term(), non_neg_integer(), non_neg_integer(), opts()) ->
-    {iolist(), non_neg_integer()}.
-format_union(_Module, Struct, _StructValue, CurDepth, CL, #{max_depth := MD})
-    when MD >= 0, CurDepth > MD ->
-    {[to_string(Struct), "{...}"], CL + 5}; %% 5 = length("{...}"
-format_union(Module, Struct, {Type, UnionValue}, CurDepth, CL, Opts) ->
+-spec format_union(atom(), atom(), term(), binary(), non_neg_integer(), non_neg_integer(), opts()) ->
+    binary().
+format_union(_Module, Struct, _StructValue, Result, 0, _ML, _MPSL) ->
+    StructName = atom_to_binary(Struct, unicode),
+    <<Result/binary, StructName/binary, "{...}">>;
+format_union(Module, Struct, {Type, UnionValue}, Result0, MD, ML, MPSL) ->
     {struct, union, StructMeta} = Module:struct_info(Struct),
-    {value, UnionMeta} = lists:keysearch(Type, 4, StructMeta),
-    StructName = to_string(Struct),
-    StructNameLen = length(StructName),
-    {Argument, CL1} = format_argument(
-        UnionMeta,
-        UnionValue,
-        CurDepth,
-        CL + StructNameLen + 2,
-        Opts
-    ), %% 2 = length("{}")
-    {[StructName, "{", Argument, "}"], CL1}.
+    UnionMeta = lists:keyfind(Type, 4, StructMeta),
+    StructName = atom_to_binary(Struct, unicode),
+    Result1 = <<Result0/binary, StructName/binary, "{">>,
+    case byte_size(Result1) > ML of
+        false ->
+            {Result2, _} = format_argument(
+                UnionMeta,
+                UnionValue,
+                Result1,
+                MD,
+                dec(ML),
+                MPSL,
+                false
+            ),
+            <<Result2/binary, "}">>;
+        true ->
+            <<Result1/binary, "...}">>
+    end.
 
-format_non_printable_string(Value) ->
-    Size = byte_size(Value),
-    ["<<", integer_to_list(Size), " bytes>>"].
+format_non_printable_string(Value, Result) ->
+    SizeStr = erlang:integer_to_binary(byte_size(Value)),
+    <<Result/binary, "<<", SizeStr/binary, " bytes>>">>.
 
-is_printable(<<>> = Slice, _Opts) ->
-    {ok, Slice};
-is_printable(Value, #{max_pritable_string_length := MPSL}) ->
+is_printable(<<>> = Slice, _ML, _CL, _MPSL) ->
+    Slice;
+is_printable(Value, ML, CL, MPSL) ->
     %% Try to get slice of first MPSL bytes from Value,
     %% assuming success means Value is printable string
     %% NOTE: Empty result means non-printable Value
-    ValueSize = byte_size(Value),
-    try string:slice(Value, 0, MPSL) of
+    try string:slice(Value, 0, compute_slice_length(ML, CL, MPSL)) of
         <<>> ->
-            {error, not_printable};
-        Slice when byte_size(Slice) < ValueSize ->
-            {ok, [Slice, "..."]};
+            not_printable;
         Slice ->
-            {ok, Slice}
+            Slice
     catch
         _:_ ->
             %% Completely wrong binary data drives to crash in string internals,
             %% mark such data as non-printable instead
-            {error, not_printable}
+            not_printable
     end.
 
--spec value_to_string(list() | binary() | atom()) -> list().
-value_to_string(S) ->
-    [maybe_replace(C) || C <- string:to_graphemes(to_string(S))].
+dec(unlimited) -> unlimited;
+dec(0) -> 0;
+dec(N) -> N - 1.
 
-maybe_replace($\') ->
-    [$\\, $\'];
-maybe_replace(C) ->
+format_verbatim(Term, Result, #{max_length := ML, max_depth := MD}) ->
+    format_verbatim(Term, Result, MD, ML).
+
+format_verbatim(Term, Result, MD, ML) ->
+    Opts = [
+        {line_length , 0},
+        {depth       , case MD of unlimited -> -1; _ -> MD end},
+        {chars_limit , case ML of unlimited -> -1; _ -> max_(0, ML - byte_size(Result)) end},
+        {encoding    , unicode}
+    ],
+    Printout = erlang:iolist_to_binary(io_lib_pretty:print(Term, Opts)),
+    <<Result/binary, Printout/binary>>.
+
+compute_slice_length(unlimited, _CL, MPSL) ->
+    MPSL;
+compute_slice_length(ML, CL, MPSL) ->
+    max_(12, min_(ML - CL, MPSL)). % length("<<X bytes>>") = 11
+
+max_(A, B) when A > B -> A;
+max_(_, B) -> B.
+
+min_(A, B) when A < B -> A;
+min_(_, B) -> B.
+
+-spec escape_printable_string(binary(), binary()) -> binary().
+escape_printable_string(<<>>, Result) ->
+    Result;
+escape_printable_string(<<$', String/binary>>, Result) ->
+    escape_printable_string(String, <<Result/binary, "\\'">>);
+escape_printable_string(<<C/utf8, String/binary>>, Result) ->
     case unicode_util:is_whitespace(C) of
-        true -> $\s;
-        false -> C
+        true  -> escape_printable_string(String, <<Result/binary, " ">>);
+        false -> escape_printable_string(String, <<Result/binary, C/utf8>>)
     end.
 
--spec to_string(list() | binary() | atom()) -> list().
-%% NOTE: Must match to supported types for `~s`
-to_string(Value) when is_list(Value) ->
-    Value;
+-spec to_string(binary() | atom()) -> binary().
 to_string(Value) when is_binary(Value) ->
-    unicode:characters_to_list(Value);
+    Value;
 to_string(Value) when is_atom(Value) ->
-    atom_to_list(Value);
+    erlang:atom_to_binary(Value, unicode);
 to_string(_) ->
     error(badarg).
 
 normalize_options(Opts) ->
     maps:merge(#{
-        max_depth => -1,
-        max_length => -1,
+        max_depth => unlimited,
+        max_length => unlimited,
         max_pritable_string_length => ?MAX_BIN_SIZE
     }, Opts).
 
-maybe_add_delimiter(false) ->
-    "";
-maybe_add_delimiter(true) ->
-    ",".
+maybe_add_delimiter(false, Result) ->
+    Result;
+maybe_add_delimiter(true, Result) ->
+    <<Result/binary, ",">>.
 
-maybe_add_more_marker(false) ->
-    "";
-maybe_add_more_marker(true) ->
-    "...".
+maybe_add_more_marker(false, Result) ->
+    Result;
+maybe_add_more_marker(true, Result) ->
+    <<Result/binary, "...">>.
 
-get_length(ML, CL) when ML > CL ->
-    ML - CL;
-get_length(_ML, _CL) ->
-    0.
-
-format_list(_Type, [], Result, _CurDepth, CL, _Opts, _IsFirst) ->
-    {Result, CL};
-format_list(Type, [Entry | ValueList], AccFmt, CurDepth, CL, Opts, IsFirst) ->
-    #{max_length := ML} = Opts,
-    Delimiter = maybe_add_delimiter(IsFirst),
-    DelimiterLen = length(Delimiter),
-    {Fmt, CL1} = format_thrift_value(Type, Entry, CurDepth, CL + DelimiterLen, Opts),
-    Result = [AccFmt | [Delimiter, Fmt]],
-    case CL1 of
-        CL1 when ML < 0 ->
-            format_list(Type, ValueList, Result, CurDepth, CL1, Opts, true);
-        CL1 when CL1 =< ML ->
-            format_list(Type, ValueList, Result, CurDepth, CL1, Opts, true);
-        CL1 ->
+format_list(_Type, [], Result, _MD, _ML, _MPSL, _AD) ->
+    Result;
+format_list(Type, [Entry | ValueList], Result0, MD, ML, MPSL, AD) ->
+    Result1 = maybe_add_delimiter(AD, Result0),
+    Result2 = format_thrift_value_(Type, Entry, Result1, MD, ML, MPSL),
+    case byte_size(Result2) of
+        CL when ML > CL ->
+            format_list(Type, ValueList, Result2, MD, ML, MPSL, true);
+        _ ->
             MaybeAddMoreMarker = length(ValueList) =/= 0,
-            stop_format(Result, CL1, MaybeAddMoreMarker)
+            stop_format(MaybeAddMoreMarker, Result2)
     end.
 
-format_map(_KeyType, _ValueType, E, Result, _CurDepth, CL, _Opts, _AddDelimiter) when map_size(E) =:= 0 ->
-    {Result, CL};
-format_map(KeyType, ValueType, Map, AccFmt, CurDepth, CL, Opts, AddDelimiter) ->
+format_map(_KeyType, _ValueType, Map, Result, _MD, _ML, _MPSL, _AD) when map_size(Map) =:= 0 ->
+    Result;
+format_map(KeyType, ValueType, Map, Result0, MD, ML, MPSL, AD) ->
     MapIterator = maps:iterator(Map),
-    format_map_(KeyType, ValueType, maps:next(MapIterator), AccFmt, CurDepth, CL, Opts, AddDelimiter).
+    format_map_(KeyType, ValueType, maps:next(MapIterator), Result0, MD, ML, MPSL, AD).
 
-format_map_(KeyType, ValueType, {Key, Value, MapIterator}, AccFmt, CurDepth, CL, Opts, AddDelimiter) ->
-    {KeyFmt, CL1} = format_thrift_value(KeyType, Key, CurDepth, CL, Opts),
-    {ValueFmt, CL2} = format_thrift_value(ValueType, Value, CurDepth, CL1, Opts),
-    #{max_length := ML} = Opts,
-    MapStr = "=>",
-    MapStrLen = 2,
-    Delimiter = maybe_add_delimiter(AddDelimiter),
-    DelimiterLen = length(Delimiter),
-    NewCL = CL2 + MapStrLen + DelimiterLen,
-    Result = [AccFmt | [Delimiter, KeyFmt, MapStr, ValueFmt]],
+format_map_(KeyType, ValueType, {Key, Value, MapIterator}, Result0, MD, ML, MPSL, AD) ->
+    Result1 = maybe_add_delimiter(AD, Result0),
+    Result2 = format_thrift_value_(KeyType, Key, Result1, MD, ML, MPSL),
+    Result3 = format_thrift_value_(ValueType, Value, <<Result2/binary, "=">>, MD, ML, MPSL),
     Next = maps:next(MapIterator),
-    case NewCL of
-        NewCL when ML < 0 ->
-            format_map_(KeyType, ValueType, Next, Result, CurDepth, NewCL, Opts, true);
-        NewCL when NewCL =< ML ->
-            format_map_(KeyType, ValueType, Next, Result, CurDepth, NewCL, Opts, true);
-        NewCL ->
+    case byte_size(Result3) of
+        CL when ML > CL ->
+            format_map_(KeyType, ValueType, Next, Result3, MD, ML, MPSL, true);
+        _ ->
             MaybeAddMoreMarker = Next =/= none,
-            stop_format(Result, NewCL, MaybeAddMoreMarker)
+            stop_format(MaybeAddMoreMarker, Result3)
     end;
-format_map_(_, _, _, AccFmt, _, CL, _, _) ->
-    {AccFmt, CL}.
+format_map_(_, _, _, Result, _, _, _, _) ->
+    Result.
 
-stop_format(Result, CL1, MaybeAddMoreMarker) ->
-    Delimiter1 = maybe_add_delimiter(MaybeAddMoreMarker),
-    DelimiterLen1 = length(Delimiter1),
-    MoreMarker = maybe_add_more_marker(MaybeAddMoreMarker),
-    MoreMarkerLen = length(MoreMarker),
-    {
-        [Result | [Delimiter1, MoreMarker]],
-        CL1 + MoreMarkerLen + DelimiterLen1
-    }.
+stop_format(MaybeAddMoreMarker, Result0) ->
+    Result1 = maybe_add_delimiter(MaybeAddMoreMarker, Result0),
+    Result2 = maybe_add_more_marker(MaybeAddMoreMarker, Result1),
+    Result2.
 
 -ifdef(TEST).
 
@@ -608,7 +553,8 @@ depth_test_() -> [
                 dmsl_payment_processing_thrift,
                 'PartyManagement',
                 'CreateClaim',
-                ?ARGS
+                ?ARGS,
+                #{}
             )
         )
     ),
@@ -647,21 +593,6 @@ depth_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_depth => 2}
-            )
-        )
-    ),
-    ?_assertEqual(
-        "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{"
-        "contract_modification=ContractModificationUnit{id='1CR1Y2ZcrA0',modification="
-        "ContractModification{...}}},...2 more...,PartyModification{shop_modification="
-        "ShopModificationUnit{id='1CR1Y2ZcrA2',modification=ShopModification{...}}}])",
-        format_msg(
-            format_call(
-                dmsl_payment_processing_thrift,
-                'PartyManagement',
-                'CreateClaim',
-                ?ARGS,
                 #{max_depth => 3}
             )
         )
@@ -681,23 +612,35 @@ depth_test_() -> [
             )
         )
     ),
-    ?_test(
-        begin
-            {Result, _} =
-                format_thrift_value(
-                    {set, string},
-                    ordsets:from_list(["a", "2", "ddd"]),
-                    0, 0, #{max_length => -1, max_depth => -1}
-                ),
-            ?_assertEqual(
-                "{'a', '2', 'ddd'}",
-                lists:flatten(Result)
-                )
-        end
+    ?_assertEqual(
+        "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{"
+        "contract_modification=ContractModificationUnit{id='1CR1Y2ZcrA0',modification="
+        "ContractModification{...}}},...2 more...,PartyModification{shop_modification="
+        "ShopModificationUnit{id='1CR1Y2ZcrA2',modification=ShopModification{...}}}])",
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CreateClaim',
+                ?ARGS,
+                #{max_depth => 4}
+            )
+        )
+    ),
+    ?_assertEqual(
+        <<"{'2','a','ddd'}">>,
+        format_thrift_value(
+            {set, string},
+            ordsets:from_list([<<"a">>, <<"2">>, <<"ddd">>]),
+            <<>>,
+            unlimited,
+            unlimited,
+            ?MAX_PRINTABLE_LIST_LENGTH
+        )
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
-        "id='1CSHThTEJ84',history=[...],history_range=HistoryRange{...},aux_state=Content{...},"
+        "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{...},aux_state=Content{...},"
         "aux_state_legacy=Value{...}}})",
         format_msg(
             format_call(
@@ -705,22 +648,22 @@ depth_test_() -> [
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_depth => 4}
+                #{max_depth => 3}
             )
         )
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
         "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{limit=10,direction="
-        "backward},aux_state=Content{data=Value{...}},aux_state_legacy=Value{obj=#{Value{...}=>"
-        "Value{...},Value{...}=>Value{...}}}}})",
+        "backward},aux_state=Content{data=Value{...}},aux_state_legacy=Value{obj=#{Value{...}="
+        "Value{...},Value{...}=Value{...}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_depth => 5}
+                #{max_depth => 4}
             )
         )
     )
@@ -748,7 +691,7 @@ length_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_length => -1}
+                #{max_length => unlimited}
             )
         )
     ),
@@ -786,7 +729,10 @@ length_test_() -> [
         "O\\'Centro, 060...',post_address='NaN',representative_position='Director',"
         "representative_full_name='Someone',representative_document='100$ banknote',"
         "russian_bank_account=RussianBankAccount{account='4276300010908312893',bank_name="
-        "'SomeBank',bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...])",
+        "'SomeBank',bank_post_account='123129876',bank_bik='66642666'}}}}}}}},...2 more...,"
+        "PartyModification{shop_modification=ShopModificationUnit{id='1CR1Y2ZcrA2',"
+        "modification=ShopModification{shop_account_creation=ShopAccountParams{"
+        "currency=CurrencyRef{symbolic_code='RUB'}}}}}])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -816,7 +762,7 @@ length_test_() -> [
         "ContractParams{template=ContractTemplateRef{id=1},payment_institution=PaymentInstitutionRef{id=1},"
         "contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity=RussianLegalEntity{"
         "registered_name='Hoofs & Horns OJSC',registered_number='1234509876',inn='1213456789012',"
-        "actual_address='Nezahualcoyotl 109 Piso 8, O\\'Centro, 060...',...}}}}}}},...])",
+        "actual_address='Nezahualcoyotl 109 Piso 8, O...',...}}}}}}},...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -830,13 +776,13 @@ length_test_() -> [
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{"
         "ns='party',id='1CSHThTEJ84',history=[Event{id=1,created_at='2019-08-13T07:52:11.080519Z',"
-        "data=Value{arr=[Value{obj=#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},"
-        "Value{str='vsn'}=>Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range="
+        "data=Value{arr=[Value{obj=#{Value{str='ct'}=Value{str='application/x-erlang-binary'},"
+        "Value{str='vsn'}=Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range="
         "HistoryRange{limit=10,"
-        "direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}=>"
-        "Value{bin=<<52 bytes>>},Value{str='ct'}=>Value{str='application/x-erlang-binary'}}}},"
-        "aux_state_legacy=Value{obj=#{Value{str='aux_state'}=>Value{bin=<<52 bytes>>},Value{str='ct'}"
-        "=>Value{str='application/x-erlang-binary'}}}}})",
+        "direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}="
+        "Value{bin=<<52 bytes>>},Value{str='ct'}=Value{str='application/x-erlang-binary'}}}},"
+        "aux_state_legacy=Value{obj=#{Value{str='aux_state'}=Value{bin=<<52 bytes>>},Value{str='ct'}"
+        "=Value{str='application/x-erlang-binary'}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -850,11 +796,12 @@ length_test_() -> [
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
         "id='1CSHThTEJ84',history=[Event{id=1,created_at='2019-08-13T07:52:11.080519Z',data="
-        "Value{arr=[Value{obj=#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},"
-        "Value{str='vsn'}=>Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range="
+        "Value{arr=[Value{obj=#{Value{str='ct'}=Value{str='application/x-erlang-binary'},"
+        "Value{str='vsn'}=Value{i=6}}},Value{bin=<<249 bytes>>}]}}],history_range="
         "HistoryRange{limit=10,"
-        "direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}=>"
-        "Value{bin=<<52 bytes>>},Value{str='ct'}=>Value{str='application/x-erlang-binary'}}}},...}})",
+        "direction=backward},aux_state=Content{data=Value{obj=#{Value{str='aux_state'}="
+        "Value{bin=<<52 bytes>>},Value{str='ct'}=Value{str='application/x-erlang-binary'}}}},"
+        "aux_state_legacy=Value{...}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -868,8 +815,7 @@ length_test_() -> [
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
         "id='1CSHThTEJ84',history=[Event{id=1,created_at='2019-08-13T07:52:11.080519Z',data="
-        "Value{arr=[Value{obj=#{Value{str='ct'}=>Value{str='application/x-erlang-binary'},...}},"
-        "...]}}],...}})",
+        "Value{arr=[Value{obj=#{Value{...}=Value{...},...}},...]}}],...}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
@@ -895,8 +841,8 @@ length_test_() -> [
     )
 ].
 
--spec depth_and_lenght_test_() -> _.
-depth_and_lenght_test_() -> [
+-spec depth_and_length_test_() -> _.
+depth_and_length_test_() -> [
     ?_assertEqual(
         "PartyManagement:CreateClaim(party_id='1CR1Xziml7o',changeset=[PartyModification{contract_modification"
         "=ContractModificationUnit{id='1CR1Y2ZcrA0',modification=ContractModification{creation="
@@ -926,13 +872,13 @@ depth_and_lenght_test_() -> [
                 'PartyManagement',
                 'CreateClaim',
                 ?ARGS,
-                #{max_length => 2048, max_depth => 7}
+                #{max_length => 2048, max_depth => 6}
             )
         )
     ),
     ?_assertEqual(
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
-        "id='1CSHThTEJ84',history=[...],history_range=HistoryRange{...},aux_state=Content{...},"
+        "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{...},aux_state=Content{...},"
         "aux_state_legacy=Value{...}}})",
         format_msg(
             format_call(
@@ -948,14 +894,34 @@ depth_and_lenght_test_() -> [
         "Processor:ProcessCall(a=CallArgs{arg=Value{bin=<<732 bytes>>},machine=Machine{ns='party',"
         "id='1CSHThTEJ84',history=[Event{...}],history_range=HistoryRange{limit=10,"
         "direction=backward},aux_state=Content{data=Value{...}},aux_state_legacy=Value{obj="
-        "#{Value{...}=>Value{...},Value{...}=>Value{...}}}}})",
+        "#{Value{...}=Value{...},Value{...}=Value{...}}}}})",
         format_msg(
             format_call(
                 mg_proto_state_processing_thrift,
                 'Processor',
                 'ProcessCall',
                 ?ARGS2,
-                #{max_length => 512, max_depth => 5}
+                #{max_length => 512, max_depth => 4}
+            )
+        )
+    )
+].
+
+-spec verbatim_test_() -> _.
+verbatim_test_() -> [
+    ?_assertEqual(
+        "PartyManagement:CallMissingFunction("
+        "[undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
+        "<<\"1CR1\"...>>,{...}}},{contract_modification,{payproc_ContractModificationUnit,<<...>>,"
+        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]]"
+        ")",
+        format_msg(
+            format_call(
+                dmsl_payment_processing_thrift,
+                'PartyManagement',
+                'CallMissingFunction',
+                ?ARGS,
+                #{max_length => 256}
             )
         )
     )
