@@ -118,17 +118,8 @@ format_thrift_value_({struct, exception, {Module, Struct}}, Value, Result, MD, M
 format_thrift_value_({enum, {_Module, _Struct}}, Value, Result, _MD, _ML, _MPSL) ->
     ValueString = to_string(Value),
     <<Result/binary, ValueString/binary>>;
-format_thrift_value_(string, Value, Result0, _MD, ML, MPSL) when is_binary(Value) ->
-    case is_printable(Value, ML, byte_size(Result0), MPSL) of
-        Slice when is_binary(Slice) ->
-            Result1 = escape_printable_string(Slice, <<Result0/binary, "'">>),
-            case byte_size(Slice) == byte_size(Value) of
-                true -> <<Result1/binary, "'">>;
-                false -> <<Result1/binary, "...'">>
-            end;
-        not_printable ->
-            format_non_printable_string(Value, Result0)
-    end;
+format_thrift_value_(string, Value, Result, _MD, ML, MPSL) when is_binary(Value) ->
+    format_string(Value, Result, ML, MPSL);
 format_thrift_value_({list, _}, _, Result, 0, _ML, _MPSL) ->
     <<Result/binary, "[...]">>;
 format_thrift_value_({list, Type}, ValueList, Result0, MD, ML, MPSL) ->
@@ -269,28 +260,6 @@ format_union(Module, Struct, {Type, UnionValue}, Result0, MD, ML, MPSL) ->
             <<Result1/binary, "...}">>
     end.
 
-format_non_printable_string(Value, Result) ->
-    SizeStr = erlang:integer_to_binary(byte_size(Value)),
-    <<Result/binary, "<<", SizeStr/binary, " bytes>>">>.
-
-is_printable(<<>> = Slice, _ML, _CL, _MPSL) ->
-    Slice;
-is_printable(Value, ML, CL, MPSL) ->
-    %% Try to get slice of first MPSL bytes from Value,
-    %% assuming success means Value is printable string
-    %% NOTE: Empty result means non-printable Value
-    try string:slice(Value, 0, compute_slice_length(ML, CL, MPSL)) of
-        <<>> ->
-            not_printable;
-        Slice ->
-            Slice
-    catch
-        _:_ ->
-            %% Completely wrong binary data drives to crash in string internals,
-            %% mark such data as non-printable instead
-            not_printable
-    end.
-
 dec(unlimited) -> unlimited;
 dec(0) -> 0;
 dec(N) -> N - 1.
@@ -308,27 +277,91 @@ format_verbatim(Term, Result, MD, ML) ->
     Printout = erlang:iolist_to_binary(io_lib_pretty:print(Term, Opts)),
     <<Result/binary, Printout/binary>>.
 
-compute_slice_length(unlimited, _CL, MPSL) ->
-    MPSL;
-compute_slice_length(ML, CL, MPSL) ->
-    max_(12, min_(ML - CL, MPSL)). % length("<<X bytes>>") = 11
-
 max_(A, B) when A > B -> A;
 max_(_, B) -> B.
 
 min_(A, B) when A < B -> A;
 min_(_, B) -> B.
 
--spec escape_printable_string(binary(), binary()) -> binary().
+-spec format_string(binary(), binary(), limit(), non_neg_integer()) -> binary().
+format_string(Value, Result, ML, MPSL) ->
+    case is_printable(Value, dec(dec(ML)), byte_size(Result), MPSL) of
+        Slice when is_binary(Slice) ->
+            try_format_printable_string(Value, Slice, Result);
+        non_printable ->
+            format_non_printable_string(Value, Result)
+    end.
+
+is_printable(<<>> = Slice, _ML, _CL, _MPSL) ->
+    Slice;
+is_printable(Value, ML, CL, MPSL) ->
+    %% Try to get slice of first MPSL bytes from Value,
+    %% assuming success means Value is printable string
+    %% NOTE: Empty result means non-printable Value
+    try string:slice(Value, 0, compute_slice_length(ML, CL, MPSL)) of
+        <<>> ->
+            non_printable;
+        Slice ->
+            Slice
+    catch
+        _:_ ->
+            %% Completely wrong binary data drives to crash in string internals,
+            %% mark such data as non-printable instead
+            non_printable
+    end.
+
+compute_slice_length(unlimited, _CL, MPSL) ->
+    MPSL;
+compute_slice_length(ML, CL, MPSL) ->
+    max_(12, min_(ML - CL, MPSL)). % length("<<X bytes>>") = 11
+
+-spec try_format_printable_string(binary(), binary(), binary()) -> binary().
+try_format_printable_string(Value, Slice, Result0) ->
+    Result1 = <<Result0/binary, "'">>,
+    case escape_printable_string(Slice, Result1) of
+        Result2 when is_binary(Result2) ->
+            case byte_size(Slice) == byte_size(Value) of
+                true -> <<Result2/binary, "'">>;
+                false -> <<Result2/binary, "...'">>
+            end;
+        non_printable ->
+            format_non_printable_string(Value, Result0)
+    end.
+
+format_non_printable_string(Value, Result) ->
+    SizeStr = erlang:integer_to_binary(byte_size(Value)),
+    <<Result/binary, "<<", SizeStr/binary, " bytes>>">>.
+
+-spec escape_printable_string(binary(), binary()) -> binary() | non_printable.
 escape_printable_string(<<>>, Result) ->
     Result;
 escape_printable_string(<<$', String/binary>>, Result) ->
     escape_printable_string(String, <<Result/binary, "\\'">>);
 escape_printable_string(<<C/utf8, String/binary>>, Result) ->
-    case unicode_util:is_whitespace(C) of
-        true  -> escape_printable_string(String, <<Result/binary, " ">>);
-        false -> escape_printable_string(String, <<Result/binary, C/utf8>>)
+    case printable_char(C) of
+        ws -> escape_printable_string(String, <<Result/binary, " ">>);
+        pr -> escape_printable_string(String, <<Result/binary, C/utf8>>);
+        no -> non_printable
     end.
+
+%% Stolen from:
+%% https://github.com/erlang/otp/blob/acc3b04/lib/stdlib/src/io_lib_pretty.erl#L886
+printable_char($\n) -> ws;
+printable_char($\r) -> ws;
+printable_char($\t) -> ws;
+printable_char($\v) -> ws;
+printable_char($\b) -> ws;
+printable_char($\f) -> ws;
+printable_char($\e) -> ws;
+printable_char(C) when
+    C >= $\s andalso C =< $~ orelse
+    C >= 16#A0 andalso C < 16#D800 orelse
+    C > 16#DFFF andalso C < 16#FFFE orelse
+    C > 16#FFFF andalso C =< 16#10FFFF
+->
+    pr;
+printable_char(_) ->
+    no.
 
 -spec to_string(binary() | atom()) -> binary().
 to_string(Value) when is_binary(Value) ->
@@ -762,7 +795,7 @@ length_test_() -> [
         "ContractParams{template=ContractTemplateRef{id=1},payment_institution=PaymentInstitutionRef{id=1},"
         "contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity=RussianLegalEntity{"
         "registered_name='Hoofs & Horns OJSC',registered_number='1234509876',inn='1213456789012',"
-        "actual_address='Nezahualcoyotl 109 Piso 8, O...',...}}}}}}},...])",
+        "actual_address='Nezahualcoyotl 109 Piso 8,...',...}}}}}}},...])",
         format_msg(
             format_call(
                 dmsl_payment_processing_thrift,
@@ -924,6 +957,43 @@ verbatim_test_() -> [
                 #{max_length => 256}
             )
         )
+    )
+].
+
+-spec printability_test_() -> _.
+printability_test_() -> [
+    ?_assertEqual(
+        <<"'Processor:ProcessCall'">>,
+        format_string(<<"Processor:ProcessCall">>, <<>>, unlimited, 100)
+    ),
+    ?_assertEqual(
+        <<"'Processor   ProcessCall'">>,
+        format_string(<<"Processor\r\n\tProcessCall">>, <<>>, unlimited, 100)
+    ),
+    ?_assertEqual(
+        <<"<<42 bytes>>">>,
+        format_string(<<0:42/integer-unit:8>>, <<>>, unlimited, 100)
+    ),
+    ?_assertEqual(
+        <<"<<59 bytes>>">>,
+        format_string(
+            <<16#1c, 0, 0, 0, "request_additional_data", 0, 0, 0, "PSE420XXVRG4X2Z31207107142808">>,
+            <<>>,
+            unlimited,
+            100
+        )
+    ),
+    ?_assertEqual(
+        <<"<<7 bytes>>">>,
+        format_string(<<15, 0, 1, 0, 0, 0, 3>>, <<>>, unlimited, 100)
+    )
+].
+
+-spec limited_printability_test_() -> _.
+limited_printability_test_() -> [
+    ?_assertEqual(
+        <<"'Processor:ProcessC...'">>,
+        format_string(<<"Processor:ProcessCall">>, <<>>, 20, 100)
     )
 ].
 
