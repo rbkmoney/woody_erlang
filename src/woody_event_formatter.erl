@@ -17,7 +17,7 @@
 -type opts():: #{
     max_depth  => limit(),
     max_length => limit(),
-    max_pritable_string_length => non_neg_integer()
+    max_printable_string_length => non_neg_integer()
 }.
 
 -export_type([opts/0]).
@@ -33,7 +33,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
         {struct, struct, ArgTypes} ->
             ML = maps:get(max_length, Opts1),
             MD = maps:get(max_depth, Opts1),
-            MPSL = maps:get(max_pritable_string_length, Opts1),
+            MPSL = maps:get(max_printable_string_length, Opts1),
             Result1 = format_call_(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
             <<Result1/binary, ")">>
     catch error:badarg ->
@@ -87,7 +87,7 @@ format_exception(Module, Service, Function, Value, Opts) when is_tuple(Value) ->
 format_exception(_Module, _Service, _Function, Value, Opts) ->
     {"~ts", [format_verbatim(Value, <<>>, normalize_options(Opts))]}.
 
-format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_pritable_string_length := MPSL}) ->
+format(ReplyType, Value, #{max_length := ML, max_depth := MD, max_printable_string_length := MPSL}) ->
     try
         ReplyValue = format_thrift_value(ReplyType, Value, <<>>, MD, ML, MPSL),
         {"~ts", [ReplyValue]}
@@ -375,7 +375,7 @@ normalize_options(Opts) ->
     maps:merge(#{
         max_depth => unlimited,
         max_length => unlimited,
-        max_pritable_string_length => ?MAX_BIN_SIZE
+        max_printable_string_length => ?MAX_BIN_SIZE
     }, Opts).
 
 maybe_add_delimiter(false, Result) ->
