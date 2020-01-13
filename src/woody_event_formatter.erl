@@ -10,7 +10,7 @@
 -define(MAX_PRINTABLE_LIST_LENGTH, 3).
 -define(MAX_FLOAT_DECIMALS, 8).
 %% Binaries under size below will log as-is.
--define(MAX_BIN_SIZE, 80).
+-define(MAX_BIN_SIZE, 40).
 -define(MAX_LENGTH, 1000).
 
 -type limit() :: non_neg_integer() | unlimited.
