@@ -227,8 +227,7 @@ format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
 -spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), options()) ->
     {severity(), msg(), meta()}.
 format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
-    FormatOpts = get_formatter_opts(Opts),
-    {Severity, Msg} = format_event(Event, Meta, RpcID, FormatOpts),
+    {Severity, Msg} = format_event(Event, Meta, RpcID, Opts),
     {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
 
 get_essential_meta(Meta, Event, Keys) ->
