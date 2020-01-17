@@ -1270,6 +1270,36 @@ result_test_() -> [
                 #{}
             )
         )
+    ),
+        ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "Value{arr=[Value{str='tup'},...2 more...,Value{obj=#{Value{str='why'}=Value{b=false}}}]}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
+                #{
+                    deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
+                    execution_start_time => 1565695142994,
+                    function => 'Call',
+                    metadata => #{},
+                    result => {ok, {'arr', [
+                        {'str', <<"tup">>}, {'str', <<"blarg">>}, {'i', 42},
+                        {'obj', #{{'str', <<"why">>} => {'b', false}}}
+                    ]}},
+                    role => server,
+                    service => 'Automaton',
+                    service_schema => {mg_proto_state_processing_thrift, 'Automaton'},
+                    status => ok,
+                    type => call
+                },
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>
+                },
+                #{}
+            )
+        )
     )
 ].
 
