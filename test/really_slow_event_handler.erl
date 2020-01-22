@@ -47,7 +47,7 @@ init(Timeout) -> {ok, #{timeout => Timeout, socket_errors_caught => 0}}.
     {reply, ok | {ok, pos_integer()}, state()}.
 handle_call({Event, Rpc, #{status := error, reason := <<"The socket has been closed.">>} = Meta, Opts}, _, #{
     socket_errors_caught := Caught
-} = State) when 
+} = State) when
     Event =:= ?EV_SERVICE_HANDLER_RESULT orelse
     Event =:= ?EV_SERVER_RECEIVE ->
     woody_tests_SUITE:handle_event(Event, Rpc, Meta, Opts),
