@@ -71,6 +71,7 @@
     call_thrift_multiplexed_test/1,
     call_deadline_ok_test/1,
     call_deadline_reached_on_client_test/1,
+    server_client_timeout_handled/1,
     call_deadline_timeout_test/1,
     server_http_req_validation_test/1,
     try_bad_handler_spec_test/1,
@@ -223,6 +224,7 @@
 -spec call_thrift_multiplexed_test(config()) -> any().
 -spec call_deadline_ok_test(config()) -> any().
 -spec call_deadline_reached_on_client_test(config()) -> any().
+-spec server_client_timeout_handled(config()) -> any().
 -spec call_deadline_timeout_test(config()) -> any().
 -spec server_http_req_validation_test(config()) -> any().
 -spec try_bad_handler_spec_test(config()) -> any().
@@ -284,6 +286,7 @@ groups() ->
         call_thrift_multiplexed_test,
         call_deadline_ok_test,
         call_deadline_reached_on_client_test,
+        server_client_timeout_handled,
         call_deadline_timeout_test,
         server_http_req_validation_test,
         try_bad_handler_spec_test,
@@ -372,6 +375,18 @@ init_per_testcase(calls_with_cache, C) ->
     {ok, _}   = start_caching_client(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C];
+init_per_testcase(server_client_timeout_handled, C) ->
+    gen_server:start_link({local, really_slow_event_handler}, really_slow_event_handler, 500, []),
+    {ok, Sup} = start_tc_sup(),
+    Server = woody_server:child_spec(woody_ct, #{
+        handlers      => [get_handler(S) || S <- ['Weapons', 'Powerups']],
+        event_handler => really_slow_event_handler,
+        ip            => ?SERVER_IP,
+        port          => ?SERVER_PORT
+    }),
+    supervisor:start_child(Sup, Server),
+    [{sup, Sup} | C];
+
 init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
@@ -827,6 +842,24 @@ call_deadline_reached_on_client_test(_) ->
     try woody_client:call(Request, Opts, Context)
     catch
         error:{woody_error, {internal, resource_unavailable, <<"deadline reached">>}} -> ok
+    end.
+
+server_client_timeout_handled(_) ->
+    Id = <<"server_client_timeout_handled">>,
+    {Url, Service} = get_service_endpoint('Weapons'),
+    Gun     = <<"Enforcer">>,
+    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Opts    = #{url => Url, event_handler => ?MODULE},
+    Deadline = woody_deadline:from_timeout(250),
+    Context  = woody_context:new(Id, #{}, Deadline),
+    try
+        case woody_client:call(Request, Opts, Context) of
+            _ -> error(unexpected_result)
+        end
+    catch
+        error:{woody_error, {external, result_unknown, <<"timeout">>}} ->
+            1 = really_slow_event_handler:get_number_of_socket_error_events(),
+            ok
     end.
 
 call_deadline_timeout_test(_) ->
