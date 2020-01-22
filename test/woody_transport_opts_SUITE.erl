@@ -187,7 +187,7 @@ handle_function(get_powerup, [Name, _], _Context, _) ->
     {ok, #'Powerup'{name = Name}}.
 
 handle_event(Event, RpcId, Meta, Opts) ->
-    {_Severity, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId),
+    {_Severity, {Format, Msg}} = woody_event_handler:format_event(Event, Meta, RpcId, #{}),
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
 
 get_powerup(Client, Name, Arg) ->
