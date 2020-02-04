@@ -290,7 +290,7 @@ format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}, _Opts) ->
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta, Opts) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta, Opts))};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result} = Meta, Opts) ->
-    Msg = format_service_reply(Meta, Result, Opts),
+    Msg = format_service_reply(Result, Meta, Opts),
     {info, append_msg({"[server] handling result: ", []}, Msg)};
 format_event(
     ?EV_SERVICE_HANDLER_RESULT,
@@ -978,7 +978,7 @@ format_service_request_with_limit_test_() -> [
 -spec result_test_() -> _.
 result_test_() -> [
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "CallResult{response=Value{bin=<<6 bytes>>},change=MachineStateChange{aux_state="
         "Content{data=Value{obj=#{Value{str='aux_state'}=Value{bin=<<108 bytes>>},Value{str='ct'}="
         "Value{str='application/x-erlang-binary'}}}},events=[Content{data=Value{arr=[Value{obj="
@@ -986,7 +986,7 @@ result_test_() -> [
         "Value{bin=<<240 bytes>>}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
-                ?EV_SERVICE_RESULT,
+                ?EV_SERVICE_HANDLER_RESULT,
                 #{
                     deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
                     execution_start_time => 1565695142994,
@@ -1060,7 +1060,7 @@ result_test_() -> [
     %% In some cases resulting message can have more data than expected
     %% In such case it will cut by formatter, as shown below
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "Party{id='1CSWG2vduGe',contact_info=PartyContactInfo{email='hg_ct_helper'},created_at="
         "'2019-08-13T11:19:01.249440Z',blocking=Blocking{unblocked=Unblocked{reason='',since="
         "'2019-08-13T11:19:02.655869Z'}},suspension=Suspension{active=Active{since="
@@ -1072,10 +1072,10 @@ result_test_() -> [
         "payout_tool_info=PayoutToolInfo{russian_bank_account=RussianBankAccount{account="
         "'4276300010908312893',bank_name='SomeBank',bank_post_account='123129876',bank_bik="
         "'66642666'}}}],contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity="
-        "RussianLegalEntity{regis...",
+        "RussianLegalEntity{registered_name='H...",
         format_msg_limited(
             format_event(
-            ?EV_SERVICE_RESULT,
+            ?EV_SERVICE_HANDLER_RESULT,
             #{args =>
             [{payproc_UserInfo, <<"1CSWG2vduGe">>,
                 {external_user, {payproc_ExternalUser}}},
@@ -1141,8 +1141,7 @@ result_test_() -> [
         )
     ),
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled "
-        "successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "SignalResult{change=MachineStateChange{aux_state=Content{data=Value{obj=#{}}},"
         "events=[Content{data=Value{arr=[Value{arr=[Value{i=2},Value{obj=#{Value{"
         "str='change'}=Value{str='created'},Value{str='contact_info'}=Value{obj=#{Value{"
@@ -1152,7 +1151,7 @@ result_test_() -> [
         "Value{str='shop_id'}=Value{str='1CSWG8j04wM'}}}]}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
-                ?EV_SERVICE_RESULT,
+                ?EV_SERVICE_HANDLER_RESULT,
                 #{args =>
                 [{mg_stateproc_SignalArgs,
                     {init,
@@ -1271,12 +1270,12 @@ result_test_() -> [
             )
         )
     ),
-        ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+    ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "Value{arr=[Value{str='tup'},...2 more...,Value{obj=#{Value{str='why'}=Value{b=false}}}]}",
         format_msg_limited(
             format_event(
-                ?EV_SERVICE_RESULT,
+                ?EV_SERVICE_HANDLER_RESULT,
                 #{
                     deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
                     execution_start_time => 1565695142994,
