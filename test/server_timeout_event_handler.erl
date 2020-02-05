@@ -3,6 +3,10 @@
 -include("src/woody_defs.hrl").
 
 -export([handle_event/4]).
+
+-export([child_spec/0]).
+-export([start_link/0]).
+
 -export([init/1]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
@@ -18,11 +22,21 @@
 
 %% API
 
--spec get_socket_errors_caught() -> {ok, pos_integer()}.
+-define(SOCKET_CLOSED, <<"The socket has been closed.">>).
+
+-spec get_socket_errors_caught() -> pos_integer().
 
 get_socket_errors_caught() ->
     {ok, N} = gen_server:call(?MODULE, get_number_of_events),
     N.
+
+-spec child_spec() -> supervisor:child_spec().
+
+child_spec() -> #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    type => worker
+}.
 
 %% woody_event_handler callbaacks
 
@@ -39,12 +53,19 @@ handle_event(Event, RpcId, Meta, Opts) ->
 
 %% gen_server callbacks
 
+-spec start_link() -> {ok, pid()}.
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
 -spec init(_) -> {ok, state()}.
-init(_) -> {ok, #{socket_errors_caught => 0}}.
+
+init(_) ->
+    {ok, #{socket_errors_caught => 0}}.
 
 -spec handle_call({event(), rpc_id(), event_meta(), options()}, _, state()) ->
     {reply, ok | {ok, pos_integer()}, state()}.
-handle_call({Event, Rpc, #{status := error, reason := <<"The socket has been closed.">>} = Meta, Opts}, _, #{
+handle_call({Event, Rpc, #{status := error, reason := ?SOCKET_CLOSED} = Meta, Opts}, _, #{
     socket_errors_caught := Caught
 } = State) when
     Event =:= ?EV_SERVICE_HANDLER_RESULT orelse
@@ -61,5 +82,6 @@ handle_call(get_number_of_events, _, #{socket_errors_caught := N} = State) ->
     {reply, {ok, N}, State}.
 
 -spec handle_cast(_, state()) -> {noreply, state()}.
+
 handle_cast(_, S) ->
     {noreply, S}.

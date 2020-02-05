@@ -377,8 +377,8 @@ init_per_testcase(calls_with_cache, C) ->
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C];
 init_per_testcase(server_handled_client_timeout_test, C) ->
-    {ok, _} = gen_server:start_link({local, server_timeout_event_handler}, server_timeout_event_handler, [], []),
     {ok, Sup} = start_tc_sup(),
+    supervisor:start_child(Sup, server_timeout_event_handler:child_spec()),
     {ok, _} = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], server_timeout_event_handler),
     [{sup, Sup} | C];
 
@@ -1041,8 +1041,7 @@ handle_function(like_powerup, [Name, To], Context, _Opts) ->
     {ok, ok};
 
 handle_function(get_stuck_looping_weapons, _, _, _) ->
-    timer:sleep(infinity),
-    {ok, ok}.
+    {ok, timer:sleep(infinity)}.
 
 %%
 %% woody_event_handler callbacks
