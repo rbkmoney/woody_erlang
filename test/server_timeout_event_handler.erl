@@ -1,4 +1,4 @@
--module(really_slow_event_handler).
+-module(server_timeout_event_handler).
 
 -include("src/woody_defs.hrl").
 
@@ -9,7 +9,6 @@
 -export([get_number_of_socket_error_events/0]).
 
 -type state() :: #{
-    timeout => pos_integer(),
     socket_errors_caught => pos_integer()
 }.
 -type event() :: woody_event_handler:event().
@@ -34,14 +33,14 @@ get_number_of_socket_error_events() ->
     options()
 ) -> _.
 
-handle_event(Event, A, Meta, B) ->
-    gen_server:call(?MODULE, {Event, A, Meta, B}).
+handle_event(Event, RpcId, Meta, Opts) ->
+    gen_server:call(?MODULE, {Event, RpcId, Meta, Opts}).
 
 
 %% gen_server callbacks
 
--spec init(pos_integer()) -> {ok, state()}.
-init(Timeout) -> {ok, #{timeout => Timeout, socket_errors_caught => 0}}.
+-spec init(_) -> {ok, state()}.
+init(_) -> {ok, #{socket_errors_caught => 0}}.
 
 -spec handle_call({event(), rpc_id(), event_meta(), options()}, _, state()) ->
     {reply, ok | {ok, pos_integer()}, state()}.
@@ -49,13 +48,13 @@ handle_call({Event, Rpc, #{status := error, reason := <<"The socket has been clo
     socket_errors_caught := Caught
 } = State) when
     Event =:= ?EV_SERVICE_HANDLER_RESULT orelse
-    Event =:= ?EV_SERVER_RECEIVE ->
+    Event =:= ?EV_SERVER_RECEIVE
+->
     woody_tests_SUITE:handle_event(Event, Rpc, Meta, Opts),
     {reply, ok, State#{socket_errors_caught => Caught + 1}};
 
-handle_call({Event, Rpc, Meta, Opts}, _, #{timeout := Timeout} = State) ->
+handle_call({Event, Rpc, Meta, Opts}, _, State) ->
     woody_tests_SUITE:handle_event(Event, Rpc, Meta, Opts),
-    timer:sleep(Timeout),
     {reply, ok, State};
 
 handle_call(get_number_of_events, _, #{socket_errors_caught := N} = State) ->

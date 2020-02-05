@@ -40,6 +40,7 @@ service Weapons {
         1: string name
         2: binary data
     ) throws (1: WeaponFailure error)
+    void get_stuck_looping_weapons()
 }
 
 service Powerups {
