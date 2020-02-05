@@ -66,7 +66,7 @@
     address  => string(),                            %% EV_CLIENT_RESOLVE_RESULT
     host     => string(),                            %% EV_CLIENT_RESOLVE_RESULT | EV_CLIENT_RESOLVE_BEGIN
     result   => woody:result() | woody_error:error(), %% EV_SERVICE_RESULT
-    format_as_exception => boolean()                 %% EV_SERVICE_RESULT
+    class    => business | system                    %% EV_SERVICE_RESULT
 }.
 -export_type([meta_client/0]).
 
@@ -257,8 +257,12 @@ format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Error, stack:= Stack},
     {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
 format_event(?EV_SERVICE_RESULT, #{status:=error, result:=Result}, _Opts) ->
     {warning, {"[client] error while handling request ~p", [Result]}};
-format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
-    {info, append_msg({"[client] request handled successfully: ", []}, format_service_reply(Meta, Opts))};
+format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Exception, class:=business} = Meta, Opts) ->
+    Msg = format_service_exception(Exception, Meta, Opts),
+    {info, append_msg({"[client] request handling business error: ", []}, Msg)};
+format_event(?EV_SERVICE_RESULT, #{status:=ok, result:=Result} = Meta, Opts) ->
+    Msg = format_service_reply(Result, Meta, Opts),
+    {info, append_msg({"[client] request handled successfully: ", []}, Msg)};
 format_event(?EV_CLIENT_SEND, #{url:=URL}, _Opts) ->
     {debug, {"[client] sending request to ~s", [URL]}};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host:=Host}, _Opts) ->
@@ -285,13 +289,21 @@ format_event(?EV_SERVER_SEND, #{status:=error, code:=Code}, _Opts) ->
     {warning, {"[server] response sent with code ~p", [Code]}};
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta, Opts) ->
     {info, append_msg({"[server] handling ", []}, format_service_request(Meta, Opts))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=_Result} = Meta, Opts) ->
-    {info, append_msg({"[server] handling result: ", []}, format_service_reply(Meta, Opts))};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=business, result:=Error}, _Opts) ->
-    {info, {"[server] handling result business error: ~p", [Error]}};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error, stack:=Stack,
-    except_class:=Class}, _Opts)
-->
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result} = Meta, Opts) ->
+    Msg = format_service_reply(Result, Meta, Opts),
+    {info, append_msg({"[server] handling result: ", []}, Msg)};
+format_event(
+    ?EV_SERVICE_HANDLER_RESULT,
+    #{status:=error, class:=business, result:=Exception} = Meta,
+    Opts
+) ->
+    Msg = format_service_exception(Exception, Meta, Opts),
+    {info, append_msg({"[server] handling result business error: ", []}, Msg)};
+format_event(
+    ?EV_SERVICE_HANDLER_RESULT,
+    #{status:=error, class:=system, result:=Error, stack:=Stack, except_class:=Class},
+    _Opts
+) ->
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}, _Opts) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
@@ -303,10 +315,12 @@ format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}, _Opts) ->
     {info, {"[client] request to '~s' cache hit", [URL]}};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}, _Opts) ->
     {debug, {"[client] request to '~s' cache miss", [URL]}};
-format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := _Result} = Meta, Opts) ->
-    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, format_service_reply(Meta, Opts))};
-format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := _Result} = Meta, Opts) ->
-    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, format_service_reply(Meta, Opts))};
+format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result} = Meta, Opts) ->
+    Msg = format_service_reply(Result, Meta, Opts),
+    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, Msg)};
+format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := Result} = Meta, Opts) ->
+    Msg = format_service_reply(Result, Meta, Opts),
+    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, Msg)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, class := Class, reason:=Reason, stack:=Stack}, _Opts) ->
     {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
 format_event(?EV_INTERNAL_ERROR, #{role:=Role, error:=Error, reason:=Reason}, _Opts) ->
@@ -326,29 +340,38 @@ format_event(UnknownEventType, Meta, _Opts) ->
 format_service_request(#{service_schema := {Module, Service}, function:=Function, args:=Args}, Opts) ->
     woody_event_formatter:format_call(Module, Service, Function, Args, get_formatter_opts(Opts)).
 
--spec format_service_reply(map(), options()) ->
+-spec format_service_exception(_Exception, map(), options()) ->
     msg().
-format_service_reply(#{service_schema := {Module, Service}, function := Function, result := Result} = Meta, Opts) ->
-    FormatasException =  maps:get(format_as_exception, Meta, false),
-    case FormatasException of
-        false ->
-            woody_event_formatter:format_reply(
-                Module,
-                Service,
-                Function,
-                get_result(Result),
-                get_formatter_opts(Opts)
-            );
-        true ->
-            woody_event_formatter:format_exception(
-                Module,
-                Service,
-                Function,
-                get_result(Result),
-                get_formatter_opts(Opts)
-            )
-    end;
-format_service_reply(Result, _Opts) ->
+format_service_exception(
+    Exception,
+    #{service_schema := {Module, Service}, function := Function},
+    Opts
+) ->
+    woody_event_formatter:format_exception(
+        Module,
+        Service,
+        Function,
+        Exception,
+        get_formatter_opts(Opts)
+    );
+format_service_exception(Exception, _Meta, _Opts) ->
+    {"~w", [Exception]}.
+
+-spec format_service_reply(_Result, meta(), options()) ->
+    msg().
+format_service_reply(
+    Result,
+    #{service_schema := {Module, Service}, function := Function},
+    Opts
+) ->
+    woody_event_formatter:format_reply(
+        Module,
+        Service,
+        Function,
+        get_result(Result),
+        get_formatter_opts(Opts)
+    );
+format_service_reply(Result, _Meta, _Opts) ->
     {"~w", [Result]}.
 
 get_result({ok, Result}) ->
@@ -402,11 +425,6 @@ get_formatter_opts(_) ->
 
 -include_lib("eunit/include/eunit.hrl").
 -spec test() -> _.
-
-format_msg({Fmt, Params}) ->
-    lists:flatten(
-        io_lib:format(Fmt, Params)
-    ).
 
 format_msg_limited({_Severity, {Fmt, Params}}) ->
     lists:flatten(
@@ -960,7 +978,7 @@ format_service_request_with_limit_test_() -> [
 -spec result_test_() -> _.
 result_test_() -> [
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "CallResult{response=Value{bin=<<6 bytes>>},change=MachineStateChange{aux_state="
         "Content{data=Value{obj=#{Value{str='aux_state'}=Value{bin=<<108 bytes>>},Value{str='ct'}="
         "Value{str='application/x-erlang-binary'}}}},events=[Content{data=Value{arr=[Value{obj="
@@ -968,7 +986,7 @@ result_test_() -> [
         "Value{bin=<<240 bytes>>}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
-                ?EV_SERVICE_RESULT,
+                ?EV_SERVICE_HANDLER_RESULT,
                 #{
                     deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
                     execution_start_time => 1565695142994,
@@ -1042,7 +1060,7 @@ result_test_() -> [
     %% In some cases resulting message can have more data than expected
     %% In such case it will cut by formatter, as shown below
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "Party{id='1CSWG2vduGe',contact_info=PartyContactInfo{email='hg_ct_helper'},created_at="
         "'2019-08-13T11:19:01.249440Z',blocking=Blocking{unblocked=Unblocked{reason='',since="
         "'2019-08-13T11:19:02.655869Z'}},suspension=Suspension{active=Active{since="
@@ -1054,10 +1072,10 @@ result_test_() -> [
         "payout_tool_info=PayoutToolInfo{russian_bank_account=RussianBankAccount{account="
         "'4276300010908312893',bank_name='SomeBank',bank_post_account='123129876',bank_bik="
         "'66642666'}}}],contractor=Contractor{legal_entity=LegalEntity{russian_legal_entity="
-        "RussianLegalEntity{regis...",
+        "RussianLegalEntity{registered_name='H...",
         format_msg_limited(
             format_event(
-            ?EV_SERVICE_RESULT,
+            ?EV_SERVICE_HANDLER_RESULT,
             #{args =>
             [{payproc_UserInfo, <<"1CSWG2vduGe">>,
                 {external_user, {payproc_ExternalUser}}},
@@ -1123,8 +1141,7 @@ result_test_() -> [
         )
     ),
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled "
-        "successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
         "SignalResult{change=MachineStateChange{aux_state=Content{data=Value{obj=#{}}},"
         "events=[Content{data=Value{arr=[Value{arr=[Value{i=2},Value{obj=#{Value{"
         "str='change'}=Value{str='created'},Value{str='contact_info'}=Value{obj=#{Value{"
@@ -1134,7 +1151,7 @@ result_test_() -> [
         "Value{str='shop_id'}=Value{str='1CSWG8j04wM'}}}]}]}}]},action=ComplexAction{}}",
         format_msg_limited(
             format_event(
-                ?EV_SERVICE_RESULT,
+                ?EV_SERVICE_HANDLER_RESULT,
                 #{args =>
                 [{mg_stateproc_SignalArgs,
                     {init,
@@ -1252,19 +1269,50 @@ result_test_() -> [
                 #{}
             )
         )
+    ),
+    ?_assertEqual(
+        "[1012689088739803136 1012689108264288256 1012689088534282240][server] handling result: "
+        "Value{arr=[Value{str='tup'},...2 more...,Value{obj=#{Value{str='why'}=Value{b=false}}}]}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_HANDLER_RESULT,
+                #{
+                    deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
+                    execution_start_time => 1565695142994,
+                    function => 'Call',
+                    metadata => #{},
+                    result => {ok, {'arr', [
+                        {'str', <<"tup">>}, {'str', <<"blarg">>}, {'i', 42},
+                        {'obj', #{{'str', <<"why">>} => {'b', false}}}
+                    ]}},
+                    role => server,
+                    service => 'Automaton',
+                    service_schema => {mg_proto_state_processing_thrift, 'Automaton'},
+                    status => ok,
+                    type => call
+                },
+                #{
+                    span_id => <<"1012689088534282240">>,
+                    trace_id => <<"1012689088739803136">>,
+                    parent_id => <<"1012689108264288256">>
+                },
+                #{}
+            )
+        )
     )
 ].
 
 -spec exception_test_() -> _.
 exception_test_() -> [
     ?_assertEqual(
-        "CustomerNotFound{}",
-        format_msg(
-            format_service_reply(
+        "[client] request handling business error: CustomerNotFound{}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
                 #{args => [<<"1Cfo5OJzx6O">>],
                     deadline => undefined,
                     execution_start_time => 1566386841317,
-                    format_as_exception => true,
+                    class => business,
                     function => 'Get',
                     metadata => #{
                         <<"user-identity.id">> => <<"1Cfo5EMKo40">>,
@@ -1280,9 +1328,10 @@ exception_test_() -> [
         )
     ),
     ?_assertEqual(
-        "OperationNotPermitted{}",
-        format_msg(
-            format_service_reply(
+        "[client] request handling business error: OperationNotPermitted{}",
+        format_msg_limited(
+            format_event(
+                ?EV_SERVICE_RESULT,
                 #{args => [
                     undefined,
                     <<"1Cfo9igJRS4">>,
@@ -1293,7 +1342,7 @@ exception_test_() -> [
                         {domain_ContactInfo, undefined, undefined}}},
                         {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined, undefined}],
                     deadline => undefined, execution_start_time => 1566386899959,
-                    format_as_exception => true,
+                    class => business,
                     function => 'StartPayment',
                     metadata => #{
                         <<"user-identity.id">> => <<"1Cfo8k9mLtA">>,
@@ -1306,7 +1355,8 @@ exception_test_() -> [
         )
     ),
     ?_assertEqual(
-        "[1012689088739803136 1012689108264288256 1012689088534282240][client] request handled successfully: "
+        "[1012689088739803136 1012689108264288256 1012689088534282240]"
+        "[client] request handling business error: "
         "InvalidRecurrentParentPayment{details='Parent payment refer to another shop'}",
         format_msg_limited(
             format_event(
@@ -1322,7 +1372,7 @@ exception_test_() -> [
                         true, undefined, undefined, undefined, undefined}],
                     deadline => undefined,
                     execution_start_time => 1575444908463,
-                    format_as_exception => true,
+                    class => business,
                     function => 'StartPayment',
                     metadata => #{
                         <<"user-identity.id">> => <<"1FToOJtk6YC">>,

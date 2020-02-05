@@ -100,10 +100,12 @@ get_server_violation_error() ->
         "sent TApplicationException (unknown exception) with http code 200"
     >>}.
 
+log_result({ok, Result}, WoodyState) ->
+    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => ok, result => Result});
 log_result({error, {business, ThriftExcept}}, WoodyState) ->
-    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => ok, format_as_exception => true, result => ThriftExcept});
-log_result({Status, Result}, WoodyState) ->
-    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => Status, result => Result}).
+    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => ok, class => business, result => ThriftExcept});
+log_result({error, Result}, WoodyState) ->
+    log_event(?EV_SERVICE_RESULT, WoodyState, #{status => error, class => system, result => Result}).
 
 -spec map_result(woody_client:result() | {error, _ThriftError}) ->
     woody_client:result().
