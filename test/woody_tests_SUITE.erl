@@ -378,7 +378,7 @@ init_per_testcase(calls_with_cache, C) ->
     [{sup, Sup} | C];
 init_per_testcase(server_handled_client_timeout_test, C) ->
     {ok, Sup} = start_tc_sup(),
-    supervisor:start_child(Sup, server_timeout_event_handler:child_spec()),
+    {ok, _} = supervisor:start_child(Sup, server_timeout_event_handler:child_spec()),
     {ok, _} = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], server_timeout_event_handler),
     [{sup, Sup} | C];
 
