@@ -6,7 +6,7 @@
 -export([init/1]).
 -export([handle_call/3]).
 -export([handle_cast/2]).
--export([get_number_of_socket_error_events/0]).
+-export([get_socket_errors_caught/0]).
 
 -type state() :: #{
     socket_errors_caught => pos_integer()
@@ -18,9 +18,9 @@
 
 %% API
 
--spec get_number_of_socket_error_events() -> {ok, pos_integer()}.
+-spec get_socket_errors_caught() -> {ok, pos_integer()}.
 
-get_number_of_socket_error_events() ->
+get_socket_errors_caught() ->
     {ok, N} = gen_server:call(?MODULE, get_number_of_events),
     N.
 

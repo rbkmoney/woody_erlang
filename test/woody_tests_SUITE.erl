@@ -850,7 +850,7 @@ server_handled_client_timeout_test(_) ->
         end
     catch
         error:{woody_error, {external, result_unknown, <<"timeout">>}} ->
-            1 = server_timeout_event_handler:get_number_of_socket_error_events(),
+            1 = server_timeout_event_handler:get_socket_errors_caught(),
             ok
     end.
 
