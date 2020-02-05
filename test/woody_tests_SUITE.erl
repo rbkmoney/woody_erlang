@@ -373,7 +373,7 @@ init_per_testcase(find_multiple_pools_test, C) ->
     [{sup, Sup} | C];
 init_per_testcase(calls_with_cache, C) ->
     {ok, Sup} = start_tc_sup(),
-    {ok, _}   = start_caching_client(),
+    {ok, _}   = start_caching_client(caching_client_ct, Sup),
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C];
 init_per_testcase(server_handled_client_timeout_test, C) ->
@@ -464,8 +464,11 @@ start_woody_server_with_pools(Id, Sup, Services, Params) ->
     _ = [supervisor:start_child(WoodyServer, Spec) || Spec <- Specs],
     ok.
 
-start_caching_client() ->
-    woody_caching_client:start_link(woody_caching_client_options()).
+start_caching_client(Id, Sup) ->
+    supervisor:start_child(Sup, #{
+        id    => Id,
+        start => {woody_caching_client, start_link, [woody_caching_client_options()]}
+    }).
 
 woody_caching_client_options() ->
     #{
@@ -579,7 +582,7 @@ ids_monotonic_incr_test(_) ->
                     Span2 = genlib:to_int(woody_context:get_rpc_id(span_id, C2)),
                     Span1 < Span2
                 end,
-    Children = lists:sort(SortFun, Children).
+    ?assertEqual(Children, lists:sort(SortFun, Children)).
 
 deadline_reached_test(_) ->
     {Date, {H, M, S}} = calendar:universal_time(),
