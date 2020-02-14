@@ -59,11 +59,21 @@ info(StreamID, Info, #{next := Next0} = State) ->
 terminate(
     StreamID,
     {socket_error, _, HumanReadable} = Reason,
-    #{woody_state := WoodyState, next := Next, event_to_emit:= Event}
+    #{woody_state := WoodyState, next := Next, event_to_emit := Event = ?EV_SERVER_RECEIVE}
 ) ->
     woody_event_handler:handle_event(Event,
         WoodyState,
         #{status => error, reason => woody_util:to_binary(HumanReadable)}
+    ),
+    cowboy_stream:terminate(StreamID, Reason, Next);
+terminate(
+    StreamID,
+    {socket_error, _, HumanReadable} = Reason,
+    #{woody_state := WoodyState, next := Next, event_to_emit := Event = ?EV_SERVICE_HANDLER_RESULT}
+) ->
+    woody_event_handler:handle_event(Event,
+        WoodyState,
+        #{status => error, class => system, result => woody_util:to_binary(HumanReadable)}
     ),
     cowboy_stream:terminate(StreamID, Reason, Next);
 terminate(StreamID, Reason, #{next := Next}) ->
