@@ -602,7 +602,7 @@ deadline_to_from_timeout_test(_) ->
 
 deadline_to_from_binary_test(_) ->
     Deadline    = {{{2010, 4, 11}, {22, 35, 41}}, 29},
-    DeadlineBin = <<"2010-04-11T22:35:41.029000Z">>,
+    DeadlineBin = <<"2010-04-11T22:35:41.029Z">>,
     DeadlineBin = woody_deadline:to_binary(Deadline),
     Deadline    = woody_deadline:from_binary(DeadlineBin),
 
@@ -611,9 +611,16 @@ deadline_to_from_binary_test(_) ->
     Deadline1    = woody_deadline:from_binary(DeadlineBin1),
 
     Deadline2    = {{{2010, 4, 11}, {22, 35, 41}}, 0},
-    DeadlineBin2 = <<"2010-04-11T22:35:41Z">>,
+    DeadlineBin2 = <<"2010-04-11T22:35:41.000Z">>,
     Deadline2    = woody_deadline:from_binary(woody_deadline:to_binary(Deadline2)),
     DeadlineBin2 = woody_deadline:to_binary(Deadline2),
+
+    Deadline3 = <<"2010-04-11T22:35:41+00:30">>,
+    try woody_deadline:from_binary(Deadline3)
+    catch
+        error:{bad_deadline, not_utc} ->
+            ok
+    end,
 
     try woody_deadline:to_binary({{baddate, {22, 35, 41}}, 29})
     catch
