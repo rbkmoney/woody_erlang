@@ -294,18 +294,18 @@ format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=ok, result:=Result} = Meta, O
     {info, append_msg({"[server] handling result: ", []}, Msg)};
 format_event(
     ?EV_SERVICE_HANDLER_RESULT,
-    #{status:=error, class:=business, reason:=Exception} = Meta,
+    #{status:=error, class:=business, result:=Exception} = Meta,
     Opts
 ) ->
     Msg = format_service_exception(Exception, Meta, Opts),
     {info, append_msg({"[server] handling result business error: ", []}, Msg)};
 format_event(
     ?EV_SERVICE_HANDLER_RESULT,
-    #{status:=error, class:=system, reason:=Error, stack:=Stack, except_class:=Class},
+    #{status:=error, class:=system, result:=Error, stack:=Stack, except_class:=Class},
     _Opts
 ) ->
     {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
-format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, reason:=Error}, _Opts) ->
+format_event(?EV_SERVICE_HANDLER_RESULT, #{status:=error, class:=system, result:=Error}, _Opts) ->
     {warning, {"[server] handling system woody error: ~p", [Error]}};
 format_event(?EV_CLIENT_CACHE_BEGIN, _Meta, _Opts) ->
     {debug, {"[client] request begin", []}};

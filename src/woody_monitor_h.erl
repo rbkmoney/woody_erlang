@@ -63,7 +63,7 @@ terminate(
 ) ->
     woody_event_handler:handle_event(Event,
         WoodyState,
-        #{status => error, class => system, reason => woody_util:to_binary(HumanReadable)}
+        #{status => error, reason => woody_util:to_binary(HumanReadable)}
     ),
     cowboy_stream:terminate(StreamID, Reason, Next);
 terminate(StreamID, Reason, #{next := Next}) ->

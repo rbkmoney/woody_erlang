@@ -269,11 +269,11 @@ handle_exception(Except, Stack, State = #{
             handle_internal_error(Except, throw, Stack, State);
         {{_Module, _Type}, oneway_void} ->
             log_handler_result(error, WoodyState,
-                #{class => business, reason => Except, ignore => true}),
+                #{class => business, result => Except, ignore => true}),
             {{error, {business, ignore}}, State};
         {{Module, Type}, _} ->
             log_handler_result(error, WoodyState,
-                #{class => business, reason => Except, ignore => false}),
+                #{class => business, result => Except, ignore => false}),
             ExceptTuple = list_to_tuple([Function | ExceptionList]),
             encode_reply(
                 {error, {business, genlib:to_binary(get_except_name(Module, Type))}},
@@ -300,21 +300,21 @@ get_except_name(Module, Type) ->
 -spec handle_woody_error(woody_error:system_error() | _Except, state()) ->
     {{error, {system, woody_error:system_error()}}, state()}.
 handle_woody_error(Error, State = #{woody_state := WoodyState, th_reply_type := oneway_void}) ->
-    log_handler_result(error, WoodyState, #{class => system, reason => Error, ignore => true}),
+    log_handler_result(error, WoodyState, #{class => system, result => Error, ignore => true}),
     {{error, {system, Error}}, State};
 handle_woody_error(Error, State = #{woody_state := WoodyState}) ->
-    log_handler_result(error, WoodyState, #{class => system, reason => Error, ignore => false}),
+    log_handler_result(error, WoodyState, #{class => system, result => Error, ignore => false}),
     {{error, {system, Error}}, State}.
 
 -spec handle_internal_error(_Error, woody_error:erlang_except(), woody_error:stack(), state()) ->
     {{error, {system, {internal, woody_error:source(), woody_error:details()}}}, state()}.
 handle_internal_error(Error, ExcClass, Stack, State = #{woody_state := WoodyState, th_reply_type := oneway_void}) ->
     log_handler_result(error, WoodyState,
-        #{class => system, reason => Error, except_class => ExcClass, stack => Stack, ignore => true}),
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => true}),
     {{error, {system, {internal, result_unexpected, <<>>}}}, State};
 handle_internal_error(Error, ExcClass, Stack, State = #{woody_state := WoodyState}) ->
     log_handler_result(error, WoodyState,
-        #{class => system, reason => Error, except_class => ExcClass, stack => Stack, ignore => false}),
+        #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => false}),
     {{error, {system, {internal, result_unexpected,
         format_unexpected_error(ExcClass, woody_error:format_details(Error), Stack)}}}, State}.
 
