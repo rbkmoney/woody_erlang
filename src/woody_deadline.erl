@@ -52,33 +52,27 @@ from_timeout(TimeoutMillisec) ->
     binary().
 to_binary(Deadline = undefined) ->
     erlang:error(bad_deadline, [Deadline]);
-to_binary(Deadline = {{Date, Time}, Millisec}) ->
-    try rfc3339:format({Date, Time, Millisec * 1000, 0}) of
-        {ok, DeadlineBin} when is_binary(DeadlineBin) ->
-            DeadlineBin;
-        Error ->
-            %% rfc3339:format/1 has a broken spec and ugly (if not to say broken) code,
-            %% so just throw any non succeess case here.
-            erlang:error({bad_deadline, Error}, [Deadline])
+to_binary(Deadline) ->
+    try
+        Millis = to_unixtime_ms(Deadline),
+        Str = calendar:system_time_to_rfc3339(Millis, [{unit, millisecond}, {offset, "Z"}]),
+        erlang:list_to_binary(Str)
     catch
         error:Error:Stacktrace ->
             erlang:error({bad_deadline, {Error, Stacktrace}}, [Deadline])
     end.
 
-%% Suppress dialyzer warning until rfc3339 spec will be fixed.
-%% see https://github.com/talentdeficit/rfc3339/pull/5
--dialyzer([{nowarn_function, [from_binary/1]}, no_match]).
 -spec from_binary(binary()) ->
     deadline().
 from_binary(Bin) ->
-    case rfc3339:parse(Bin) of
-        {ok, {_Date, _Time, _Usec, TZ}} when TZ =/= 0 andalso TZ =/= undefined ->
-            erlang:error({bad_deadline, not_utc}, [Bin]);
-        {ok, {Date, Time, undefined, _TZ}} ->
-            {to_calendar_datetime(Date, Time), 0};
-        {ok, {Date, Time, Usec, _TZ}} ->
-            {to_calendar_datetime(Date, Time), Usec div 1000};
-        {error, Error} ->
+    ok = assert_is_utc(Bin),
+    Str = erlang:binary_to_list(Bin),
+    try
+        Millis = calendar:rfc3339_to_system_time(Str, [{unit, millisecond}]),
+        Datetime = calendar:system_time_to_universal_time(Millis, millisecond),
+        {Datetime, Millis rem 1000}
+    catch
+        error:Error ->
             erlang:error({bad_deadline, Error}, [Bin])
     end.
 
@@ -94,6 +88,17 @@ from_unixtime_ms(DeadlineMillisec) ->
 %% Internal functions
 %%
 
+-spec assert_is_utc(binary()) ->
+    ok | no_return().
+assert_is_utc(Bin) ->
+    Size = erlang:byte_size(Bin) - 1,
+    case Bin of
+        <<_:Size/bytes, "Z">> ->
+            ok;
+        _ ->
+            erlang:error({bad_deadline, not_utc}, [Bin])
+    end.
+
 -spec unow() ->
     millisec().
 unow() ->
@@ -101,11 +106,3 @@ unow() ->
     % erlang:system_time/1 may have a various difference with global time to prevent time warp.
     % see http://erlang.org/doc/apps/erts/time_correction.html#time-warp-modes for details
     os:system_time(millisecond).
-
-to_calendar_datetime(Date, Time = {H, _, S}) when H =:= 24 orelse S =:= 60 ->
-    %% Type specifications for hours and seconds differ in calendar and rfc3339,
-    %% so make a proper calendar:datetime() here.
-    Sec = calendar:datetime_to_gregorian_seconds({Date, Time}),
-    calendar:gregorian_seconds_to_datetime(Sec);
-to_calendar_datetime(Date, Time) ->
-    {Date, Time}.
