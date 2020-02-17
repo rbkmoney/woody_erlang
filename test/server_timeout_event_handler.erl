@@ -65,12 +65,15 @@ init(_) ->
 
 -spec handle_call({event(), rpc_id(), event_meta(), options()}, _, state()) ->
     {reply, ok | {ok, pos_integer()}, state()}.
-handle_call({Event, Rpc, #{status := error, reason := ?SOCKET_CLOSED} = Meta, Opts}, _, #{
+handle_call({Event = ?EV_SERVICE_HANDLER_RESULT, Rpc,
+            #{status := error, class := system, result := ?SOCKET_CLOSED} = Meta, Opts}, _, #{
     socket_errors_caught := Caught
-} = State) when
-    Event =:= ?EV_SERVICE_HANDLER_RESULT orelse
-    Event =:= ?EV_SERVER_RECEIVE
-->
+} = State) ->
+    woody_tests_SUITE:handle_event(Event, Rpc, Meta, Opts),
+    {reply, ok, State#{socket_errors_caught => Caught + 1}};
+handle_call({Event = ?EV_SERVER_RECEIVE, Rpc, #{status := error, reason := ?SOCKET_CLOSED} = Meta, Opts}, _, #{
+    socket_errors_caught := Caught
+} = State) ->
     woody_tests_SUITE:handle_event(Event, Rpc, Meta, Opts),
     {reply, ok, State#{socket_errors_caught => Caught + 1}};
 
