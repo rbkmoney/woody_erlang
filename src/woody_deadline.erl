@@ -91,9 +91,15 @@ from_unixtime_ms(DeadlineMillisec) ->
 -spec assert_is_utc(binary()) ->
     ok | no_return().
 assert_is_utc(Bin) ->
-    Size = erlang:byte_size(Bin) - 1,
+    Size0 = erlang:byte_size(Bin),
+    Size1 = Size0 - 1,
+    Size6 = Size0 - 6,
     case Bin of
-        <<_:Size/bytes, "Z">> ->
+        <<_:Size1/bytes, "Z">> ->
+            ok;
+        <<_:Size6/bytes, "+00:00">> ->
+            ok;
+        <<_:Size6/bytes, "-00:00">> ->
             ok;
         _ ->
             erlang:error({bad_deadline, not_utc}, [Bin])

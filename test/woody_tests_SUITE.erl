@@ -621,6 +621,8 @@ deadline_to_from_binary_test(_) ->
         error:{bad_deadline, not_utc} ->
             ok
     end,
+    _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41+00:00">>),
+    _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41-00:00">>),
 
     try woody_deadline:to_binary({{baddate, {22, 35, 41}}, 29})
     catch
