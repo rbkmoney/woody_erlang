@@ -134,10 +134,10 @@ new_unique_int() ->
             Id
     catch
         error:{backward_clock_moving, _Last, _New} = Reason ->
-            BinReason = woody_error:format_details(Reason),
+            BinReason = woody_error:format_details({snowflake, Reason}),
             woody_error:raise(system, {internal, resource_unavailable, BinReason});
         error:exhausted = Reason ->
-            BinReason = woody_error:format_details(Reason),
+            BinReason = woody_error:format_details({snowflake, Reason}),
             woody_error:raise(system, {internal, resource_unavailable, BinReason})
     end.
 
