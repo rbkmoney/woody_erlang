@@ -129,8 +129,17 @@ new_req_id() ->
 -spec new_unique_int() ->
     pos_integer().
 new_unique_int() ->
-    <<Id:64>> = snowflake:new(?MODULE),
-    Id.
+    try snowflake:new(?MODULE) of
+        <<Id:64>> ->
+            Id
+    catch
+        error:{backward_clock_moving, _Last, _New} = Reason ->
+            BinReason = woody_error:format_details({snowflake, Reason}),
+            woody_error:raise(system, {internal, resource_unavailable, BinReason});
+        error:exhausted = Reason ->
+            BinReason = woody_error:format_details({snowflake, Reason}),
+            woody_error:raise(system, {internal, resource_unavailable, BinReason})
+    end.
 
 -spec set_deadline(woody:deadline(), ctx()) ->
     ctx().
