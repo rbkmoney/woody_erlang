@@ -23,8 +23,7 @@
 
 %% Types
 -type handler_limits() :: #{
-    max_heap_size       => integer(), %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
-    total_mem_threshold => integer()  %% bytes, see erlang:memory() for details.
+    max_heap_size => integer() %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
 }.
 -export_type([handler_limits/0]).
 
@@ -261,19 +260,10 @@ init(Req, Opts = #{ev_handler := EvHandler, handler_limits := Limits}) ->
     ok = set_handler_limits(Limits),
     Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
     WoodyState = create_dummy_state(EvHandler),
-    case have_resources_to_continue(Limits) of
-        true ->
-            Opts1 = update_woody_state(Opts#{url => Url}, WoodyState, Req),
-            case check_request(Req, Opts1) of
-                {ok, Req1, State} -> handle(Req1, State);
-                {stop, Req1, State} -> {ok, Req1, State}
-            end;
-        false ->
-            Details = <<"erlang vm exceeded total memory threshold">>,
-            _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
-                #{url => Url, status => error, reason => Details}),
-            Req2 = handle_error({system, {internal, resource_unavailable, Details}}, Req, WoodyState),
-            {ok, Req2, undefined}
+    Opts1 = update_woody_state(Opts#{url => Url}, WoodyState, Req),
+    case check_request(Req, Opts1) of
+        {ok, Req1, State} -> handle(Req1, State);
+        {stop, Req1, State} -> {ok, Req1, State}
     end.
 
 -spec set_handler_limits(handler_limits()) ->
@@ -289,16 +279,6 @@ set_handler_limits(Limits) ->
                 error_logger => true
             }),
             ok
-    end.
-
--spec have_resources_to_continue(handler_limits()) ->
-    boolean().
-have_resources_to_continue(Limits) ->
-    case maps:get(total_mem_threshold, Limits, undefined) of
-        undefined ->
-            true;
-        MaxTotalMem when is_integer(MaxTotalMem) ->
-            erlang:memory(total) < MaxTotalMem
     end.
 
 -spec handle(cowboy_req:req(), state()) ->
