@@ -18,6 +18,16 @@
 -type transport_options() :: map().
 -export_type([transport_options/0]).
 
+-define(DEFAULT_TRANSPORT_OPTIONS, #{
+    connect_options => [
+        % Turn TCP_NODELAY on.
+        % We expect that Nagle's algorithm would not be very helpful for typical
+        % Woody RPC workloads, negatively impacting perceived latency. So it's
+        % better to turn it off.
+        {nodelay, true}
+    ]
+}).
+
 -type woody_transport() :: #{
     url               := woody:url(),
     woody_state       := woody_state:st(),
@@ -111,9 +121,10 @@ send(Url, Body, Options, ResOpts, WoodyState) ->
             case woody_resolver:resolve_url(Url, WoodyState, ResOpts) of
                 {ok, {OldUrl, NewUrl}} ->
                     Headers  = add_host_header(OldUrl, make_woody_headers(Context)),
-                    Timeouts = maps:to_list(set_timeouts(Options, Context)),
+                    Options1 = set_defaults(Options),
+                    Options2 = set_timeouts(Options1, Context),
                     HeaderList = maps:to_list(Headers),
-                    Result = hackney:request(post, NewUrl, HeaderList, Body, Timeouts),
+                    Result = hackney:request(post, NewUrl, HeaderList, Body, maps:to_list(Options2)),
                     transform_request_results(Result);
                 {error, Reason} ->
                     {error, {resolve_failed, Reason}}
@@ -126,6 +137,9 @@ transform_request_results({ok, Code, Headers}) ->
     {ok, Code, maps:from_list(Headers)};
 transform_request_results(Any) ->
     Any.
+
+set_defaults(Options) ->
+    maps:merge(?DEFAULT_TRANSPORT_OPTIONS, Options).
 
 set_timeouts(Options, Context) ->
     case woody_context:get_deadline(Context) of
