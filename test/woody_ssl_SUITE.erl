@@ -125,8 +125,12 @@ client_wo_cert_test(C) ->
         get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
+        % NOTE
+        % Seems that TLSv1.3 connection setup kinda racy.
         error:{woody_error, {internal, result_unexpected, Reason}} when Vsn =:= 'tlsv1.3' ->
             ?assertMatch(<<"{tls_alert,{certificate_required", _/binary>>, Reason);
+        error:{woody_error, {external, result_unknown, <<"closed">>}} when Vsn =:= 'tlsv1.3' ->
+            ok;
         error:{woody_error, {internal, result_unexpected, Reason}} ->
             {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]handshake[ _]failure.*$">>, [])
     end.
@@ -147,6 +151,10 @@ invalid_client_cert_test(C) ->
         get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
+        % NOTE
+        % Seems that TLSv1.3 connection setup kinda racy.
+        error:{woody_error, {external, result_unknown, <<"closed">>}} when Vsn =:= 'tlsv1.3' ->
+            ok;
         error:{woody_error, {internal, result_unexpected, Reason}} ->
             {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]unknown[ _]ca.*$">>, [])
     end.
