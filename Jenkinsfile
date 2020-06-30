@@ -33,7 +33,7 @@ build('woody_erlang', 'docker-host', finalHook) {
     }
     runStage('dialyze') {
       withGithubPrivkey {
-        withWsCache("_build/test/rebar3_21.3.8.7_plt") {
+        withWsCache("_build/test/rebar3_23.0.1_plt") {
           sh 'make wc_dialyze'
         }
       }
@@ -43,4 +43,3 @@ build('woody_erlang', 'docker-host', finalHook) {
     }
   }
 }
-
