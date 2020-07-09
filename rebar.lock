@@ -9,7 +9,7 @@
  {<<"cowboy">>,{pkg,<<"cowboy">>,<<"2.7.0">>},0},
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"2.8.0">>},1},
  {<<"folsom">>,
-  {git,"git@github.com:folsom-project/folsom.git",
+  {git,"https://github.com/folsom-project/folsom.git",
        {ref,"9309bad9ffadeebbefe97521577c7480c7cfcd8a"}},
   1},
  {<<"genlib">>,
