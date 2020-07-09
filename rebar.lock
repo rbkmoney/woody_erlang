@@ -3,7 +3,7 @@
  {<<"cache">>,{pkg,<<"cache">>,<<"2.2.0">>},0},
  {<<"certifi">>,{pkg,<<"certifi">>,<<"2.5.2">>},1},
  {<<"cg_mon">>,
-  {git,"git@github.com:rbkmoney/cg_mon.git",
+  {git,"https://github.com/rbkmoney/cg_mon.git",
        {ref,"5a87a37694e42b6592d3b4164ae54e0e87e24e18"}},
   1},
  {<<"cowboy">>,{pkg,<<"cowboy">>,<<"2.7.0">>},0},
