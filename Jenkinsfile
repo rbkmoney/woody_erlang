@@ -1,5 +1,20 @@
 #!groovy
 // -*- mode: groovy -*-
+//
+// Copyright 2017 RBKmoney
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 def finalHook = {
   runStage('store CT logs') {
@@ -11,35 +26,17 @@ build('woody_erlang', 'docker-host', finalHook) {
   checkoutRepo()
   loadBuildUtils()
 
-  def pipeDefault
-  def withWsCache
+  def pipeErlangLib
   runStage('load pipeline') {
     env.JENKINS_LIB = "build_utils/jenkins_lib"
-    pipeDefault = load("${env.JENKINS_LIB}/pipeDefault.groovy")
-    withWsCache = load("${env.JENKINS_LIB}/withWsCache.groovy")
+    env.SH_TOOLS = "build_utils/sh"
+    pipeErlangLib = load("${env.JENKINS_LIB}/pipeErlangLib.groovy")
   }
 
-  pipeDefault() {
-    runStage('compile') {
-      withGithubPrivkey {
-        sh 'make wc_compile'
-      }
-    }
-    runStage('lint') {
-      sh 'make wc_lint'
-    }
-    runStage('xref') {
-      sh 'make wc_xref'
-    }
-    runStage('dialyze') {
-      withGithubPrivkey {
-        withWsCache("_build/test/rebar3_23.0.1_plt") {
-          sh 'make wc_dialyze'
-        }
-      }
-    }
-    runStage('test') {
-      sh "make wc_test"
-    }
-  }
+  // NOTE: Parallel pipeline almost always fails because of
+  // rebar3's design (it uses link for libraries, so
+  // parallel runs with different profiles brake each other)
+  // To prevent this use sequential pipleine here
+
+  pipeErlangLib.runPipe(false, false, 'test')
 }
