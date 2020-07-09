@@ -32,10 +32,11 @@ build('woody_erlang', 'docker-host', finalHook) {
     env.SH_TOOLS = "build_utils/sh"
     pipeErlangLib = load("${env.JENKINS_LIB}/pipeErlangLib.groovy")
   }
+
   // NOTE: Parallel pipeline almost always fails because of
   // rebar3's design (it uses link for libraries, so
   // parallel runs with different profiles brake each other)
   // To prevent this use sequential pipleine here
-  //pipeErlangLib.runPipe(testWithDependencies: false, runInParallel: false, dialyzeWithProfile:'test')
+
   pipeErlangLib.runPipe(false, false, 'test')
 }
