@@ -29,7 +29,7 @@
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.7.1">>},1},
  {<<"snowflake">>,
   {git,"https://github.com/rbkmoney/snowflake.git",
-       {ref,"563d8ef9543c1e4424aefa9ec7b41aa68885f0ad"}},
+       {ref,"7f379ad5e389e1c96389a8d60bae8117965d6a6d"}},
   0},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.6">>},1},
  {<<"thrift">>,
