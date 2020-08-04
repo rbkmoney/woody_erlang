@@ -164,9 +164,12 @@ invalid_client_cert_test(C) ->
 
 client_ssl_opts('tlsv1.3') ->
     % NOTE
-    % We need at least an extra TLSv1.2 here, otherwise hackney messes up
-    % client options.
-    [{versions, ['tlsv1.3', 'tlsv1.2']}];
+    % We need at least an extra TLSv1.2 here and default OTP cipher suites,
+    % otherwise hackney messes up client options.
+    [
+        {versions, ['tlsv1.3', 'tlsv1.2']},
+        {ciphers, ssl:cipher_suites(default, 'tlsv1.3')}
+    ];
 client_ssl_opts(Vsn) ->
     [{versions, [Vsn]}].
 
