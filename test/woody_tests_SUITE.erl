@@ -963,13 +963,13 @@ init(_) ->
 %%
 
 %% Weapons
-handle_function(switch_weapon, [CurrentWeapon, Direction, Shift, To], Context, #{meta_test_id := AnnotTestId}) ->
+handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #{meta_test_id := AnnotTestId}) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), CurrentWeapon}),
     CheckAnnot = is_meta_check_required(AnnotTestId, woody_context:get_rpc_id(trace_id, Context)),
     ok = check_meta(CheckAnnot, Context, CurrentWeapon),
     switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot);
 
-handle_function(get_weapon, [Name, To], Context, _Opts) ->
+handle_function(get_weapon, {Name, To}, Context, _Opts) ->
     ok = handle_sleep(Context),
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     case genlib_map:get(Name, ?WEAPONS) of
@@ -980,14 +980,18 @@ handle_function(get_weapon, [Name, To], Context, _Opts) ->
     end;
 
 %% Powerups
-handle_function(get_powerup, [Name, To], Context, _Opts) ->
+handle_function(get_powerup, {Name, To}, Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     {ok, return_powerup(Name)};
 
-handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
+handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
     ProxyGetPowerup =:= proxy_get_powerup orelse
     ProxyGetPowerup =:= bad_proxy_get_powerup
 ->
+    % NOTE
+    % Client may return `{exception, _}` tuple with some business level exception
+    % here, yet handler expects us to `throw/1` them. This is expected here it
+    % seems though.
     try call(Context, 'Powerups', get_powerup, {Name, self_to_bin()})
     catch
         Class:Reason:Stacktrace ->
@@ -997,7 +1001,7 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
         ok      = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name})
     end;
 
-handle_function(like_powerup, [Name, To], Context, _Opts) ->
+handle_function(like_powerup, {Name, To}, Context, _Opts) ->
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
     {ok, ok};
 
@@ -1063,7 +1067,7 @@ log_event(Event, RpcId, Meta) ->
 %%
 init(Req, Code) ->
     ct:pal("Cowboy fail server received request. Replying: ~p", [Code]),
-    {stop, cowboy_req:reply(Code, Req), Code}.
+    {ok, cowboy_req:reply(Code, Req), Code}.
 
 terminate(_, _, _) ->
     ok.

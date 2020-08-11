@@ -199,7 +199,7 @@ handle_event(Event, RpcId, Meta, _) ->
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
     {ok, woody:result()}.
 
-handle_function(get_weapon, [Name, _Data], Context, _Opts) ->
+handle_function(get_weapon, {Name, _Data}, Context, _Opts) ->
     _ = assert_common_name([<<"Valid Test Client">>], Context),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
 

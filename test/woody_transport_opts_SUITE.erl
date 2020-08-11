@@ -176,13 +176,13 @@ stop_woody_server(Pid) ->
     true = exit(Pid, shutdown),
     ok.
 
-handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
+handle_function(get_weapon, {Name, _}, _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
     _ = ets:update_counter(Table, slot, -1),
     {ok, #'Weapon'{name = Name, slot_pos = Slot}};
 
-handle_function(get_powerup, [Name, _], _Context, _) ->
+handle_function(get_powerup, {Name, _}, _Context, _) ->
     ok = timer:sleep(2000),
     {ok, #'Powerup'{name = Name}}.
 
