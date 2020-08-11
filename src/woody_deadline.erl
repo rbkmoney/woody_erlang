@@ -11,6 +11,7 @@
 -export([from_binary/1]).
 -export([to_unixtime_ms/1]).
 -export([from_unixtime_ms/1]).
+-export([unow/0]).
 
 %% Types
 -type millisec() :: 0..1000.
