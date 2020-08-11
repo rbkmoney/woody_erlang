@@ -9,8 +9,6 @@
 -export([call      /3]).
 -export([child_spec/1]).
 
--export([get_rpc_type/2]).
-
 %% Types
 -type thrift_client() :: term().
 
@@ -33,7 +31,7 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
             service        => ServiceName,
             service_schema => Service,
             function       => Function,
-            type           => get_rpc_type(Service, Function),
+            type           => woody_util:get_rpc_type(Service, Function),
             args           => Args,
             deadline       => woody_context:get_deadline(WoodyContext),
             metadata       => woody_context:get_meta(WoodyContext)
@@ -42,15 +40,6 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     ),
     _ = log_event(?EV_CALL_SERVICE, WoodyState1, #{}),
     do_call(make_thrift_client(Service, Opts, WoodyState1), Function, Args, WoodyState1).
-
--spec get_rpc_type(woody:service(), woody:func()) ->
-    woody:rpc_type().
-get_rpc_type(ThriftService = {Module, Service}, Function) ->
-    try woody_util:get_rpc_reply_type(Module:function_info(Service, Function, reply_type))
-    catch
-        error:Reason when Reason =:= undef orelse Reason =:= badarg ->
-            error(badarg, [ThriftService, Function])
-    end.
 
 %%
 %% Internal functions

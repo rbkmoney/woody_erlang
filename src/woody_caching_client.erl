@@ -224,6 +224,6 @@ add_thrift_meta({Service = {_, ServiceName}, Function, Args}, Meta) ->
         service        => ServiceName,
         service_schema => Service,
         function       => Function,
-        type           => woody_client_thrift:get_rpc_type(Service, Function),
+        type           => woody_util:get_rpc_type(Service, Function),
         args           => Args
     }.

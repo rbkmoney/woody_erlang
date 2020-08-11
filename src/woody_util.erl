@@ -6,6 +6,7 @@
 -export([get_protocol_handler/2]).
 -export([get_mod_opts/1]).
 -export([to_binary/1]).
+-export([get_rpc_type/2]).
 -export([get_rpc_reply_type/1]).
 
 -define(DEFAULT_HANDLER_OPTS, undefined).
@@ -19,7 +20,7 @@ get_protocol_handler(Role, Opts) ->
     Protocol  = genlib_map:get(protocol, Opts, thrift),
     Transport = genlib_map:get(transport, Opts, http),
     case {Role, Protocol, Transport} of
-        {client, thrift, http} -> woody_client_thrift;
+        {client, thrift, http} -> woody_client_thrift_v2;
         {server, thrift, http} -> woody_server_thrift_http_handler;
         _                      -> error(badarg, [Role, Opts])
     end.
@@ -43,6 +44,11 @@ to_binary([], Reason) ->
 to_binary([Part | T], Reason) ->
     BinPart = genlib:to_binary(Part),
     to_binary(T, <<Reason/binary, BinPart/binary>>).
+
+-spec get_rpc_type(woody:service(), woody:func()) ->
+    woody:rpc_type().
+get_rpc_type({Module, Service}, Function) ->
+    get_rpc_reply_type(Module:function_info(Service, Function, reply_type)).
 
 -spec get_rpc_reply_type(_ThriftReplyType) ->
     woody:rpc_type().
