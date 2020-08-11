@@ -17,10 +17,6 @@
 -export([init/2]).
 -export([terminate/3]).
 
-%% API for woody_stream_handler
--export([trace_req/4]).
--export([trace_resp/6]).
-
 %% Types
 -type handler_limits() :: #{
     max_heap_size => integer() %% process words, see erlang:process_flag(max_heap_size, MaxHeapSize) for details.
@@ -71,6 +67,7 @@
 -type route_opts() :: #{
     handlers              := list(woody:http_handler(woody:th_handler())),
     event_handler         := woody:ev_handlers(),
+    read_body_opts        => read_body_opts(),
     protocol              => thrift,
     transport             => http,
     handler_limits        => handler_limits()
@@ -82,13 +79,12 @@
 
 -export_type([protocol_opts/0]).
 
--type server_opts() :: #{regexp_meta => re_mp()}.
-
 -type state() :: #{
-    th_handler     := woody:th_handler(),
+    th_handler     => woody:th_handler(),
     ev_handler     := woody:ev_handlers(),
-    server_opts    := server_opts(),
+    read_body_opts := read_body_opts(),
     handler_limits := handler_limits(),
+    regexp_meta    := re_mp(),
     url            => woody:url(),
     woody_state    => woody_state:st()
 }.
@@ -151,9 +147,9 @@ get_cowboy_config(Opts = #{event_handler := EvHandler}) ->
     Dispatch   = get_dispatch(Opts),
     ProtocolOpts = maps:get(protocol_opts, Opts, #{}),
     CowboyOpts   = maps:put(stream_handlers, [woody_monitor_h, woody_trace_h, cowboy_stream_h], ProtocolOpts),
-    ReadBodyOpts = maps:get(read_body_opts, Opts, #{}),
+    Env = woody_trace_h:env(maps:with([event_handler], Opts)),
     maps:merge(#{
-        env =>#{dispatch => Dispatch, event_handler => EvHandler, read_body_opts => ReadBodyOpts},
+        env => Env#{dispatch => Dispatch},
         max_header_name_length => 64
     }, CowboyOpts).
 
@@ -175,81 +171,38 @@ get_dispatch(Opts) ->
 -spec get_all_routes(options())->
     [route(_)].
 get_all_routes(Opts) ->
+    RouteOpts = maps:with([handlers, event_handler, read_body_opts, handler_limits, protocol, transport], Opts),
     AdditionalRoutes = maps:get(additional_routes, Opts, []),
-    AdditionalRoutes ++ get_routes(maps:with([handlers, event_handler, handler_limits, protocol, transport], Opts)).
+    AdditionalRoutes ++ get_routes(RouteOpts).
 
--spec get_routes(route_opts())->
+-spec get_routes(route_opts()) ->
     [route(state())].
-get_routes(Opts = #{handlers := Handlers, event_handler := EvHandler}) ->
-    Limits = maps:get(handler_limits, Opts, #{}),
-    get_routes(config(), Limits, EvHandler, Handlers, []).
+get_routes(Opts = #{handlers := Handlers}) ->
+    State0 = init_state(Opts),
+    [get_route(State0, Handler) || Handler <- Handlers].
 
--spec get_routes(server_opts(), handler_limits(), woody:ev_handlers(), Handlers, Routes) ->
-    Routes when Handlers :: list(woody:http_handler(woody:th_handler())), Routes :: [route(state())].
-get_routes(_, _, _, [], Routes) ->
-    Routes;
-get_routes(ServerOpts, Limits, EvHandler, [{PathMatch, {Service, Handler}} | T], Routes) ->
-    get_routes(ServerOpts, Limits, EvHandler, T, [
-        {PathMatch, ?MODULE, #{
-            th_handler     => {Service, Handler},
-            ev_handler     => EvHandler,
-            server_opts    => ServerOpts,
-            handler_limits => Limits
-        }} | Routes
-    ]);
-get_routes(_, _, _, [Handler | _], _) ->
+-spec get_route(state(), woody:http_handler(woody:th_handler())) ->
+    route(state()).
+get_route(State0, {PathMatch, {Service, Handler}}) ->
+    {PathMatch, ?MODULE, State0#{th_handler => {Service, Handler}}};
+get_route(_, Handler) ->
     error({bad_handler_spec, Handler}).
 
--spec config() ->
-    server_opts().
-config() ->
-    #{regexp_meta => compile_filter_meta()}.
+-spec init_state(route_opts()) ->
+    state().
+init_state(Opts = #{}) ->
+    #{
+        ev_handler     => maps:get(event_handler, Opts),
+        read_body_opts => maps:get(read_body_opts, Opts, #{}),
+        handler_limits => maps:get(handler_limits, Opts, #{}),
+        regexp_meta    => compile_filter_meta()
+    }.
 
 -spec compile_filter_meta() ->
     re_mp().
 compile_filter_meta() ->
     {ok, Re} = re:compile(?HEADER_META_RE, [unicode, caseless]),
     Re.
-
--spec trace_req(true, cowboy_req:req(), woody:ev_handlers(), server_opts()) ->
-    cowboy_req:req().
-trace_req(true, Req, EvHandler, ServerOpts) ->
-    Url = unicode:characters_to_binary(cowboy_req:uri(Req)),
-    Headers = cowboy_req:headers(Req),
-    Meta = #{
-         role    => server,
-         event   => <<"http request received">>,
-         url     => Url,
-         headers => Headers
-     },
-    Meta1 = case get_body(Req, ServerOpts) of
-        {ok, Body, _} ->
-             Meta#{body => Body, body_status => ok}
-    end,
-    _ = woody_event_handler:handle_event(EvHandler, ?EV_TRACE, undefined, Meta1),
-    Req;
-trace_req(_, Req, _, _) ->
-    Req.
-
--spec trace_resp(
-    true,
-    cowboy_req:req(),
-    woody:http_code(),
-    woody:http_headers(),
-    woody:http_body(),
-    woody:ev_handlers()
-) ->
-    cowboy_req:req().
-trace_resp(true, Req, Code, Headers, Body, EvHandler) ->
-    _ = woody_event_handler:handle_event(EvHandler, ?EV_TRACE, undefined, #{
-         role    => server,
-         event   => <<"http response send">>,
-         code    => Code,
-         headers => Headers,
-         body    => Body}),
-    Req;
-trace_resp(_, Req, _, _, _, _) ->
-    Req.
 
 %%
 %% cowboy_http_handler callbacks
@@ -286,10 +239,10 @@ set_handler_limits(Limits) ->
 handle(Req, State = #{
     url         := Url,
     woody_state := WoodyState,
-    server_opts := ServerOpts,
+    read_body_opts := ReadBodyOpts,
     th_handler  := ThriftHandler
 }) ->
-    Req2 = case get_body(Req, ServerOpts) of
+    Req2 = case get_body(Req, ReadBodyOpts) of
         {ok, Body, Req1} when byte_size(Body) > 0 ->
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState, #{url => Url, status => ok}),
             handle_request(Body, ThriftHandler, WoodyState, Req1);
@@ -433,13 +386,13 @@ check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) 
 
 -spec check_metadata_headers(woody:http_headers(), cowboy_req:req(), state()) ->
     check_result().
-check_metadata_headers(Headers, Req, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
-    WoodyState1 = set_metadata(find_metadata(Headers, ServerOpts), WoodyState),
+check_metadata_headers(Headers, Req, State = #{woody_state := WoodyState, regexp_meta := ReMeta}) ->
+    WoodyState1 = set_metadata(find_metadata(Headers, ReMeta), WoodyState),
     {ok, Req, update_woody_state(State, WoodyState1, Req)}.
 
--spec find_metadata(woody:http_headers(), server_opts()) ->
+-spec find_metadata(woody:http_headers(), re_mp()) ->
     woody_context:meta().
-find_metadata(Headers, #{regexp_meta := Re}) ->
+find_metadata(Headers, Re) ->
     RpcId = ?HEADER_RPC_ID,
     RootId = ?HEADER_RPC_ROOT_ID,
     ParentId = ?HEADER_RPC_PARENT_ID,
@@ -493,12 +446,10 @@ reply_client_error(Code, Reason, Req, #{url := Url, woody_state := WoodyState}) 
     reply(Code, set_error_headers(<<"Result Unexpected">>, Reason, Req), WoodyState).
 
 %% handle functions
--spec get_body(cowboy_req:req(), server_opts()) ->
+-spec get_body(cowboy_req:req(), read_body_opts()) ->
     {ok, woody:http_body(), cowboy_req:req()}.
-get_body(Req, #{read_body_opts := ReadBodyOpts}) ->
-    do_get_body(<<>>, Req, ReadBodyOpts);
-get_body(Req, _) ->
-    do_get_body(<<>>, Req, #{}).
+get_body(Req, ReadBodyOpts) ->
+    do_get_body(<<>>, Req, ReadBodyOpts).
 
 do_get_body(Body, Req, Opts) ->
     case cowboy_req:read_body(Req, Opts) of
