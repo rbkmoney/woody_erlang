@@ -100,7 +100,7 @@ respects_max_connections(C) ->
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),
     Results = genlib_pmap:map(
         fun (_) ->
-            woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client)
+            woody_client:call({Service, 'get_weapon', {<<"BFG">>, <<>>}}, Client)
         end,
         lists:seq(1, MaxConns * 10)
     ),
@@ -191,7 +191,7 @@ handle_event(Event, RpcId, Meta, Opts) ->
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
 
 get_powerup(Client, Name, Arg) ->
-    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', [Name, Arg]}, Client).
+    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', {Name, Arg}}, Client).
 
 %%
 

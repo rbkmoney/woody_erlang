@@ -594,13 +594,13 @@ call_resolver_nxdomain(_) ->
     Context = make_context(<<"nxdomain">>),
     ?assertError(
         {woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}},
-        call(Context, 'The Void', get_weapon, [<<"Enforcer">>, self_to_bin()])
+        call(Context, 'The Void', get_weapon, {<<"Enforcer">>, self_to_bin()})
     ).
 
 call3_ok_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts    = #{url => Url, event_handler => ?MODULE},
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts).
@@ -608,7 +608,7 @@ call3_ok_test(_) ->
 call3_ok_default_ev_handler_test(_) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts    = #{url => Url, event_handler => {woody_event_handler_default, #{}}},
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts).
@@ -624,7 +624,7 @@ call_throw_unexpected_test(_) ->
     Context = make_context(Id),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()])
+        call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()})
     ).
 
 call_system_external_error_test(_) ->
@@ -633,7 +633,7 @@ call_system_external_error_test(_) ->
     Context = make_context(Id),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()})
     ).
 
 call_client_error_test(_) ->
@@ -641,7 +641,7 @@ call_client_error_test(_) ->
     Context = make_context(<<"call_client_error">>),
     ?assertError(
         {woody_error, {internal, result_unexpected, <<"client thrift error: ", _/binary>>}},
-        call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()])
+        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()})
     ).
 
 call_server_internal_error_test(_) ->
@@ -649,14 +649,14 @@ call_server_internal_error_test(_) ->
     Context = make_context(<<"call_server_internal_error">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', get_powerup, [Armor, self_to_bin()])
+        call(Context, 'Powerups', get_powerup, {Armor, self_to_bin()})
     ),
     {ok, _} = receive_msg(Armor, Context).
 
 call_oneway_void_test(_) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_oneway_void">>),
-    {ok, ok} = call(Context, 'Powerups', like_powerup, [Armor, self_to_bin()]),
+    {ok, ok} = call(Context, 'Powerups', like_powerup, {Armor, self_to_bin()}),
     {ok, _}  = receive_msg(Armor, Context).
 
 call_sequence_with_context_meta_test(_) ->
@@ -666,13 +666,13 @@ call_sequence_with_context_meta_test(_) ->
                 <<"call_seq_with_context_meta">>,
                 #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
     Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)},
-    Expect = call(Context, 'Weapons', switch_weapon, [Current, next, 1, self_to_bin()]).
+    Expect = call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()}).
 
 call_pass_thru_ok_test(_) ->
     Armor   = <<"AntiGrav Boots">>,
     Context = make_context(<<"call_pass_thru_ok">>),
     Expect  = {ok, genlib_map:get(Armor, ?POWERUPS)},
-    Expect  = call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()]),
+    Expect  = call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}),
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_except_test(_) ->
@@ -680,7 +680,7 @@ call_pass_thru_except_test(_) ->
     Id      = <<"call_pass_thru_except">>,
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
-    try call(Context, 'Powerups', proxy_get_powerup, [Armor, self_to_bin()])
+    try call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()})
     catch
         error:{woody_error, {external, result_unexpected, _}} ->
             ok
@@ -692,7 +692,7 @@ call_pass_thru_bad_result_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_result">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()})
     ),
     {ok, _} = receive_msg(Armor, Context).
 
@@ -701,7 +701,7 @@ call_pass_thru_bad_except_test(_) ->
     Context  = make_context(<<"call_pass_thru_bad_except">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', bad_proxy_get_powerup, [Armor, self_to_bin()])
+        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()})
     ),
     {ok, _} = receive_msg(Armor, Context).
 
@@ -723,7 +723,7 @@ call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass) ->
     ?assertException(
         ExceptClass,
         {woody_error, {external, ErrClass, _}},
-        call(Context, 'Powerups', proxy_get_powerup, [Powerup, self_to_bin()])
+        call(Context, 'Powerups', proxy_get_powerup, {Powerup, self_to_bin()})
     ),
     {ok, _} = receive_msg(Powerup, Context).
 
@@ -749,7 +749,7 @@ call_fail_w_no_headers(Id, Class, Code) ->
     BinCode = integer_to_binary(Code),
     ?assertError(
         {woody_error, {external, Class, <<"got response with http code ", BinCode:3/binary, _/binary>>}},
-        woody_client:call({Service, get_weapon, [Gun, self_to_bin()]},
+        woody_client:call({Service, get_weapon, {Gun, self_to_bin()}},
             #{url => Url, event_handler => ?MODULE}, Context)
     ).
 
@@ -779,7 +779,7 @@ call_deadline_ok_test(_) ->
     Id = <<"call_deadline_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(3000),
     Context  = woody_context:new(Id, #{<<"sleep">> => <<"100">>}, Deadline),
@@ -790,7 +790,7 @@ call_deadline_reached_on_client_test(_) ->
     Id = <<"call_deadline_reached_on_client">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(0),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"1000">>}, Deadline),
@@ -802,7 +802,7 @@ call_deadline_reached_on_client_test(_) ->
 server_handled_client_timeout_test(_) ->
     Id = <<"server_handled_client_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
-    Request = {Service, get_stuck_looping_weapons, []},
+    Request = {Service, get_stuck_looping_weapons, {}},
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(250),
     Context  = woody_context:new(Id, #{}, Deadline),
@@ -820,7 +820,7 @@ call_deadline_timeout_test(_) ->
     Id = <<"call_deadline_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
-    Request = {Service, get_weapon, [Gun, self_to_bin()]},
+    Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts    = #{url => Url, event_handler => ?MODULE},
     Deadline = woody_deadline:from_timeout(500),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"3000">>}, Deadline),
@@ -883,8 +883,8 @@ try_bad_handler_spec_test(_) ->
 calls_with_cache(_) ->
     Id = <<"call_with_cache">>,
     {_, Service} = get_service_endpoint('Weapons'),
-    Request = {Service, get_weapon, [<<"Enforcer">>, self_to_bin()]},
-    InvalidRequest = {Service, get_weapon, [<<"Bio Rifle">>, self_to_bin()]},
+    Request = {Service, get_weapon, {<<"Enforcer">>, self_to_bin()}},
+    InvalidRequest = {Service, get_weapon, {<<"Bio Rifle">>, self_to_bin()}},
     Opts    = woody_caching_client_options(),
     Context = woody_context:new(Id),
 
@@ -988,7 +988,7 @@ handle_function(ProxyGetPowerup, [Name, To], Context, _Opts) when
     ProxyGetPowerup =:= proxy_get_powerup orelse
     ProxyGetPowerup =:= bad_proxy_get_powerup
 ->
-    try call(Context, 'Powerups', get_powerup, [Name, self_to_bin()])
+    try call(Context, 'Powerups', get_powerup, {Name, self_to_bin()})
     catch
         Class:Reason:Stacktrace ->
             erlang:raise(Class, Reason, Stacktrace)
@@ -1074,7 +1074,7 @@ terminate(_, _, _) ->
 gun_test_basic(Id, Gun, Expect, WithMsg) ->
     Context   = make_context(Id),
     {Class, Reason} = get_except(Expect),
-    try call(Context, 'Weapons', get_weapon, [Gun, self_to_bin()]) of
+    try call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}) of
         Expect -> ok
     catch
         Class:Reason -> ok
@@ -1119,7 +1119,7 @@ check_msg(false, _, _) ->
 switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift),
     ContextAnnot = annotate_weapon(CheckAnnot, Context, NextWName, NextWPos),
-    case call(ContextAnnot, 'Weapons', get_weapon, [NextWName, self_to_bin()]) of
+    case call(ContextAnnot, 'Weapons', get_weapon, {NextWName, self_to_bin()}) of
         {exception, #'WeaponFailure'{code = <<"weapon_error">>, reason = <<"out of ammo">>}}
         ->
             switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot);

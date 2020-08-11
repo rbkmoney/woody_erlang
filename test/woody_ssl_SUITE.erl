@@ -259,7 +259,7 @@ get_weapon(Id, Gun, SSLOptions) ->
             ]
         }
     },
-    woody_client:call({Service, get_weapon, [Gun, <<>>]}, Options, Context).
+    woody_client:call({Service, get_weapon, {Gun, <<>>}}, Options, Context).
 
 get_service_endpoint('Weapons') ->
     {

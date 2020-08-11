@@ -34,7 +34,7 @@
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.5">>},1},
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
-       {ref,"aa233e29a8d8682ae9e088eedde772f0ee45d105"}},
+       {ref,"d6ff6a2d8d48716a802b44ebd476e436b857d4b4"}},
   0},
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.4.1">>},2}]}.
 [

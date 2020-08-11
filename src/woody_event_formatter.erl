@@ -35,7 +35,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             ML = maps:get(max_length, Opts1),
             MD = maps:get(max_depth, Opts1),
             MPSL = maps:get(max_printable_string_length, Opts1),
-            Result1 = format_call_(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
+            Result1 = format_arguments(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
             <<Result1/binary, ")">>
     catch error:badarg ->
         Result1 = format_verbatim(Arguments, Result0, Opts1),
@@ -43,18 +43,44 @@ format_call(Module, Service, Function, Arguments, Opts) ->
     end,
     {"~ts", [Result]}.
 
-format_call_([], [], Result, _MD, _ML, _MPSL, _AD) ->
+format_arguments(ArgTypes, Arguments, Result, MD, ML, MPSL, AD) when is_tuple(Arguments) ->
+    format_arguments_tup(ArgTypes, Arguments, 1, Result, MD, ML, MPSL, AD);
+format_arguments(ArgTypes, Arguments, Result, MD, ML, MPSL, AD) when is_list(Arguments) ->
+    format_arguments_list(ArgTypes, Arguments, Result, MD, ML, MPSL, AD).
+
+format_arguments_list([], [], Result, _MD, _ML, _MPSL, _AD) ->
     Result;
-format_call_(_, ArgumentList, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
+format_arguments_list(_, ArgumentList, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
     HasMoreArguments = AD and (ArgumentList =/= []),
     Result1 = maybe_add_delimiter(HasMoreArguments, Result0),
     Result2 = maybe_add_more_marker(HasMoreArguments, Result1),
     Result2;
-format_call_([Type | RestType], [Argument | RestArgs], Result0, MD, ML, MPSL, AD) ->
+format_arguments_list([Type | RestType], [Argument | RestArgs], Result0, MD, ML, MPSL, AD) ->
     {Result1, AD1} = format_argument(Type, Argument, Result0, MD, ML, MPSL, AD),
-    format_call_(
+    format_arguments_list(
         RestType,
         RestArgs,
+        Result1,
+        MD,
+        ML,
+        MPSL,
+        AD1
+    ).
+
+format_arguments_tup([], _, _, Result, _MD, _ML, _MPSL, _AD) ->
+    Result;
+format_arguments_tup(Types, _, _, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
+    HasMoreArguments = AD and (Types =/= []),
+    Result1 = maybe_add_delimiter(HasMoreArguments, Result0),
+    Result2 = maybe_add_more_marker(HasMoreArguments, Result1),
+    Result2;
+format_arguments_tup([Type | RestType], Arguments, I, Result0, MD, ML, MPSL, AD) ->
+    Argument = element(I, Arguments),
+    {Result1, AD1} = format_argument(Type, Argument, Result0, MD, ML, MPSL, AD),
+    format_arguments_tup(
+        RestType,
+        Arguments,
+        I + 1,
         Result1,
         MD,
         ML,
