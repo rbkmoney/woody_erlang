@@ -208,7 +208,7 @@ config() ->
 -spec compile_filter_meta() ->
     re_mp().
 compile_filter_meta() ->
-    {ok, Re} = re:compile([?NORMAL_HEADER_META_RE], [unicode, caseless]),
+    {ok, Re} = re:compile(?HEADER_META_RE, [unicode, caseless]),
     Re.
 
 -spec trace_req(true, cowboy_req:req(), woody:ev_handlers(), server_opts()) ->
@@ -362,33 +362,31 @@ check_accept(BadAccept, Req1, State) ->
 -spec check_woody_headers(cowboy_req:req(), state()) ->
     check_result().
 check_woody_headers(Req, State = #{woody_state := WoodyState0}) ->
-    {Mode, Req0} = woody_util:get_req_headers_mode(Req),
-    case get_rpc_id(Req0, Mode) of
+    case get_rpc_id(Req) of
         {ok, RpcId, Req1} ->
             WoodyState1 = set_cert(Req1, set_rpc_id(RpcId, WoodyState0)),
             check_deadline_header(
-                cowboy_req:header(?HEADER_DEADLINE(Mode), Req1),
+                cowboy_req:header(?HEADER_DEADLINE, Req1),
                 Req1,
-                Mode,
                 update_woody_state(State, WoodyState1, Req1)
             );
         {error, BadRpcId, Req1} ->
             WoodyState1 = set_rpc_id(BadRpcId, WoodyState0),
-            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX(Mode), " id header"]),
+            reply_bad_header(400, woody_util:to_binary(["bad ", ?HEADER_PREFIX, " id header"]),
                 Req1, update_woody_state(State, WoodyState1, Req1)
             )
     end.
 
--spec get_rpc_id(cowboy_req:req(), woody_util:headers_mode()) ->
+-spec get_rpc_id(cowboy_req:req()) ->
     {ok | error, woody:rpc_id(), cowboy_req:req()}.
-get_rpc_id(Req, Mode) ->
+get_rpc_id(Req) ->
     check_ids(maps:fold(
         fun get_rpc_id/3,
         #{req => Req},
         #{
-            span_id   => ?HEADER_RPC_ID(Mode),
-            trace_id  => ?HEADER_RPC_ROOT_ID(Mode),
-            parent_id => ?HEADER_RPC_PARENT_ID(Mode)
+            span_id   => ?HEADER_RPC_ID,
+            trace_id  => ?HEADER_RPC_ROOT_ID,
+            parent_id => ?HEADER_RPC_PARENT_ID
         }
     )).
 
@@ -405,22 +403,22 @@ check_ids(Map = #{status := error, req := Req}) ->
 check_ids(Map = #{req := Req}) ->
     {ok, maps:without([req], Map), Req}.
 
--spec check_deadline_header(Header, Req, woody_util:headers_mode(), state()) -> cowboy_init_result() when
+-spec check_deadline_header(Header, Req, state()) -> cowboy_init_result() when
     Header :: woody:http_header_val() | undefined, Req :: cowboy_req:req().
-check_deadline_header(undefined, Req, Mode, State) ->
-    check_metadata_headers(cowboy_req:headers(Req), Req, Mode, State);
-check_deadline_header(DeadlineBin, Req, Mode, State) ->
+check_deadline_header(undefined, Req, State) ->
+    check_metadata_headers(cowboy_req:headers(Req), Req, State);
+check_deadline_header(DeadlineBin, Req, State) ->
     try woody_deadline:from_binary(DeadlineBin) of
-        Deadline -> check_deadline(Deadline, Req, Mode, State)
+        Deadline -> check_deadline(Deadline, Req, State)
     catch
         error:{bad_deadline, Error} ->
-            ErrorDescription = woody_util:to_binary(["bad ", ?HEADER_DEADLINE(Mode), " header: ", Error]),
+            ErrorDescription = woody_util:to_binary(["bad ", ?HEADER_DEADLINE, " header: ", Error]),
             reply_bad_header(400, ErrorDescription, Req, State)
     end.
 
--spec check_deadline(woody:deadline(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
+-spec check_deadline(woody:deadline(), cowboy_req:req(), state()) ->
     check_result().
-check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodyState}) ->
+check_deadline(Deadline, Req, State = #{url := Url, woody_state := WoodyState}) ->
     case woody_deadline:is_reached(Deadline) of
         true ->
             _ = woody_event_handler:handle_event(?EV_SERVER_RECEIVE, WoodyState,
@@ -430,29 +428,28 @@ check_deadline(Deadline, Req, Mode, State = #{url := Url, woody_state := WoodySt
         false ->
             WoodyState1 = set_deadline(Deadline, WoodyState),
             Headers = cowboy_req:headers(Req),
-            check_metadata_headers(Headers, Req, Mode, update_woody_state(State, WoodyState1, Req))
+            check_metadata_headers(Headers, Req, update_woody_state(State, WoodyState1, Req))
     end.
 
--spec check_metadata_headers(woody:http_headers(), cowboy_req:req(), woody_util:headers_mode(), state()) ->
+-spec check_metadata_headers(woody:http_headers(), cowboy_req:req(), state()) ->
     check_result().
-check_metadata_headers(Headers, Req, Mode, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
-    WoodyState1 = set_metadata(find_metadata(Headers, Mode, ServerOpts), WoodyState),
+check_metadata_headers(Headers, Req, State = #{woody_state := WoodyState, server_opts := ServerOpts}) ->
+    WoodyState1 = set_metadata(find_metadata(Headers, ServerOpts), WoodyState),
     {ok, Req, update_woody_state(State, WoodyState1, Req)}.
 
--spec find_metadata(woody:http_headers(), woody_util:headers_mode(), server_opts()) ->
+-spec find_metadata(woody:http_headers(), server_opts()) ->
     woody_context:meta().
-find_metadata(Headers, Mode, #{regexp_meta := _Re}) ->
-    %% TODO: Use compiled Re after headers transition ends
-    RpcId = ?HEADER_RPC_ID(Mode),
-    RootId = ?HEADER_RPC_ROOT_ID(Mode),
-    ParentId = ?HEADER_RPC_PARENT_ID(Mode),
+find_metadata(Headers, #{regexp_meta := Re}) ->
+    RpcId = ?HEADER_RPC_ID,
+    RootId = ?HEADER_RPC_ROOT_ID,
+    ParentId = ?HEADER_RPC_PARENT_ID,
     maps:fold(
         fun(H, V, Acc) when
             H =/= RpcId andalso
             H =/= RootId andalso
             H =/= ParentId
         ->
-            case re:replace(H, ?HEADER_META_RE(Mode), "", [{return, binary}, anchored]) of
+            case re:replace(H, Re, "", [{return, binary}, anchored]) of
                 H -> Acc;
                 MetaHeader -> Acc#{MetaHeader => V}
             end;
@@ -556,10 +553,8 @@ handle_error({system, {external, result_unknown, Details}}, Req, WoodyState) ->
     cowboy_req:req().
 set_error_headers(Class, Reason, Req) ->
     Headers = #{
-        ?NORMAL_HEADER_E_CLASS => Class,
-        ?NORMAL_HEADER_E_REASON => Reason,
-        ?LEGACY_HEADER_E_CLASS => Class,
-        ?LEGACY_HEADER_E_REASON =>Reason
+        ?HEADER_E_CLASS => Class,
+        ?HEADER_E_REASON => Reason
     },
     cowboy_req:set_resp_headers(Headers, Req).
 

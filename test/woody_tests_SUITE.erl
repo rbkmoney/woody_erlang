@@ -240,11 +240,7 @@
 %%
 all() ->
     [
-        {group, legacy_client_auto_server},
-        {group, auto_client_legacy_server},
-        {group, auto_both},
-        {group, normal_both},
-        {group, legacy_both},
+        {group, client_server},
         {group, woody_resolver}
     ].
 
@@ -295,11 +291,7 @@ groups() ->
         calls_with_cache
     ],
     [
-        {legacy_client_auto_server, [], SpecTests},
-        {auto_client_legacy_server, [], SpecTests},
-        {auto_both, [], SpecTests},
-        {normal_both, [], SpecTests},
-        {legacy_both, [], SpecTests},
+        {client_server, [], SpecTests},
         {woody_resolver, [], [
             woody_resolver_inet,
             woody_resolver_inet6,
@@ -331,17 +323,7 @@ init_per_suite(C) ->
 
 end_per_suite(C) ->
     application:unset_env(hackney, mod_metrics), % unset so it won't report metrics next suite
-    [application_stop(App) || App <- proplists:get_value(apps, C)].
-
-application_stop(App=sasl) ->
-    %% hack for preventing sasl deadlock
-    %% http://erlang.org/pipermail/erlang-questions/2014-May/079012.html
-    error_logger:delete_report_handler(cth_log_redirect),
-    _ = application:stop(App),
-    error_logger:add_report_handler(cth_log_redirect),
-    ok;
-application_stop(App) ->
-    application:stop(App).
+    [application:stop(App) || App <- proplists:get_value(apps, C)].
 
 init_per_testcase(TC, C) when
       TC =:= try_bad_handler_spec_test     ;
@@ -387,45 +369,13 @@ init_per_testcase(_, C) ->
     {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
     [{sup, Sup} | C].
 
-init_per_group(legacy_client_auto_server, Config) ->
-    config_headers_mode(legacy, auto, Config);
-init_per_group(auto_client_legacy_server, Config) ->
-    config_headers_mode(auto, legacy, Config);
-init_per_group(auto_both, Config) ->
-    config_headers_mode(auto, auto, Config);
-init_per_group(normal_both, Config) ->
-    config_headers_mode(normal, normal, Config);
-init_per_group(legacy_both, Config) ->
-    config_headers_mode(legacy, legacy, Config);
 init_per_group(woody_resolver, Config) ->
-    Config0 = config_headers_mode(normal, normal, Config),
-    [{env_inet6, inet_db:res_option(inet6)} | Config0];
+    [{env_inet6, inet_db:res_option(inet6)} | Config];
 init_per_group(_Name, Config) ->
     Config.
 
-end_per_group(Name, _Config) when
-    Name =:= legacy_client_auto_server orelse
-    Name =:= auto_client_legacy_server orelse
-    Name =:= auto_both orelse
-    Name =:= normal_both orelse
-    Name =:= legacy_both orelse
-    Name =:= woody_resolver
-->
-    ok = application:set_env(woody, client_headers_mode, auto),
-    ok = application:set_env(woody, server_headers_mode, auto),
-    ok;
 end_per_group(_Name, _Config) ->
     ok.
-
-config_headers_mode(Client, Server, Config) ->
-    ok = application:set_env(woody, client_headers_mode, Client),
-    ok = application:set_env(woody, server_headers_mode, Server),
-    [{server_headers_mode, not_auto(Server)}, {client_headers_mode, not_auto(Client)} | Config].
-
-not_auto(auto) ->
-    normal;
-not_auto(Mode) ->
-    Mode.
 
 start_tc_sup() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -883,16 +833,15 @@ call_deadline_timeout_test(_) ->
         woody_client:call(Request, Opts, Context)
     ).
 
-server_http_req_validation_test(Config) ->
-    HeadersMode = proplists:get_value(client_headers_mode, Config),
+server_http_req_validation_test(_Config) ->
     Id  = <<"server_http_req_validation">>,
     {Url, _Service} = get_service_endpoint('Weapons'),
     Headers = [
-        {?HEADER_RPC_ROOT_ID(HeadersMode)    , genlib:to_binary(Id)},
-        {?HEADER_RPC_ID(HeadersMode)         , genlib:to_binary(Id)},
-        {?HEADER_RPC_PARENT_ID(HeadersMode)  , genlib:to_binary(?ROOT_REQ_PARENT_ID)},
-        {<<"content-type">>                  , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>                        , ?CONTENT_TYPE_THRIFT}
+        {?HEADER_RPC_ROOT_ID    , genlib:to_binary(Id)},
+        {?HEADER_RPC_ID         , genlib:to_binary(Id)},
+        {?HEADER_RPC_PARENT_ID  , genlib:to_binary(?ROOT_REQ_PARENT_ID)},
+        {<<"content-type">>     , ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>           , ?CONTENT_TYPE_THRIFT}
     ],
 
     {ok, _Ref} = timer:kill_after(5000),

@@ -42,7 +42,7 @@
 
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
--define(BAD_RESP_HEADER(Mode)   , <<"reason unknown due to bad ", ?HEADER_PREFIX(Mode)/binary, "-error- headers">>).
+-define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
 
 %%
 %% API
@@ -196,16 +196,14 @@ close(Transport) ->
 -spec handle_result(_, woody_state:st()) ->
     {ok, woody:http_body()} | error().
 handle_result({ok, 200, Headers, Ref}, WoodyState) ->
-    Mode = woody_util:get_error_headers_mode(Headers),
-    Meta = case check_error_reason(Headers, 200, Mode, WoodyState) of
+    Meta = case check_error_reason(Headers, 200, WoodyState) of
         <<>>   -> #{};
         Reason -> #{reason => Reason}
     end,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
     get_body(hackney:body(Ref), WoodyState);
 handle_result({ok, Code, Headers, Ref}, WoodyState) ->
-    Mode = woody_util:get_error_headers_mode(Headers),
-    {Class, Details} = check_error_headers(Code, Headers, Mode, WoodyState),
+    {Class, Details} = check_error_headers(Code, Headers, WoodyState),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status=>error, code=>Code, reason=>Details}),
     %% Free the connection
     case hackney:skip_body(Ref) of
@@ -259,12 +257,12 @@ get_body({error, Reason}, WoodyState) ->
     _ = log_internal_error(?ERROR_RESP_BODY, Reason, WoodyState),
     {error, {system, {internal, result_unknown, ?ERROR_RESP_BODY}}}.
 
--spec check_error_headers(woody:http_code(), woody:http_headers(), woody_util:headers_mode(), woody_state:st()) ->
+-spec check_error_headers(woody:http_code(), woody:http_headers(), woody_state:st()) ->
     {woody_error:class(), woody_error:details()}.
-check_error_headers(502, Headers, Mode, WoodyState) ->
-    check_502_error_class(get_error_class_header_value(Headers, Mode), Headers, Mode, WoodyState);
-check_error_headers(Code, Headers, Mode, WoodyState) ->
-    {get_error_class(Code), check_error_reason(Headers, Code, Mode, WoodyState)}.
+check_error_headers(502, Headers, WoodyState) ->
+    check_502_error_class(get_error_class_header_value(Headers), Headers, WoodyState);
+check_error_headers(Code, Headers, WoodyState) ->
+    {get_error_class(Code), check_error_reason(Headers, Code, WoodyState)}.
 
 -spec get_error_class(woody:http_code()) ->
     woody_error:class().
@@ -275,40 +273,40 @@ get_error_class(504) ->
 get_error_class(_) ->
     result_unexpected.
 
--spec check_502_error_class(header_parse_value(), woody:http_headers(), woody_util:headers_mode(), woody_state:st()) ->
+-spec check_502_error_class(header_parse_value(), woody:http_headers(), woody_state:st()) ->
     {woody_error:class(), woody_error:details()}.
-check_502_error_class(none, Headers, Mode, WoodyState) ->
-    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS(Mode), " header missing"])}),
-    {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(<<"result unexpected">>, Headers, Mode, WoodyState) ->
-    {result_unexpected, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(<<"resource unavailable">>, Headers, Mode, WoodyState) ->
-    {resource_unavailable, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(<<"result unknown">>, Headers, Mode, WoodyState) ->
-    {result_unknown, check_error_reason(Headers, 502, Mode, WoodyState)};
-check_502_error_class(Bad, _, Mode, WoodyState) ->
-    _ = log_internal_error(?ERROR_RESP_HEADER, ["unknown ", ?HEADER_E_CLASS(Mode), " header value: ", Bad], WoodyState),
-    {result_unexpected, ?BAD_RESP_HEADER(Mode)}.
+check_502_error_class(none, Headers, WoodyState) ->
+    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_CLASS, " header missing"])}),
+    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(<<"result unexpected">>, Headers, WoodyState) ->
+    {result_unexpected, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(<<"resource unavailable">>, Headers, WoodyState) ->
+    {resource_unavailable, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(<<"result unknown">>, Headers, WoodyState) ->
+    {result_unknown, check_error_reason(Headers, 502, WoodyState)};
+check_502_error_class(Bad, _, WoodyState) ->
+    _ = log_internal_error(?ERROR_RESP_HEADER, ["unknown ", ?HEADER_E_CLASS, " header value: ", Bad], WoodyState),
+    {result_unexpected, ?BAD_RESP_HEADER}.
 
--spec check_error_reason(woody:http_headers(), woody:http_code(), woody_util:headers_mode(), woody_state:st()) ->
+-spec check_error_reason(woody:http_headers(), woody:http_code(), woody_state:st()) ->
     woody_error:details().
-check_error_reason(Headers, Code, Mode, WoodyState) ->
-    do_check_error_reason(get_header_value(?HEADER_E_REASON(Mode), Headers), Code, Mode, WoodyState).
+check_error_reason(Headers, Code, WoodyState) ->
+    do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, WoodyState).
 
--spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_util:headers_mode(), woody_state:st()) ->
+-spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_state:st()) ->
     woody_error:details().
-do_check_error_reason(none, 200, _Mode, _WoodyState) ->
+do_check_error_reason(none, 200, _WoodyState) ->
     <<>>;
-do_check_error_reason(none, Code, Mode, WoodyState) ->
-    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON(Mode), " header missing"])}),
-    woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON(Mode), " header"]);
-do_check_error_reason(Reason, _, _, _) ->
+do_check_error_reason(none, Code, WoodyState) ->
+    _ = log_event(?EV_TRACE, WoodyState, #{event => woody_util:to_binary([?HEADER_E_REASON, " header missing"])}),
+    woody_util:to_binary(["got response with http code ", Code, " and without ", ?HEADER_E_REASON, " header"]);
+do_check_error_reason(Reason, _, _) ->
     Reason.
 
--spec get_error_class_header_value(woody:http_headers(), woody_util:headers_mode()) ->
+-spec get_error_class_header_value(woody:http_headers()) ->
     header_parse_value().
-get_error_class_header_value(Headers, Mode) ->
-    case get_header_value(?HEADER_E_CLASS(Mode), Headers) of
+get_error_class_header_value(Headers) ->
+    case get_header_value(?HEADER_E_CLASS, Headers) of
         None when None =:= none orelse None =:= multiple ->
             None;
         Value ->
@@ -329,14 +327,11 @@ get_header_value(Name, Headers) ->
     woody:http_headers().
 make_woody_headers(Context) ->
     add_optional_headers(Context, #{
-        <<"content-type">>         => ?CONTENT_TYPE_THRIFT,
-        <<"accept">>               => ?CONTENT_TYPE_THRIFT,
-        ?NORMAL_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
-        ?NORMAL_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
-        ?NORMAL_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context),
-        ?LEGACY_HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
-        ?LEGACY_HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
-        ?LEGACY_HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context)
+        <<"content-type">>    => ?CONTENT_TYPE_THRIFT,
+        <<"accept">>          => ?CONTENT_TYPE_THRIFT,
+        ?HEADER_RPC_ROOT_ID   => woody_context:get_rpc_id(trace_id , Context),
+        ?HEADER_RPC_ID        => woody_context:get_rpc_id(span_id  , Context),
+        ?HEADER_RPC_PARENT_ID => woody_context:get_rpc_id(parent_id, Context)
     }).
 
 -spec add_optional_headers(woody_context:ctx(), woody:http_headers()) ->
@@ -352,10 +347,7 @@ add_metadata_headers(Context, Headers) ->
 -spec add_metadata_header(woody:http_header_name(), woody:http_header_val(), woody:http_headers()) ->
     woody:http_headers() | no_return().
 add_metadata_header(H, V, Headers) when is_binary(H) and is_binary(V) ->
-    maps:merge(#{
-        << ?NORMAL_HEADER_META_PREFIX/binary, H/binary >> => V,
-        << ?LEGACY_HEADER_META_PREFIX/binary, H/binary >> => V
-    }, Headers);
+    maps:put(<<?HEADER_META_PREFIX/binary, H/binary>>, V, Headers);
 add_metadata_header(H, V, Headers) ->
     error(badarg, [H, V, Headers]).
 
@@ -365,10 +357,7 @@ add_deadline_header(Context, Headers) ->
 do_add_deadline_header(undefined, Headers) ->
     Headers;
 do_add_deadline_header(Deadline, Headers) ->
-    maps:merge(#{
-        ?NORMAL_HEADER_DEADLINE => woody_deadline:to_binary(Deadline),
-        ?LEGACY_HEADER_DEADLINE => woody_deadline:to_binary(Deadline)
-    }, Headers).
+    maps:put(?HEADER_DEADLINE, woody_deadline:to_binary(Deadline), Headers).
 
 add_host_header(#hackney_url{netloc = Netloc}, Headers) ->
     maps:merge(Headers, #{<<"Host">> => Netloc}).
