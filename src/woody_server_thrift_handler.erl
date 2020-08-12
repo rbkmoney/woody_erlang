@@ -151,8 +151,7 @@ add_ev_meta(WoodyState, Service = {_, ServiceName}, Function, ReplyType) ->
 decode_request(State = #{th_proto := Proto, th_param_type := ParamsType, woody_state := WoodyState}) ->
     case thrift_protocol:read(Proto, ParamsType) of
         {Proto1, {ok, Args}} ->
-            Args1 = tuple_to_list(Args),
-            State#{th_proto => Proto1, args => Args1, woody_state := add_ev_meta(WoodyState, Args1)};
+            State#{th_proto => Proto1, args => Args, woody_state := add_ev_meta(WoodyState, Args)};
         {_, {error, Error}} ->
             throw_decode_error(Error)
     end.

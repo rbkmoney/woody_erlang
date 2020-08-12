@@ -81,7 +81,7 @@ get_resolver_opts(Opts) ->
 -spec do_call(thrift_client(), woody:func(), woody:args(), woody_state:st()) ->
     woody_client:result().
 do_call(Client, Function, Args, WoodyState) ->
-    {ClientNext, Result} = try thrift_client:call(Client, Function, Args)
+    {ClientNext, Result} = try thrift_client:call(Client, Function, tuple_to_list(Args))
         catch
             throw:{Client1, {exception, #'TApplicationException'{}}} ->
                 {Client1, {error, {system, get_server_violation_error()}}};
