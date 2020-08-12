@@ -10,6 +10,15 @@
 -export([child_spec/1]).
 
 %% Types
+-type options() :: #{
+    url            := woody:url(),
+    event_handler  := woody:ev_handlers(),
+    transport_opts => woody_client_thrift_http_transport:transport_options(),
+    resolver_opts  => woody_resolver:options(),
+    protocol       => thrift,
+    transport      => http
+}.
+
 -type thrift_client() :: term().
 
 -define(WOODY_OPTS, [protocol, transport, event_handler]).
@@ -17,12 +26,12 @@
 %%
 %% API
 %%
--spec child_spec(woody_client:options()) ->
+-spec child_spec(options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     woody_client_thrift_http_transport:child_spec(get_transport_opts(Options)).
 
--spec call(woody:request(), woody_client:options(), woody_state:st()) ->
+-spec call(woody:request(), options(), woody_state:st()) ->
     woody_client:result().
 call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     WoodyContext = woody_state:get_context(WoodyState),
@@ -44,7 +53,7 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
 %%
 %% Internal functions
 %%
--spec make_thrift_client(woody:service(), woody_client:options(), woody_state:st()) ->
+-spec make_thrift_client(woody:service(), options(), woody_state:st()) ->
     thrift_client().
 make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->
     {ok, Protocol} = thrift_binary_protocol:new(
@@ -59,12 +68,12 @@ make_thrift_client(Service, Opts = #{url := Url}, WoodyState) ->
     {ok, Client} = thrift_client:new(Protocol, Service),
     Client.
 
--spec get_transport_opts(woody_client:options()) ->
+-spec get_transport_opts(options()) ->
     woody_client_thrift_http_transport:transport_options().
 get_transport_opts(Opts) ->
     maps:get(transport_opts, Opts, #{}).
 
--spec get_resolver_opts(woody_client:options()) ->
+-spec get_resolver_opts(options()) ->
     woody_resolver:options().
 get_resolver_opts(Opts) ->
     maps:get(resolver_opts, Opts, #{}).

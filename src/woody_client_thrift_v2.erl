@@ -10,19 +10,40 @@
 -export([child_spec/1]).
 
 %% Types
--define(WOODY_OPTS, [protocol, transport, event_handler]).
+-type options() :: #{
+    url            := woody:url(),
+    event_handler  := woody:ev_handlers(),
+    transport_opts => transport_options(),
+    resolver_opts  => woody_resolver:options(),
+    protocol       => thrift,
+    transport      => http
+}.
+
+%% See hackney:request/5 for available options.
+-type transport_options() :: map().
+
+-define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
+-define(DEFAULT_TRANSPORT_OPTIONS, #{
+    connect_options => [
+        % Turn TCP_NODELAY on.
+        % We expect that Nagle's algorithm would not be very helpful for typical
+        % Woody RPC workloads, negatively impacting perceived latency. So it's
+        % better to turn it off.
+        {nodelay, true}
+    ]
+}).
 
 %%
 %% API
 %%
--spec child_spec(woody_client:options()) ->
+-spec child_spec(options()) ->
     supervisor:child_spec().
 child_spec(Options) ->
     TransportOpts = get_transport_opts(Options),
     Name = maps:get(pool, TransportOpts, undefined),
     hackney_pool:child_spec(Name, maps:to_list(TransportOpts)).
 
--spec call(woody:request(), woody_client:options(), woody_state:st()) ->
+-spec call(woody:request(), options(), woody_state:st()) ->
     woody_client:result().
 call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     WoodyContext = woody_state:get_context(WoodyState),
@@ -51,17 +72,6 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
 -type header_parse_value() :: none | woody:http_header_val().
 
 -define(CODEC, thrift_strict_binary_codec).
--define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
--define(DEFAULT_TRANSPORT_OPTIONS, #{
-    connect_options => [
-        % Turn TCP_NODELAY on.
-        % We expect that Nagle's algorithm would not be very helpful for typical
-        % Woody RPC workloads, negatively impacting perceived latency. So it's
-        % better to turn it off.
-        {nodelay, true}
-    ]
-}).
-
 -define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
 -define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
 -define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
@@ -73,17 +83,17 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     >>}
 ).
 
--spec get_transport_opts(woody_client:options()) ->
+-spec get_transport_opts(options()) ->
     woody_client_thrift_http_transport:transport_options().
 get_transport_opts(Opts) ->
     maps:get(transport_opts, Opts, #{}).
 
--spec get_resolver_opts(woody_client:options()) ->
+-spec get_resolver_opts(options()) ->
     woody_resolver:options().
 get_resolver_opts(Opts) ->
     maps:get(resolver_opts, Opts, #{}).
 
--spec do_call(woody:service(), woody:func(), woody:args(), woody_client:options(), woody_state:st()) ->
+-spec do_call(woody:service(), woody:func(), woody:args(), options(), woody_state:st()) ->
     woody_client:result().
 do_call(Service, Function, Args, Opts, WoodyState) ->
     Buffer = ?CODEC:new(),
@@ -124,7 +134,7 @@ handle_result(Service, Function, Response) ->
             Error
     end.
 
--spec send_call(?CODEC:protocol(), woody_client:options(), woody_state:st()) ->
+-spec send_call(?CODEC:protocol(), options(), woody_state:st()) ->
     {ok, binary()} | {error, {system, _}}.
 send_call(Buffer, Opts = #{url := Url}, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
