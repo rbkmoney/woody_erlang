@@ -16,6 +16,8 @@
 %%
 -spec get_protocol_handler(woody:role(), map()) ->
     module() | no_return().
+get_protocol_handler(_Role, #{protocol_handler_override := Module}) when is_atom(Module) ->
+    Module;
 get_protocol_handler(Role, Opts) ->
     Protocol  = genlib_map:get(protocol, Opts, thrift),
     Transport = genlib_map:get(transport, Opts, http),

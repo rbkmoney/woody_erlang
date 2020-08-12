@@ -15,7 +15,10 @@
     url            := woody:url(),
     event_handler  := woody:ev_handlers(),
     protocol       => thrift,
-    transport      => http
+    transport      => http,
+    %% Set to override protocol handler module selection, useful for test purposes, rarely
+    %% if ever needed otherwise.
+    protocol_handler_override => module()
 }.
 -export_type([options/0]).
 
