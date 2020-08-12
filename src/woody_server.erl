@@ -7,7 +7,11 @@
 -export([child_spec/2]).
 
 %% Types
--type options() :: woody_server_thrift_http_handler:options().
+-type options() :: #{
+    event_handler         := woody:ev_handlers(),
+    protocol              => thrift,
+    transport             => http
+}.
 -export_type([options/0]).
 
 %% Behaviour definition
