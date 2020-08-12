@@ -18,7 +18,9 @@
     transport      => http,
     %% Set to override protocol handler module selection, useful for test purposes, rarely
     %% if ever needed otherwise.
-    protocol_handler_override => module()
+    protocol_handler_override => module(),
+    %% Implementation-specific options
+    _              => _
 }.
 -export_type([options/0]).
 
