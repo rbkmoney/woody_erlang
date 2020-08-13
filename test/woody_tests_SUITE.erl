@@ -239,24 +239,17 @@
 %% tests descriptions
 %%
 all() ->
+    [{group, G} || G <- maps:keys(cross_test_groups())] ++
     [
         {group, client_server},
+        ids_monotonic_incr_test,
+        {group, contexts},
+        {group, deadlines},
         {group, woody_resolver}
     ].
 
 groups() ->
     SpecTests = [
-        context_add_put_get_meta_ok_test,
-        context_get_meta_by_key_ok_test,
-        context_get_empty_meta_ok_test,
-        context_get_empty_meta_by_key_ok_test,
-        context_given_rpc_id_test,
-        context_given_id_test,
-        context_generated_rpc_id_test,
-        ids_monotonic_incr_test,
-        deadline_reached_test,
-        deadline_to_from_timeout_test,
-        deadline_to_from_binary_test,
         call_ok_test,
         call_resolver_nxdomain,
         call3_ok_test,
@@ -290,14 +283,45 @@ groups() ->
         find_multiple_pools_test,
         calls_with_cache
     ],
+    [{G, [], SpecTests} || G <- maps:keys(cross_test_groups())] ++
     [
         {client_server, [], SpecTests},
+        {contexts, [], [
+            context_add_put_get_meta_ok_test,
+            context_get_meta_by_key_ok_test,
+            context_get_empty_meta_ok_test,
+            context_get_empty_meta_by_key_ok_test,
+            context_given_rpc_id_test,
+            context_given_id_test,
+            context_generated_rpc_id_test
+        ]},
+        {deadlines, [], [
+            deadline_reached_test,
+            deadline_to_from_timeout_test,
+            deadline_to_from_binary_test
+        ]},
         {woody_resolver, [], [
             woody_resolver_inet,
             woody_resolver_inet6,
             woody_resolver_errors
         ]}
     ].
+
+cross_test_groups() ->
+    #{
+        'client_v1.server_v1' => {
+            #{protocol_handler_override => woody_client_thrift},
+            #{protocol_handler_override => woody_server_thrift_http_handler}
+        },
+        'client_v1.server_v2' => {
+            #{protocol_handler_override => woody_client_thrift},
+            #{}
+        },
+        'client_v2.server_v1' => {
+            #{},
+            #{protocol_handler_override => woody_server_thrift_http_handler}
+        }
+    }.
 
 %%
 %% starting/stopping
@@ -351,28 +375,29 @@ init_per_testcase(find_multiple_pools_test, C) ->
     {ok, Sup} = start_tc_sup(),
     Pool1 = {swords, 15000, 100},
     Pool2 = {shields, undefined, 50},
-    ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2]),
+    ok = start_woody_server_with_pools(woody_ct, Sup, ['Weapons', 'Powerups'], [Pool1, Pool2], C),
     [{sup, Sup} | C];
 init_per_testcase(calls_with_cache, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _}   = start_caching_client(caching_client_ct, Sup),
-    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
+    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], C),
     [{sup, Sup} | C];
 init_per_testcase(server_handled_client_timeout_test, C) ->
     {ok, Sup} = start_tc_sup(),
     {ok, _} = supervisor:start_child(Sup, server_timeout_event_handler:child_spec()),
-    {ok, _} = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], server_timeout_event_handler),
+    {ok, _} = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], server_timeout_event_handler, C),
     [{sup, Sup} | C];
 
 init_per_testcase(_, C) ->
     {ok, Sup} = start_tc_sup(),
-    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups']),
+    {ok, _}   = start_woody_server(woody_ct, Sup, ['Weapons', 'Powerups'], C),
     [{sup, Sup} | C].
 
 init_per_group(woody_resolver, Config) ->
     [{env_inet6, inet_db:res_option(inet6)} | Config];
-init_per_group(_Name, Config) ->
-    Config.
+init_per_group(Name, Config) ->
+    {ClientOpts, ServerOpts} = maps:get(Name, cross_test_groups(), {#{}, #{}}),
+    [{client_opts, ClientOpts}, {server_opts, ServerOpts} | Config].
 
 end_per_group(_Name, _Config) ->
     ok.
@@ -389,25 +414,33 @@ start_error_server(TC, Sup) ->
              ),
     supervisor:start_child(Sup, Server).
 
-start_woody_server(Id, Sup, Services) ->
-    start_woody_server(Id, Sup, Services, ?MODULE).
+start_woody_server(Id, Sup, Services, C) ->
+    start_woody_server(Id, Sup, Services, ?MODULE, C).
 
-start_woody_server(Id, Sup, Services, EventHandler) ->
-    Server = woody_server:child_spec(Id, #{
-        handlers      => [get_handler(S) || S <- Services],
-        event_handler => EventHandler,
-        ip            => ?SERVER_IP,
-        port          => ?SERVER_PORT
-    }),
+start_woody_server(Id, Sup, Services, EventHandler, C) ->
+    Opts = maps:merge(
+        proplists:get_value(server_opts, C, #{}),
+        #{
+            handlers      => [get_handler(S) || S <- Services],
+            event_handler => EventHandler,
+            ip            => ?SERVER_IP,
+            port          => ?SERVER_PORT
+        }
+    ),
+    Server = woody_server:child_spec(Id, Opts),
     supervisor:start_child(Sup, Server).
 
-start_woody_server_with_pools(Id, Sup, Services, Params) ->
-    Server = woody_server:child_spec(Id, #{
-        handlers      => [get_handler(S) || S <- Services],
-        event_handler => ?MODULE,
-        ip            => ?SERVER_IP,
-        port          => ?SERVER_PORT
-    }),
+start_woody_server_with_pools(Id, Sup, Services, Params, C) ->
+    Opts = maps:merge(
+        proplists:get_value(server_opts, C, #{}),
+        #{
+            handlers      => [get_handler(S) || S <- Services],
+            event_handler => ?MODULE,
+            ip            => ?SERVER_IP,
+            port          => ?SERVER_PORT
+        }
+    ),
+    Server = woody_server:child_spec(Id, Opts),
     {ok, WoodyServer} = supervisor:start_child(Sup, Server),
     Specs = [woody_client:child_spec(pool_opts(Pool)) || Pool <- Params],
 
@@ -586,144 +619,144 @@ deadline_to_from_binary_test(_) ->
             ok
     end.
 
-call_ok_test(_) ->
+call_ok_test(C) ->
     Gun = <<"Enforcer">>,
-    gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true).
+    gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true, C).
 
-call_resolver_nxdomain(_) ->
+call_resolver_nxdomain(C) ->
     Context = make_context(<<"nxdomain">>),
     ?assertError(
         {woody_error, {internal, resource_unavailable, <<"{resolve_failed,nxdomain}">>}},
-        call(Context, 'The Void', get_weapon, {<<"Enforcer">>, self_to_bin()})
+        call(Context, 'The Void', get_weapon, {<<"Enforcer">>, self_to_bin()}, C)
     ).
 
-call3_ok_test(_) ->
+call3_ok_test(C) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
-    Opts    = #{url => Url, event_handler => ?MODULE},
+    Opts    = mk_client_opts(#{url => Url}, C),
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts).
 
-call3_ok_default_ev_handler_test(_) ->
+call3_ok_default_ev_handler_test(C) ->
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
-    Opts    = #{url => Url, event_handler => {woody_event_handler_default, #{}}},
+    Opts    = mk_client_opts(#{url => Url, event_handler => {woody_event_handler_default, #{}}}, C),
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts).
 
-call_business_error_test(_) ->
+call_business_error_test(C) ->
     Gun = <<"Bio Rifle">>,
     gun_test_basic(<<"call_business_error">>, Gun,
-        {exception, ?WEAPON_FAILURE("out of ammo")}, true).
+        {exception, ?WEAPON_FAILURE("out of ammo")}, true, C).
 
-call_throw_unexpected_test(_) ->
+call_throw_unexpected_test(C) ->
     Id      = <<"call_throw_unexpected">>,
     Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
     Context = make_context(Id),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()})
+        call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()}, C)
     ).
 
-call_system_external_error_test(_) ->
+call_system_external_error_test(C) ->
     Id  = <<"call_system_external_error">>,
     Gun = <<"The Ultimate Super Mega Destroyer">>,
     Context = make_context(Id),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()})
+        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}, C)
     ).
 
-call_client_error_test(_) ->
+call_client_error_test(C) ->
     Gun     = 'Wrong Type of Mega Destroyer',
     Context = make_context(<<"call_client_error">>),
     ?assertError(
         {woody_error, {internal, result_unexpected, <<"client thrift error: ", _/binary>>}},
-        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()})
+        call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}, C)
     ).
 
-call_server_internal_error_test(_) ->
+call_server_internal_error_test(C) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_server_internal_error">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', get_powerup, {Armor, self_to_bin()})
+        call(Context, 'Powerups', get_powerup, {Armor, self_to_bin()}, C)
     ),
     {ok, _} = receive_msg(Armor, Context).
 
-call_oneway_void_test(_) ->
+call_oneway_void_test(C) ->
     Armor   = <<"Helmet">>,
     Context = make_context(<<"call_oneway_void">>),
-    {ok, ok} = call(Context, 'Powerups', like_powerup, {Armor, self_to_bin()}),
+    {ok, ok} = call(Context, 'Powerups', like_powerup, {Armor, self_to_bin()}, C),
     {ok, _}  = receive_msg(Armor, Context).
 
-call_sequence_with_context_meta_test(_) ->
+call_sequence_with_context_meta_test(C) ->
     Gun     = <<"Enforcer">>,
     Current = genlib_map:get(Gun, ?WEAPONS),
     Context = woody_context:new(
                 <<"call_seq_with_context_meta">>,
                 #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}),
     Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)},
-    Expect = call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()}).
+    Expect = call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()}, C).
 
-call_pass_thru_ok_test(_) ->
+call_pass_thru_ok_test(C) ->
     Armor   = <<"AntiGrav Boots">>,
     Context = make_context(<<"call_pass_thru_ok">>),
     Expect  = {ok, genlib_map:get(Armor, ?POWERUPS)},
-    Expect  = call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}),
+    Expect  = call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}, C),
     {ok, _} = receive_msg(Armor, Context).
 
-call_pass_thru_except_test(_) ->
+call_pass_thru_except_test(C) ->
     Armor   = <<"Shield Belt">>,
     Id      = <<"call_pass_thru_except">>,
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
-    try call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()})
+    try call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}, C)
     catch
         error:{woody_error, {external, result_unexpected, _}} ->
             ok
     end,
     {ok, _} = receive_msg(Armor, Context).
 
-call_pass_thru_bad_result_test(_) ->
+call_pass_thru_bad_result_test(C) ->
     Armor    = <<"AntiGrav Boots">>,
     Context  = make_context(<<"call_pass_thru_bad_result">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()})
+        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()}, C)
     ),
     {ok, _} = receive_msg(Armor, Context).
 
-call_pass_thru_bad_except_test(_) ->
+call_pass_thru_bad_except_test(C) ->
     Armor    = <<"Shield Belt">>,
     Context  = make_context(<<"call_pass_thru_bad_except">>),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
-        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()})
+        call(Context, 'Powerups', bad_proxy_get_powerup, {Armor, self_to_bin()}, C)
     ),
     {ok, _} = receive_msg(Armor, Context).
 
-call_pass_thru_result_unexpected_test(_) ->
+call_pass_thru_result_unexpected_test(C) ->
     call_pass_thru_error(<<"call_pass_thru_result_unexpected">>, <<"Helmet">>,
-        error, result_unexpected).
+        error, result_unexpected, C).
 
-call_pass_thru_resource_unavail_test(_) ->
+call_pass_thru_resource_unavail_test(C) ->
     call_pass_thru_error(<<"call_pass_thru_resource_unavail">>, <<"Damage Amplifier">>,
-        error, resource_unavailable).
+        error, resource_unavailable, C).
 
-call_pass_thru_result_unknown_test(_) ->
+call_pass_thru_result_unknown_test(C) ->
     call_pass_thru_error(<<"call_pass_thru_result_unknown">>, <<"Invisibility">>,
-        error, result_unknown).
+        error, result_unknown, C).
 
-call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass) ->
+call_pass_thru_error(Id, Powerup, ExceptClass, ErrClass, C) ->
     RpcId   = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
     ?assertException(
         ExceptClass,
         {woody_error, {external, ErrClass, _}},
-        call(Context, 'Powerups', proxy_get_powerup, {Powerup, self_to_bin()})
+        call(Context, 'Powerups', proxy_get_powerup, {Powerup, self_to_bin()}, C)
     ),
     {ok, _} = receive_msg(Powerup, Context).
 
@@ -775,23 +808,23 @@ make_thrift_multiplexed_client(Id, ServiceName, {Url, Service}) ->
     {ok, Client} = thrift_client:new(Protocol1, Service),
     Client.
 
-call_deadline_ok_test(_) ->
+call_deadline_ok_test(C) ->
     Id = <<"call_deadline_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
-    Opts    = #{url => Url, event_handler => ?MODULE},
+    Opts    = mk_client_opts(#{url => Url}, C),
     Deadline = woody_deadline:from_timeout(3000),
     Context  = woody_context:new(Id, #{<<"sleep">> => <<"100">>}, Deadline),
     Expect  = {ok, genlib_map:get(Gun, ?WEAPONS)},
     Expect  = woody_client:call(Request, Opts, Context).
 
-call_deadline_reached_on_client_test(_) ->
+call_deadline_reached_on_client_test(C) ->
     Id = <<"call_deadline_reached_on_client">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
-    Opts    = #{url => Url, event_handler => ?MODULE},
+    Opts    = mk_client_opts(#{url => Url}, C),
     Deadline = woody_deadline:from_timeout(0),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"1000">>}, Deadline),
     ?assertError(
@@ -799,11 +832,11 @@ call_deadline_reached_on_client_test(_) ->
         woody_client:call(Request, Opts, Context)
     ).
 
-server_handled_client_timeout_test(_) ->
+server_handled_client_timeout_test(C) ->
     Id = <<"server_handled_client_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Request = {Service, get_stuck_looping_weapons, {}},
-    Opts    = #{url => Url, event_handler => ?MODULE},
+    Opts    = mk_client_opts(#{url => Url}, C),
     Deadline = woody_deadline:from_timeout(250),
     Context  = woody_context:new(Id, #{}, Deadline),
     try
@@ -816,12 +849,12 @@ server_handled_client_timeout_test(_) ->
             ok
     end.
 
-call_deadline_timeout_test(_) ->
+call_deadline_timeout_test(C) ->
     Id = <<"call_deadline_timeout">>,
     {Url, Service} = get_service_endpoint('Weapons'),
     Gun     = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
-    Opts    = #{url => Url, event_handler => ?MODULE},
+    Opts    = mk_client_opts(#{url => Url}, C),
     Deadline = woody_deadline:from_timeout(500),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"3000">>}, Deadline),
     ?assertError(
@@ -967,7 +1000,7 @@ handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), CurrentWeapon}),
     CheckAnnot = is_meta_check_required(AnnotTestId, woody_context:get_rpc_id(trace_id, Context)),
     ok = check_meta(CheckAnnot, Context, CurrentWeapon),
-    switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot);
+    switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot, []);
 
 handle_function(get_weapon, {Name, To}, Context, _Opts) ->
     ok = handle_sleep(Context),
@@ -992,7 +1025,7 @@ handle_function(ProxyGetPowerup, {Name, To}, Context, _Opts) when
     % Client may return `{exception, _}` tuple with some business level exception
     % here, yet handler expects us to `throw/1` them. This is expected here it
     % seems though.
-    try call(Context, 'Powerups', get_powerup, {Name, self_to_bin()})
+    try call(Context, 'Powerups', get_powerup, {Name, self_to_bin()}, [])
     catch
         Class:Reason:Stacktrace ->
             erlang:raise(Class, Reason, Stacktrace)
@@ -1075,10 +1108,10 @@ terminate(_, _, _) ->
 %%
 %% internal functions
 %%
-gun_test_basic(Id, Gun, Expect, WithMsg) ->
+gun_test_basic(Id, Gun, Expect, WithMsg, C) ->
     Context   = make_context(Id),
     {Class, Reason} = get_except(Expect),
-    try call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}) of
+    try call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}, C) of
         Expect -> ok
     catch
         Class:Reason -> ok
@@ -1095,9 +1128,9 @@ get_except(Except = {_Class, _Reason}) ->
 make_context(ReqId) ->
     woody_context:new(ReqId).
 
-call(Context, ServiceName, Function, Args) ->
+call(Context, ServiceName, Function, Args, C) ->
     {Url, Service} = get_service_endpoint(ServiceName),
-    woody_client:call({Service, Function, Args}, #{url => Url, event_handler => ?MODULE}, Context).
+    woody_client:call({Service, Function, Args}, mk_client_opts(#{url => Url}, C), Context).
 
 get_service_endpoint('Weapons') ->
     {
@@ -1120,13 +1153,13 @@ check_msg(true, Msg, Context) ->
 check_msg(false, _, _) ->
     ok.
 
-switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot) ->
+switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot, C) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift),
     ContextAnnot = annotate_weapon(CheckAnnot, Context, NextWName, NextWPos),
-    case call(ContextAnnot, 'Weapons', get_weapon, {NextWName, self_to_bin()}) of
+    case call(ContextAnnot, 'Weapons', get_weapon, {NextWName, self_to_bin()}, C) of
         {exception, #'WeaponFailure'{code = <<"weapon_error">>, reason = <<"out of ammo">>}}
         ->
-            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot);
+            switch_weapon(CurrentWeapon, Direction, Shift + 1, Context, CheckAnnot, C);
         Ok ->
             Ok
     end.
@@ -1158,6 +1191,13 @@ return_powerup(P = #'Powerup'{}) ->
     P;
 return_powerup(P = ?BAD_POWERUP_REPLY) ->
     P.
+
+mk_client_opts(TestCaseOpts, C) ->
+    GroupOpts = proplists:get_value(client_opts, C, #{}),
+    lists:foldl(fun maps:merge/2, GroupOpts, [
+        #{event_handler => ?MODULE},
+        TestCaseOpts
+    ]).
 
 self_to_bin() ->
     genlib:to_binary(pid_to_list(self())).
