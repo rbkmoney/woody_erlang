@@ -3,6 +3,9 @@
 %% API
 -export([init_handler/3, invoke_handler/1]).
 
+%% Behaviour dispatch
+-export([handle_function/4]).
+
 -include_lib("thrift/include/thrift_constants.hrl").
 -include_lib("thrift/include/thrift_protocol.hrl").
 -include("woody_defs.hrl").
@@ -71,6 +74,13 @@ invoke_handler(State) ->
     {Result, #{th_proto := Proto, th_reply_type := MsgType}} = call_handler_safe(State),
     {_, {ok, Reply}} = thrift_protocol:close_transport(Proto),
     handle_result(Result, Reply, MsgType).
+
+-spec handle_function(woody:handler(woody:options()), woody:func(), woody:args(), woody_state:st()) ->
+    {ok, woody:result()} | no_return().
+handle_function(Handler, Function, Args, WoodyState) ->
+    _ = woody_event_handler:handle_event(?EV_INVOKE_SERVICE_HANDLER, WoodyState, #{}),
+    {Module, Opts} = woody_util:get_mod_opts(Handler),
+    Module:handle_function(Function, Args, woody_state:get_context(WoodyState), Opts).
 
 %%
 %% Internal functions
@@ -211,9 +221,7 @@ call_handler(#{
     function    := Function,
     args        := Args})
 ->
-    _ = woody_event_handler:handle_event(?EV_INVOKE_SERVICE_HANDLER, WoodyState, #{}),
-    {Module, Opts} = woody_util:get_mod_opts(Handler),
-    Module:handle_function(Function, Args, woody_state:get_context(WoodyState), Opts).
+    handle_function(Handler, Function, Args, WoodyState).
 
 -spec handle_success({ok, woody:result()}, state()) ->
     {ok | {error, {system, woody_error:system_error()}}, state()}.

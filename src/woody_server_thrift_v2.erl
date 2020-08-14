@@ -564,9 +564,7 @@ handle_call(Handler, Service, Function, Args, WoodyState) ->
 -spec call_handler(woody:handler(_), woody:func(), woody:args(), woody_state:st()) ->
     {ok, woody:result()} | no_return().
 call_handler(Handler, Function, Args, WoodyState) ->
-    _ = handle_event(?EV_INVOKE_SERVICE_HANDLER, WoodyState, #{}),
-    {Module, Opts} = woody_util:get_mod_opts(Handler),
-    Module:handle_function(Function, Args, woody_state:get_context(WoodyState), Opts).
+    woody_server_thrift_handler:handle_function(Handler, Function, Args, WoodyState).
 
 -spec process_handler_throw(_Exception, woody_error:stack(), woody:service(), woody:func(), woody_state:st()) ->
     {exception, _TypeName, _Exception} |
