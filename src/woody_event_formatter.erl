@@ -435,7 +435,7 @@ stop_format(MaybeAddMoreMarker, Result0) ->
 -include_lib("eunit/include/eunit.hrl").
 -spec test() -> _.
 
--define(ARGS, [undefined, <<"1CR1Xziml7o">>,
+-define(ARGS, {undefined, <<"1CR1Xziml7o">>,
     [{contract_modification,
         {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
             {creation,
@@ -472,9 +472,9 @@ stop_format(MaybeAddMoreMarker, Result0) ->
             {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
                 {shop_account_creation,
                     {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]
-]).
+}).
 
--define(ARGS2, [{mg_stateproc_CallArgs,
+-define(ARGS2, {{mg_stateproc_CallArgs,
     {bin,
         <<131, 104, 4, 100, 0, 11, 116, 104, 114, 105, 102, 116, 95, 99, 97, 108, 108,
             100, 0, 16, 112, 97, 114, 116, 121, 95, 109, 97, 110, 97, 103, 101, 109, 101,
@@ -560,7 +560,7 @@ stop_format(MaybeAddMoreMarker, Result0) ->
                     101, 120, 116, 0, 0, 0, 0, 100, 0, 14, 115, 110, 97, 112,
                     115, 104, 111, 116, 95, 105, 110, 100, 101, 120, 106>>},
                 {str, <<"ct">>} =>
-                {str, <<"application/x-erlang-binary">>}}}}}]
+                {str, <<"application/x-erlang-binary">>}}}}}}
 ).
 
 format_msg({Fmt, Params}) ->
@@ -947,9 +947,9 @@ depth_and_length_test_() -> [
 verbatim_test_() -> [
     ?_assertEqual(
         "PartyManagement:CallMissingFunction("
-        "[undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
+        "{undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
         "<<\"1CR1\"...>>,{...}}},{contract_modification,{payproc_ContractModificationUnit,<<...>>,"
-        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]]"
+        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]}"
         ")",
         format_msg(
             format_call(
