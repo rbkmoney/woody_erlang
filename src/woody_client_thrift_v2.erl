@@ -134,7 +134,7 @@ handle_result(Service, Function, Response) ->
             Error
     end.
 
--spec send_call(?CODEC:protocol(), options(), woody_state:st()) ->
+-spec send_call(?CODEC:buffer(), options(), woody_state:st()) ->
     {ok, binary()} | {error, {system, _}}.
 send_call(Buffer, Opts = #{url := Url}, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
