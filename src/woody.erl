@@ -34,7 +34,7 @@
 -type service_name() :: atom().
 -type service()      :: {module(), service_name()}.
 -type func()         :: atom().
--type args()         :: list().
+-type args()         :: tuple().
 -type request()      :: {service(), func(), args()}.
 -type result()       ::  _.
 -type th_handler()   :: {service(), handler(options())}.

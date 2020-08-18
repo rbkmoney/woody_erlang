@@ -441,8 +441,8 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [undefined, <<"1CQdDqPROyW">>,
-                    {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}],
+                {undefined, <<"1CQdDqPROyW">>,
+                    {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}},
                     deadline => undefined, execution_start_time => 1565596875497,
                     function => 'Create',
                     metadata =>
@@ -468,9 +468,9 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{payproc_UserInfo, <<"1CQdDqPROyW">>,
+                {{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}}, undefined,
-                    {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}],
+                    {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}},
                     deadline => undefined, execution_start_time => 1565596875497,
                     function => 'Create',
                     metadata =>
@@ -493,7 +493,7 @@ format_service_request_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
-                #{args => [undefined, <<"1CQdDqPROyW">>],
+                #{args => {undefined, <<"1CQdDqPROyW">>},
                     deadline => undefined, execution_start_time => 1565596875696,
                     function => 'Get',
                     metadata =>
@@ -516,7 +516,7 @@ format_service_request_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
-                #{args => [undefined, <<"~s">>],
+                #{args => {undefined, <<"~s">>},
                     deadline => undefined, execution_start_time => 1565596875696,
                     function => 'Get',
                     metadata =>
@@ -541,9 +541,9 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{payproc_CustomerParams, <<"1CQdDqPROyW">>, <<"1CQdDwgt3R3">>,
+                {{payproc_CustomerParams, <<"1CQdDqPROyW">>, <<"1CQdDwgt3R3">>,
                     {domain_ContactInfo, undefined, <<"invalid_shop">>},
-                    {nl, {json_Null}}}],
+                    {nl, {json_Null}}}},
                     deadline => undefined,
                     execution_start_time => 1565596876258,
                     function => 'Create',
@@ -569,9 +569,9 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{payproc_UserInfo, <<"1CQdDqPROyW">>,
+                {{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}},
-                    <<"1CQdDqPROyW">>],
+                    <<"1CQdDqPROyW">>},
                     deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
                     execution_start_time => 1565596876266, function => 'GetRevision',
                     metadata =>
@@ -596,10 +596,10 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{payproc_UserInfo, <<"1CQdDqPROyW">>,
+                {{payproc_UserInfo, <<"1CQdDqPROyW">>,
                     {external_user, {payproc_ExternalUser}}},
                     <<"1CQdDqPROyW">>,
-                    {revision, 1}],
+                    {revision, 1}},
                     deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
                     execution_start_time => 1565596876292,
                     function => 'Checkout',
@@ -623,7 +623,7 @@ format_service_request_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
-                #{args => [undefined, <<"1CQdDqPROyW">>, <<>>],
+                #{args => {undefined, <<"1CQdDqPROyW">>, <<>>},
                     deadline => undefined,
                     execution_start_time => 1565596876383,
                     function => 'Block',
@@ -648,7 +648,7 @@ format_service_request_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_CALL_SERVICE,
-                #{args => [undefined, <<"1CQdDqPROyW">>, <<>>],
+                #{args => {undefined, <<"1CQdDqPROyW">>, <<>>},
                     deadline => undefined,
                     execution_start_time => 1565596876458,
                     function => 'Unblock',
@@ -676,7 +676,7 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{mg_stateproc_SignalArgs,
+                {{mg_stateproc_SignalArgs,
                     {init,
                         {mg_stateproc_InitSignal,
                             {bin,
@@ -686,7 +686,7 @@ format_service_request_test_() -> [
                         {mg_stateproc_HistoryRange, undefined, undefined, forward},
                         {mg_stateproc_Content, undefined, {bin, <<>>}},
                         undefined,
-                        {bin, <<>>}}}],
+                        {bin, <<>>}}}},
                     deadline => {{{2019, 8, 12}, {12, 46, 36}}, 433},
                     execution_start_time => 1565613966542,
                     function => 'ProcessSignal',
@@ -723,7 +723,7 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [undefined, <<"1CR1Xziml7o">>,
+                {undefined, <<"1CR1Xziml7o">>,
                     [{contract_modification,
                         {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
                             {creation,
@@ -759,7 +759,7 @@ format_service_request_test_() -> [
                         {shop_modification,
                             {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
                                 {shop_account_creation,
-                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]],
+                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]},
                     deadline => undefined,
                     execution_start_time => 1565617299263,
                     function => 'CreateClaim',
@@ -791,7 +791,7 @@ format_service_request_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{mg_stateproc_CallArgs,
+                {{mg_stateproc_CallArgs,
                     {bin,
                         <<131, 104, 4, 100, 0, 11, 116, 104, 114, 105, 102, 116, 95, 99, 97, 108, 108,
                             100, 0, 16, 112, 97, 114, 116, 121, 95, 109, 97, 110, 97, 103, 101, 109, 101,
@@ -877,7 +877,7 @@ format_service_request_test_() -> [
                                     101, 120, 116, 0, 0, 0, 0, 100, 0, 14, 115, 110, 97, 112,
                                     115, 104, 111, 116, 95, 105, 110, 100, 101, 120, 106>>},
                                 {str, <<"ct">>} =>
-                                {str, <<"application/x-erlang-binary">>}}}}}],
+                                {str, <<"application/x-erlang-binary">>}}}}}},
                     deadline => {{{2019, 8, 13}, {7, 52, 41}}, 105},
                     execution_start_time => 1565682731109,
                     function => 'ProcessCall',
@@ -918,7 +918,7 @@ format_service_request_with_limit_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [undefined, <<"1CR1Xziml7o">>,
+                {undefined, <<"1CR1Xziml7o">>,
                     [{contract_modification,
                         {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
                             {creation,
@@ -954,7 +954,7 @@ format_service_request_with_limit_test_() -> [
                         {shop_modification,
                             {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
                                 {shop_account_creation,
-                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]],
+                                    {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]},
                     deadline => undefined,
                     execution_start_time => 1565617299263,
                     function => 'CreateClaim',
@@ -1077,10 +1077,10 @@ result_test_() -> [
             format_event(
             ?EV_SERVICE_HANDLER_RESULT,
             #{args =>
-            [{payproc_UserInfo, <<"1CSWG2vduGe">>,
+            {{payproc_UserInfo, <<"1CSWG2vduGe">>,
                 {external_user, {payproc_ExternalUser}}},
                 <<"1CSWG2vduGe">>,
-                {revision, 6}],
+                {revision, 6}},
                 deadline => {{{2019, 8, 13}, {11, 19, 33}}, 42},
                 execution_start_time => 1565695143068,
                 function => 'Checkout',
@@ -1153,7 +1153,7 @@ result_test_() -> [
             format_event(
                 ?EV_SERVICE_HANDLER_RESULT,
                 #{args =>
-                [{mg_stateproc_SignalArgs,
+                {{mg_stateproc_SignalArgs,
                     {init,
                         {mg_stateproc_InitSignal,
                             {bin,
@@ -1168,7 +1168,7 @@ result_test_() -> [
                         {mg_stateproc_HistoryRange, undefined, undefined, forward},
                         {mg_stateproc_Content, undefined, {bin, <<>>}},
                         undefined,
-                        {bin, <<>>}}}],
+                        {bin, <<>>}}}},
                     deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
                     execution_start_time => 1565695143707, function => 'ProcessSignal',
                     metadata =>
@@ -1216,7 +1216,7 @@ result_test_() -> [
             format_event(
                 ?EV_CALL_SERVICE,
                 #{args =>
-                [{mg_stateproc_SignalArgs,
+                {{mg_stateproc_SignalArgs,
                     {init,
                         {mg_stateproc_InitSignal,
                             {bin,
@@ -1231,7 +1231,7 @@ result_test_() -> [
                         {mg_stateproc_HistoryRange, undefined, undefined, forward},
                         {mg_stateproc_Content, undefined, {bin, <<>>}},
                         undefined,
-                        {bin, <<>>}}}],
+                        {bin, <<>>}}}},
                     deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
                     execution_start_time => 1565695143707, function => 'ProcessSignal',
                     metadata =>
@@ -1309,7 +1309,7 @@ exception_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
-                #{args => [<<"1Cfo5OJzx6O">>],
+                #{args => {<<"1Cfo5OJzx6O">>},
                     deadline => undefined,
                     execution_start_time => 1566386841317,
                     class => business,
@@ -1332,7 +1332,7 @@ exception_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
-                #{args => [
+                #{args => {
                     undefined,
                     <<"1Cfo9igJRS4">>,
                     {payproc_InvoicePaymentParams, {payment_resource, {payproc_PaymentResourcePayerParams,
@@ -1340,7 +1340,7 @@ exception_test_() -> [
                             visa, <<"424242">>, <<"4242">>, undefined, undefined, undefined, undefined, undefined}},
                             <<"SESSION42">>, {domain_ClientInfo, undefined, undefined}},
                         {domain_ContactInfo, undefined, undefined}}},
-                        {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined, undefined}],
+                        {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined, undefined}},
                     deadline => undefined, execution_start_time => 1566386899959,
                     class => business,
                     function => 'StartPayment',
@@ -1361,7 +1361,7 @@ exception_test_() -> [
         format_msg_limited(
             format_event(
                 ?EV_SERVICE_RESULT,
-                #{args=>[
+                #{args=>{
                     undefined,
                     <<"1FToOuf532G">>,
                     {payproc_InvoicePaymentParams,
@@ -1369,7 +1369,7 @@ exception_test_() -> [
                             {domain_RecurrentParentPayment, <<"1FToOLnG2Ou">>, <<"1">>},
                             {domain_ContactInfo, undefined, undefined}}},
                         {instant, {payproc_InvoicePaymentParamsFlowInstant}},
-                        true, undefined, undefined, undefined, undefined}],
+                        true, undefined, undefined, undefined, undefined}},
                     deadline => undefined,
                     execution_start_time => 1575444908463,
                     class => business,

@@ -15,6 +15,8 @@
 
 
 %% Types
+
+%% See hackney:request/5 for available options.
 -type transport_options() :: map().
 -export_type([transport_options/0]).
 

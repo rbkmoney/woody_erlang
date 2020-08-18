@@ -100,7 +100,7 @@ respects_max_connections(C) ->
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),
     Results = genlib_pmap:map(
         fun (_) ->
-            woody_client:call({Service, 'get_weapon', [<<"BFG">>, <<>>]}, Client)
+            woody_client:call({Service, 'get_weapon', {<<"BFG">>, <<>>}}, Client)
         end,
         lists:seq(1, MaxConns * 10)
     ),
@@ -176,13 +176,13 @@ stop_woody_server(Pid) ->
     true = exit(Pid, shutdown),
     ok.
 
-handle_function(get_weapon, [Name, _], _Context, {respects_max_connections, Table}) ->
+handle_function(get_weapon, {Name, _}, _Context, {respects_max_connections, Table}) ->
     Slot = ets:update_counter(Table, slot, 1),
     ok = timer:sleep(rand:uniform(10)),
     _ = ets:update_counter(Table, slot, -1),
     {ok, #'Weapon'{name = Name, slot_pos = Slot}};
 
-handle_function(get_powerup, [Name, _], _Context, _) ->
+handle_function(get_powerup, {Name, _}, _Context, _) ->
     ok = timer:sleep(2000),
     {ok, #'Powerup'{name = Name}}.
 
@@ -191,7 +191,7 @@ handle_event(Event, RpcId, Meta, Opts) ->
     ct:pal("~p " ++ Format, [Opts] ++ Msg).
 
 get_powerup(Client, Name, Arg) ->
-    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', [Name, Arg]}, Client).
+    woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', {Name, Arg}}, Client).
 
 %%
 

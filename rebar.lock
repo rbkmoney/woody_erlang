@@ -14,7 +14,7 @@
   1},
  {<<"genlib">>,
   {git,"https://github.com/rbkmoney/genlib.git",
-       {ref,"a6b9f52d61372cdbea6c5967053662dd3309e0d7"}},
+       {ref,"54920e768a71f121304a5eda547ee60295398f3c"}},
   0},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.8.0">>},0},
  {<<"hackney">>,{pkg,<<"hackney">>,<<"1.15.2">>},0},
@@ -34,7 +34,7 @@
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.5">>},1},
  {<<"thrift">>,
   {git,"https://github.com/rbkmoney/thrift_erlang.git",
-       {ref,"aa233e29a8d8682ae9e088eedde772f0ee45d105"}},
+       {ref,"4eda678c985d2894251b91ae43aacf7941846cc9"}},
   0},
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.4.1">>},2}]}.
 [

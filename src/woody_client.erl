@@ -10,16 +10,17 @@
 -export([call      /2]).
 -export([call      /3]).
 
--type transport_options() :: woody_client_thrift_http_transport:transport_options().
-
 %% Types
 -type options() :: #{
     url            := woody:url(),
     event_handler  := woody:ev_handlers(),
-    transport_opts => transport_options(), %% See hackney:request/5 for available options.
-    resolver_opts  => woody_resolver:options(),
     protocol       => thrift,
-    transport      => http
+    transport      => http,
+    %% Set to override protocol handler module selection, useful for test purposes, rarely
+    %% if ever needed otherwise.
+    protocol_handler_override => module(),
+    %% Implementation-specific options
+    _              => _
 }.
 -export_type([options/0]).
 

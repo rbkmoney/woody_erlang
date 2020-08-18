@@ -35,7 +35,7 @@ format_call(Module, Service, Function, Arguments, Opts) ->
             ML = maps:get(max_length, Opts1),
             MD = maps:get(max_depth, Opts1),
             MPSL = maps:get(max_printable_string_length, Opts1),
-            Result1 = format_call_(ArgTypes, Arguments, Result0, MD, dec(ML), MPSL, false),
+            Result1 = format_arguments(ArgTypes, Arguments, 1, Result0, MD, dec(ML), MPSL, false),
             <<Result1/binary, ")">>
     catch error:badarg ->
         Result1 = format_verbatim(Arguments, Result0, Opts1),
@@ -43,18 +43,20 @@ format_call(Module, Service, Function, Arguments, Opts) ->
     end,
     {"~ts", [Result]}.
 
-format_call_([], [], Result, _MD, _ML, _MPSL, _AD) ->
+format_arguments([], _, _, Result, _MD, _ML, _MPSL, _AD) ->
     Result;
-format_call_(_, ArgumentList, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
-    HasMoreArguments = AD and (ArgumentList =/= []),
+format_arguments(Types, _, _, Result0, _MD, ML, _MPSL, AD) when byte_size(Result0) > ML ->
+    HasMoreArguments = AD and (Types =/= []),
     Result1 = maybe_add_delimiter(HasMoreArguments, Result0),
     Result2 = maybe_add_more_marker(HasMoreArguments, Result1),
     Result2;
-format_call_([Type | RestType], [Argument | RestArgs], Result0, MD, ML, MPSL, AD) ->
+format_arguments([Type | RestType], Arguments, I, Result0, MD, ML, MPSL, AD) ->
+    Argument = element(I, Arguments),
     {Result1, AD1} = format_argument(Type, Argument, Result0, MD, ML, MPSL, AD),
-    format_call_(
+    format_arguments(
         RestType,
-        RestArgs,
+        Arguments,
+        I + 1,
         Result1,
         MD,
         ML,
@@ -433,7 +435,7 @@ stop_format(MaybeAddMoreMarker, Result0) ->
 -include_lib("eunit/include/eunit.hrl").
 -spec test() -> _.
 
--define(ARGS, [undefined, <<"1CR1Xziml7o">>,
+-define(ARGS, {undefined, <<"1CR1Xziml7o">>,
     [{contract_modification,
         {payproc_ContractModificationUnit, <<"1CR1Y2ZcrA0">>,
             {creation,
@@ -470,9 +472,9 @@ stop_format(MaybeAddMoreMarker, Result0) ->
             {payproc_ShopModificationUnit, <<"1CR1Y2ZcrA2">>,
                 {shop_account_creation,
                     {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}]
-]).
+}).
 
--define(ARGS2, [{mg_stateproc_CallArgs,
+-define(ARGS2, {{mg_stateproc_CallArgs,
     {bin,
         <<131, 104, 4, 100, 0, 11, 116, 104, 114, 105, 102, 116, 95, 99, 97, 108, 108,
             100, 0, 16, 112, 97, 114, 116, 121, 95, 109, 97, 110, 97, 103, 101, 109, 101,
@@ -558,7 +560,7 @@ stop_format(MaybeAddMoreMarker, Result0) ->
                     101, 120, 116, 0, 0, 0, 0, 100, 0, 14, 115, 110, 97, 112,
                     115, 104, 111, 116, 95, 105, 110, 100, 101, 120, 106>>},
                 {str, <<"ct">>} =>
-                {str, <<"application/x-erlang-binary">>}}}}}]
+                {str, <<"application/x-erlang-binary">>}}}}}}
 ).
 
 format_msg({Fmt, Params}) ->
@@ -945,9 +947,9 @@ depth_and_length_test_() -> [
 verbatim_test_() -> [
     ?_assertEqual(
         "PartyManagement:CallMissingFunction("
-        "[undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
+        "{undefined,<<\"1CR1Xziml7o\">>,[{contract_modification,{payproc_ContractModificationUnit,"
         "<<\"1CR1\"...>>,{...}}},{contract_modification,{payproc_ContractModificationUnit,<<...>>,"
-        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]]"
+        "...}},{shop_modification,{payproc_ShopModificationUnit,...}}|...]}"
         ")",
         format_msg(
             format_call(
