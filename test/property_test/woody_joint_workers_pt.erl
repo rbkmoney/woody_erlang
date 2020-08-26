@@ -72,7 +72,7 @@ do(ID, Successfulness) ->
     catch woody_joint_workers:do(workers, {ID, Successfulness}, Task, woody_deadline:from_timeout(WorkerTimeout)).
 
 % если уменьшать, то могут быть ложные срабатывания
--define(timeout_k, 10).
+-define(timeout_k, 20).
 task_timeouts(success) ->
     {?timeout_k * 1, ?timeout_k * 3};
 task_timeouts(fail) ->
