@@ -186,7 +186,7 @@ make_ctx(RpcId = #{span_id := _, parent_id := _, trace_id := _}, Meta, Deadline)
 make_ctx(RpcId, Meta, Deadline) ->
     error(badarg, [RpcId, Meta, Deadline]).
 
-check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 32 ->
+check_req_id_limit(_Type, Id) when is_binary(Id) andalso byte_size(Id) =< 64 ->
     ok;
 check_req_id_limit(Type, Id) ->
     error(badarg, [Type, Id]).
