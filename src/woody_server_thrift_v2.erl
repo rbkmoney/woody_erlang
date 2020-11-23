@@ -8,6 +8,7 @@
 
 %% woody_server callback
 -export([child_spec/2]).
+-export([get_addr/1]).
 
 %% API
 -export([get_routes/1]).
@@ -120,10 +121,18 @@
 child_spec(Id, Opts) ->
     {Transport, TransportOpts} = get_socket_transport(Opts),
     CowboyOpts = get_cowboy_config(Opts),
-    RanchRef = {?MODULE, Id},
+    RanchRef = create_ranch_ref(Id),
     DrainSpec = make_drain_childspec(RanchRef, Opts),
     RanchSpec = ranch:child_spec(RanchRef, Transport, TransportOpts, cowboy_clear, CowboyOpts),
     make_server_childspec(Id, [RanchSpec, DrainSpec]).
+
+-spec get_addr(atom()) ->
+    {inet:ip_address(), inet:port_number()}.
+get_addr(Id) ->
+    ranch:get_addr(create_ranch_ref(Id)).
+
+create_ranch_ref(Id) ->
+    {?MODULE, Id}.
 
 make_drain_childspec(Ref, Opts) ->
     ShutdownTimeout = maps:get(shutdown_timeout, Opts, ?DEFAULT_SHUTDOWN_TIMEOUT),

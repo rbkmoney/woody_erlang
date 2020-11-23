@@ -5,6 +5,7 @@
 
 %% API
 -export([child_spec/2]).
+-export([get_addr/2]).
 
 %% Types
 -type options() :: #{
@@ -21,6 +22,7 @@
 
 %% Behaviour definition
 -callback child_spec(_Id, options()) -> supervisor:child_spec().
+-callback get_addr(_Id) -> {inet:ip_address(), inet:port_number()}.
 
 %%
 %% API
@@ -30,3 +32,9 @@
 child_spec(Id, Options) ->
     ProtocolHandler = woody_util:get_protocol_handler(server, Options),
     ProtocolHandler:child_spec(Id, Options).
+
+-spec get_addr(_Id, options()) ->
+    {inet:ip_address(), inet:port_number()}.
+get_addr(Id, Options) ->
+    ProtocolHandler = woody_util:get_protocol_handler(server, Options),
+    ProtocolHandler:get_addr(Id).
