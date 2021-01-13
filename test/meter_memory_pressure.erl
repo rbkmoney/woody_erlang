@@ -22,16 +22,15 @@
 
 -type runner() :: fun(() -> _).
 -type opts() :: #{
-    iterations  => pos_integer(),
-    spawn_opts  => [{atom(), _}],
+    iterations => pos_integer(),
+    spawn_opts => [{atom(), _}],
     dump_traces => file:filename()
 }.
 
 -export_type([runner/0]).
 -export_type([opts/0]).
 
--spec measure(runner(), opts()) ->
-    metrics().
+-spec measure(runner(), opts()) -> metrics().
 measure(Runner, Opts0) ->
     Opts = maps:merge(get_default_opts(), Opts0),
     Token = make_ref(),
@@ -49,7 +48,7 @@ get_default_opts() ->
 run(Runner, Tracer, Opts) ->
     SpawnOpts = [monitor, {priority, high}] ++ maps:get(spawn_opts, Opts),
     {Staging, MRef} = erlang:spawn_opt(
-        fun () -> run_staging(Runner, Tracer, Opts) end,
+        fun() -> run_staging(Runner, Tracer, Opts) end,
         SpawnOpts
     ),
     receive
@@ -73,7 +72,7 @@ iterate(_Runner, 0) ->
 
 start_tracer(Token, Opts) ->
     Self = self(),
-    erlang:spawn_link(fun () -> run_tracer(Self, Token, Opts) end).
+    erlang:spawn_link(fun() -> run_tracer(Self, Token, Opts) end).
 
 collect_metrics(Tracer, Token) ->
     _ = Tracer ! Token,
@@ -83,7 +82,10 @@ collect_metrics(Tracer, Token) ->
     end.
 
 run_tracer(MeterPid, Token, Opts) ->
-    _ = receive Token -> ok end,
+    _ =
+        receive
+            Token -> ok
+        end,
     Traces = collect_traces(),
     Metrics = analyze_traces(Traces),
     ok = maybe_dump_traces(Traces, Opts),
@@ -91,15 +93,14 @@ run_tracer(MeterPid, Token, Opts) ->
 
 collect_traces() ->
     collect_traces([]).
+
 collect_traces(Acc) ->
     receive
         {trace_ts, _Pid, Trace, Info, Clock} ->
             collect_traces([{Trace, Info, Clock} | Acc]);
         Unexpected ->
             error({unexpected, Unexpected})
-    after
-        0 ->
-            lists:reverse(Acc)
+    after 0 -> lists:reverse(Acc)
     end.
 
 maybe_dump_traces(Traces, #{dump_traces := Filename}) ->
@@ -136,7 +137,7 @@ analyze_gc(InfoStart, InfoEnd, M0) ->
     M4.
 
 difference(Name, Info1, Info2) ->
-    combine(Name, fun (V1, V2) -> erlang:max(0, V2 - V1) end, Info1, Info2).
+    combine(Name, fun(V1, V2) -> erlang:max(0, V2 - V1) end, Info1, Info2).
 
 min(Name, Info1, Info2) ->
     combine(Name, fun erlang:min/2, Info1, Info2).
@@ -153,15 +154,14 @@ increment(Name, Metrics) ->
     increment(Name, 1, Metrics).
 
 increment(Name, Delta, Metrics) ->
-    maps:update_with(Name, fun (V) -> V + Delta end, Metrics).
+    maps:update_with(Name, fun(V) -> V + Delta end, Metrics).
 
 update(Name, Fun, I, Metrics) ->
-    maps:update_with(Name, fun (V) -> Fun(V, I) end, I, Metrics).
+    maps:update_with(Name, fun(V) -> Fun(V, I) end, I, Metrics).
 
 %%
 
 -spec export(file:filename(), file:filename(), csv) -> ok.
-
 export(FilenameIn, FilenameOut, Format) ->
     {ok, Content} = file:read_file(FilenameIn),
     Traces = erlang:binary_to_term(Content),
@@ -171,7 +171,7 @@ export(FilenameIn, FilenameOut, Format) ->
 
 format_traces(Traces, csv, FileOut) ->
     _ = format_csv_header(FileOut),
-    _ = lists:foreach(fun (T) -> format_csv_trace(T, FileOut) end, Traces),
+    _ = lists:foreach(fun(T) -> format_csv_trace(T, FileOut) end, Traces),
     ok.
 
 format_csv_header(Out) ->
@@ -209,7 +209,8 @@ format_csv_trace({Event, Info, Clock}, Out) ->
     ]).
 
 get_info(Name, Info) ->
-    {_Name, V} = lists:keyfind(Name, 1, Info), V.
+    {_Name, V} = lists:keyfind(Name, 1, Info),
+    V.
 
 clock_to_mcs({MSec, Sec, USec}) ->
     (MSec * 1000000 + Sec) * 1000000 + USec.

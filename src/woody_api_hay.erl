@@ -15,6 +15,7 @@
 %%%
 
 -module(woody_api_hay).
+
 -behaviour(hay_metrics_handler).
 
 %% how_are_you callbacks
@@ -31,7 +32,6 @@
 -export_type([options/0]).
 
 %% Internal types
-
 
 -type state() :: options().
 -type metric() :: how_are_you:metric().
@@ -67,15 +67,15 @@ get_ranch_info() ->
 
 get_active_connections() ->
     F = fun({Ref, Info}) ->
-        Nconns = case lists:keyfind(active_connections, 1, Info) of
-            false -> 0;
-            {_, N} -> N
-        end,
+        Nconns =
+            case lists:keyfind(active_connections, 1, Info) of
+                false -> 0;
+                {_, N} -> N
+            end,
         {Ref, Nconns}
     end,
     lists:map(F, get_ranch_info()).
 
--spec gauge(metric_key(), metric_value()) ->
-    metric().
+-spec gauge(metric_key(), metric_value()) -> metric().
 gauge(Key, Value) ->
     how_are_you:metric_construct(gauge, Key, Value).

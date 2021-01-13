@@ -9,15 +9,16 @@
 
 %% Types
 -type options() :: #{
-    event_handler         := woody:ev_handlers(),
-    protocol              => thrift,
-    transport             => http,
+    event_handler := woody:ev_handlers(),
+    protocol => thrift,
+    transport => http,
     %% Set to override protocol handler module selection, useful for test purposes, rarely
     %% if ever needed otherwise.
     protocol_handler_override => module(),
     %% Implementation-specific options
-    _                     => _
+    _ => _
 }.
+
 -export_type([options/0]).
 
 %% Behaviour definition
@@ -27,14 +28,12 @@
 %%
 %% API
 %%
--spec child_spec(_Id, options()) ->
-    supervisor:child_spec().
+-spec child_spec(_Id, options()) -> supervisor:child_spec().
 child_spec(Id, Options) ->
     ProtocolHandler = woody_util:get_protocol_handler(server, Options),
     ProtocolHandler:child_spec(Id, Options).
 
--spec get_addr(_Id, options()) ->
-    {inet:ip_address(), inet:port_number()}.
+-spec get_addr(_Id, options()) -> {inet:ip_address(), inet:port_number()}.
 get_addr(Id, Options) ->
     ProtocolHandler = woody_util:get_protocol_handler(server, Options),
     ProtocolHandler:get_addr(Id).

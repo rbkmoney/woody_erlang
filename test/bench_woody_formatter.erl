@@ -10,8 +10,7 @@
 
 -type input() :: term().
 
--spec input() ->
-    input().
+-spec input() -> input().
 input() ->
     %% NOTE
     %% You will need some reasonably complex term following `domain_config.Snapshot` thrift schema
@@ -20,23 +19,19 @@ input() ->
     {ok, Bin} = file:read_file("test/snapshot.term"),
     erlang:binary_to_term(Bin).
 
--spec iolib_formatter({input, _State}) ->
-    input().
+-spec iolib_formatter({input, _State}) -> input().
 iolib_formatter({input, _}) ->
     input().
 
--spec thrift_formatter({input, _State}) ->
-    input().
+-spec thrift_formatter({input, _State}) -> input().
 thrift_formatter({input, _}) ->
     input().
 
--spec bench_iolib_formatter(input(), _State) ->
-    term().
+-spec bench_iolib_formatter(input(), _State) -> term().
 bench_iolib_formatter(Snapshot, _) ->
     format_msg({"~0tp", [Snapshot]}).
 
--spec bench_thrift_formatter(input(), _State) ->
-    term().
+-spec bench_thrift_formatter(input(), _State) -> term().
 bench_thrift_formatter(Snapshot, _) ->
     Service = dmsl_domain_config_thrift,
     format_msg(woody_event_formatter:format_reply(Service, 'Repository', 'Checkout', Snapshot, #{})).

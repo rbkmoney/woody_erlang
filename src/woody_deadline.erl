@@ -15,22 +15,22 @@
 
 %% Types
 -type millisec() :: 0..1000.
--type deadline() :: {calendar:datetime(), millisec()} | undefined. %% deadline may be not set for a request,
-                                                                   %% that's why  'undefined' is here as well.
+%% deadline may be not set for a request,
+-type deadline() :: {calendar:datetime(), millisec()} | undefined.
+
+%% that's why  'undefined' is here as well.
 -export_type([deadline/0, millisec/0]).
 
 %%
 %% API
 %%
--spec is_reached(deadline()) ->
-    boolean().
+-spec is_reached(deadline()) -> boolean().
 is_reached(undefined) ->
     false;
 is_reached(Deadline) ->
     unow() >= to_unixtime_ms(Deadline).
 
--spec to_timeout(deadline()) ->
-    timeout().
+-spec to_timeout(deadline()) -> timeout().
 to_timeout(undefined) ->
     infinity;
 to_timeout(Deadline) ->
@@ -41,16 +41,14 @@ to_timeout(Deadline) ->
             erlang:error(deadline_reached, [Deadline])
     end.
 
--spec from_timeout(timeout()) ->
-    deadline().
+-spec from_timeout(timeout()) -> deadline().
 from_timeout(infinity) ->
     undefined;
 from_timeout(TimeoutMillisec) ->
     DeadlineMillisec = unow() + TimeoutMillisec,
     from_unixtime_ms(DeadlineMillisec).
 
--spec to_binary(deadline()) ->
-    binary().
+-spec to_binary(deadline()) -> binary().
 to_binary(Deadline = undefined) ->
     erlang:error(bad_deadline, [Deadline]);
 to_binary(Deadline) ->
@@ -63,8 +61,7 @@ to_binary(Deadline) ->
             erlang:error({bad_deadline, {Error, Stacktrace}}, [Deadline])
     end.
 
--spec from_binary(binary()) ->
-    deadline().
+-spec from_binary(binary()) -> deadline().
 from_binary(Bin) ->
     ok = assert_is_utc(Bin),
     Str = erlang:binary_to_list(Bin),
@@ -89,8 +86,7 @@ from_unixtime_ms(DeadlineMillisec) ->
 %% Internal functions
 %%
 
--spec assert_is_utc(binary()) ->
-    ok | no_return().
+-spec assert_is_utc(binary()) -> ok | no_return().
 assert_is_utc(Bin) ->
     Size0 = erlang:byte_size(Bin),
     Size1 = Size0 - 1,
@@ -106,8 +102,7 @@ assert_is_utc(Bin) ->
             erlang:error({bad_deadline, not_utc}, [Bin])
     end.
 
--spec unow() ->
-    millisec().
+-spec unow() -> millisec().
 unow() ->
     % We must use OS time for communications with external systems
     % erlang:system_time/1 may have a various difference with global time to prevent time warp.

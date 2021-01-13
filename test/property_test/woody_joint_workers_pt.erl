@@ -1,4 +1,5 @@
 -module(woody_joint_workers_pt).
+
 -include_lib("proper/include/proper.hrl").
 
 -export([
@@ -49,7 +50,6 @@ prop_test() ->
         end
     ).
 
-
 start_workers() ->
     genlib:unwrap(woody_joint_workers:start_link({local, workers})).
 
@@ -64,15 +64,15 @@ do(ID, Successfulness) ->
     % тестовый таск спит небольшое время
     % дедлайн ставится либо до, либо после него
     {TaskSleepTimeout, WorkerTimeout} = task_timeouts(Successfulness),
-    Task =
-        fun(_) ->
-            ok = timer:sleep(TaskSleepTimeout),
-            {ok, ID}
-        end,
+    Task = fun(_) ->
+        ok = timer:sleep(TaskSleepTimeout),
+        {ok, ID}
+    end,
     catch woody_joint_workers:do(workers, {ID, Successfulness}, Task, woody_deadline:from_timeout(WorkerTimeout)).
 
 % если уменьшать, то могут быть ложные срабатывания
 -define(timeout_k, 20).
+
 task_timeouts(success) ->
     {?timeout_k * 1, ?timeout_k * 3};
 task_timeouts(fail) ->
@@ -84,7 +84,7 @@ id() ->
 command(_) ->
     frequency([
         {10, {call, ?MODULE, do, [id(), success]}},
-        {1 , {call, ?MODULE, do, [id(), fail   ]}}
+        {1, {call, ?MODULE, do, [id(), fail]}}
     ]).
 
 initial_state() ->

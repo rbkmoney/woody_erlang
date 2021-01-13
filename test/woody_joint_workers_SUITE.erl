@@ -1,4 +1,5 @@
 -module(woody_joint_workers_SUITE).
+
 -include_lib("common_test/include/ct.hrl").
 
 -export([
@@ -33,7 +34,7 @@ init_per_suite(C) ->
     % dbg:tpl({woody_joint_workers, do, 4}, x),
 
     {ok, Apps} = application:ensure_all_started(woody),
-    [{apps, Apps}|C].
+    [{apps, Apps} | C].
 
 end_per_suite(C) ->
     [application:stop(App) || App <- ?config(apps, C)].
@@ -43,10 +44,11 @@ end_per_suite(C) ->
 %%
 prop_test(_C) ->
     R = proper:quickcheck(
-            woody_joint_workers_pt:prop_test(),
-            [noshrink] % default options
-        ),
+        woody_joint_workers_pt:prop_test(),
+        % default options
+        [noshrink]
+    ),
     case R of
-        true  -> ok;
+        true -> ok;
         Error -> exit(Error)
     end.

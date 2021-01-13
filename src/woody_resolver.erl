@@ -8,8 +8,8 @@
 -type url() :: woody:url().
 -type parsed_url() :: #hackney_url{}.
 
--type resolve_result() :: {Old::parsed_url(), New::parsed_url()}.
--type resolve_error()  :: einval | nxdomain | timeout | {unsupported_url_scheme, woody:url()}.
+-type resolve_result() :: {Old :: parsed_url(), New :: parsed_url()}.
+-type resolve_error() :: einval | nxdomain | timeout | {unsupported_url_scheme, woody:url()}.
 
 -type options() :: #{
     ip_picker => ip_picker(),
@@ -18,8 +18,8 @@
 
 -type ip_picker() :: {module(), atom()} | predefined_ip_picker().
 -type predefined_ip_picker() ::
-    random |
-    first.
+    random
+    | first.
 
 -export_type([options/0]).
 -export_type([ip_picker/0]).
@@ -36,14 +36,14 @@
 %%
 
 -spec resolve_url(url(), woody_state:st()) ->
-    {ok, resolve_result()}    |
-    {error, resolve_error()}.
+    {ok, resolve_result()}
+    | {error, resolve_error()}.
 resolve_url(Url, WoodyState) ->
     resolve_url(Url, WoodyState, #{}).
 
 -spec resolve_url(url(), woody_state:st(), options()) ->
-    {ok, resolve_result()}    |
-    {error, resolve_error()}.
+    {ok, resolve_result()}
+    | {error, resolve_error()}.
 resolve_url(Url, WoodyState, Opts) when is_list(Url) ->
     resolve_url(unicode:characters_to_binary(Url), WoodyState, Opts);
 resolve_url(<<"https://", _Rest/binary>> = Url, WoodyState, Opts) ->
@@ -60,7 +60,8 @@ parse_url(Url) ->
 
 resolve_parsed_url(ParsedUrl = #hackney_url{}, WoodyState, Opts) ->
     case inet:parse_address(ParsedUrl#hackney_url.host) of
-        {ok, _} -> {ok, {ParsedUrl, ParsedUrl}}; % url host is already an ip, move on
+        % url host is already an ip, move on
+        {ok, _} -> {ok, {ParsedUrl, ParsedUrl}};
         {error, _} -> do_resolve_url(ParsedUrl, WoodyState, Opts)
     end.
 
@@ -138,8 +139,7 @@ apply_ip_picker({M, F}, AddrList) ->
 get_ip_family(HostEnt) ->
     HostEnt#hostent.h_addrtype.
 
--spec get_ip_family_preference() ->
-    [inet:address_family()].
+-spec get_ip_family_preference() -> [inet:address_family()].
 get_ip_family_preference() ->
     case inet_db:res_option(inet6) of
         true -> [inet6, inet];
@@ -149,4 +149,4 @@ get_ip_family_preference() ->
 %%
 
 log_event(Event, WoodyState, ExtraMeta) ->
-        woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).
+    woody_event_handler:handle_event(Event, WoodyState, ExtraMeta).

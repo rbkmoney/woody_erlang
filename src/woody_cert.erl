@@ -6,20 +6,18 @@
 -export([get_common_name/1]).
 
 -opaque cert() :: public_key:der_encoded() | #'OTPCertificate'{} | undefined.
+
 -type common_name() :: binary().
+
 -export_type([cert/0, common_name/0]).
 
 %%% API
 
--spec from_req(cowboy_req:req()) ->
-    cert().
-
+-spec from_req(cowboy_req:req()) -> cert().
 from_req(Req) ->
     cowboy_req:cert(Req).
 
--spec get_common_name(cert()) ->
-    common_name() | undefined.
-
+-spec get_common_name(cert()) -> common_name() | undefined.
 get_common_name(undefined) ->
     undefined;
 get_common_name(Cert) when is_binary(Cert) ->
@@ -35,9 +33,11 @@ get_common_name(#'OTPCertificate'{tbsCertificate = TbsCert}) ->
 %%% Internal functions
 
 get_cn_from_rdn({rdnSequence, RDNSeq}) ->
-    [to_binary(V) ||
-     ATVs <- RDNSeq,
-        #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs];
+    [
+        to_binary(V)
+        || ATVs <- RDNSeq,
+           #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs
+    ];
 get_cn_from_rdn(_) ->
     [].
 
