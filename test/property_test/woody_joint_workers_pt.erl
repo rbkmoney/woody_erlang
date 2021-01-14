@@ -1,5 +1,4 @@
 -module(woody_joint_workers_pt).
-
 -include_lib("proper/include/proper.hrl").
 
 -export([
@@ -21,8 +20,8 @@
 -type id_t() :: non_neg_integer().
 
 -spec prop_test() -> any().
--spec start_workers() -> genlib_gen:start_ret().
--spec stop_workers(any()) -> ok.
+-spec start_workers() -> pid().
+-spec stop_workers(pid()) -> ok.
 -spec do(id_t(), successfulness()) -> any().
 -spec task_timeouts(successfulness()) -> {timeout(), timeout()}.
 -spec id() -> id_t().
@@ -78,6 +77,7 @@ task_timeouts(success) ->
 task_timeouts(fail) ->
     {?timeout_k * 3, ?timeout_k * 1}.
 
+-dialyzer({no_opaque, id/0}).
 id() ->
     oneof(lists:seq(1, 3)).
 

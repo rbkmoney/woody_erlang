@@ -13,7 +13,7 @@
 -export([get_socket_errors_caught/0]).
 
 -type state() :: #{
-    socket_errors_caught => pos_integer()
+    socket_errors_caught => non_neg_integer()
 }.
 
 -type event() :: woody_event_handler:event().
@@ -59,8 +59,8 @@ start_link() ->
 init(_) ->
     {ok, #{socket_errors_caught => 0}}.
 
--spec handle_call({event(), rpc_id(), event_meta(), options()}, _, state()) ->
-    {reply, ok | {ok, pos_integer()}, state()}.
+-spec handle_call(get_number_of_events | {event(), rpc_id(), event_meta(), options()}, _, state()) ->
+    {reply, ok | {ok, non_neg_integer()}, state()}.
 handle_call(
     {Event = ?EV_SERVICE_HANDLER_RESULT, Rpc, #{status := error, class := system, result := ?SOCKET_CLOSED} = Meta,
         Opts},

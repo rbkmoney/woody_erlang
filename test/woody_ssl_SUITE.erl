@@ -57,7 +57,7 @@
 %%% CT callbacks
 %%%
 
--spec all() -> [case_name()].
+-spec all() -> [{group, group_name()}].
 all() ->
     [
         {group, 'tlsv1.3'},
@@ -89,7 +89,7 @@ init_per_suite(C) ->
 end_per_suite(C) ->
     Sup = ?config(sup, C),
     ok = proc_lib:stop(Sup),
-    [application:stop(App) || App <- proplists:get_value(apps, C)],
+    _ = [application:stop(App) || App <- proplists:get_value(apps, C)],
     ok.
 
 -spec init_per_group(group_name(), config()) -> config().
@@ -110,7 +110,7 @@ client_wo_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)} | client_ssl_opts(Vsn)],
     try
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -134,7 +134,7 @@ invalid_client_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?invalid_client_cert(C)} | client_ssl_opts(Vsn)],
     try
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -204,7 +204,7 @@ handle_function(get_weapon, {Name, _Data}, Context, _Opts) ->
 %%% Supervisor callback
 %%%
 
--spec init(_) -> _.
+-spec init(_) -> genlib_gen:supervisor_ret().
 init(_) ->
     {ok,
         {
@@ -264,9 +264,7 @@ get_service_endpoint('Weapons') ->
     }.
 
 to_binary(Atom) when is_atom(Atom) ->
-    erlang:atom_to_binary(Atom, utf8);
-to_binary(Binary) when is_binary(Binary) ->
-    Binary.
+    erlang:atom_to_binary(Atom, utf8).
 
 assert_common_name(CNs, Context) ->
     CN = woody_context:get_common_name(Context),

@@ -8,12 +8,12 @@
     bench_thrift_formatter/2
 ]).
 
--type input() :: {woody_thrift_formatter:event_meta(), woody:rpc_id()}.
+-type input() :: {woody_event_handler:event_meta(), woody:rpc_id()}.
 
 -spec input() -> input().
 input() ->
     Meta = #{
-        args => [
+        args => {
             {mg_stateproc_CallArgs,
                 {bin,
                     <<131, 104, 4, 100, 0, 11, 116, 104, 114, 105, 102, 116, 95, 99, 97, 108, 108, 100, 0, 16, 112, 97,
@@ -92,7 +92,7 @@ input() ->
                         {str, <<"ct">>} =>
                             {str, <<"application/x-erlang-binary">>}
                     }}}}
-        ],
+        },
         deadline => {{{2019, 8, 13}, {7, 52, 41}}, 105},
         execution_start_time => 1565682731109,
         function => 'ProcessCall',

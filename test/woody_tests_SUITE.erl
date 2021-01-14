@@ -86,43 +86,6 @@
 
 -define(THRIFT_DEFS, woody_test_thrift).
 
-%% Weapons service
--define(SLOTS, #{
-    1 => <<"Impact Hammer">>,
-    2 => <<"Enforcer">>,
-    3 => <<"Bio Rifle">>,
-    4 => <<"Shock Rifle">>,
-    5 => <<"Pulse Gun">>,
-    6 => <<"Ripper">>,
-    7 => <<"Minigun">>,
-    8 => <<"Flak Cannon">>,
-    9 => <<"Rocket Launcher">>,
-    0 => <<"Sniper Rifle">>
-}).
-
--define(WEAPON(Name, Pos, Ammo),
-    Name => #'Weapon'{
-        name = Name,
-        slot_pos = Pos,
-        ammo = Ammo
-    }
-).
-
--define(WEAPON(Name, Pos), ?WEAPON(Name, Pos, undefined)).
-
--define(WEAPONS, #{
-    ?WEAPON(<<"Impact Hammer">>, 1),
-    ?WEAPON(<<"Enforcer">>, 2, 25),
-    ?WEAPON(<<"Bio Rifle">>, 3, 0),
-    ?WEAPON(<<"Shock Rifle">>, 4, 0),
-    ?WEAPON(<<"Pulse Gun">>, 5, 0),
-    ?WEAPON(<<"Ripper">>, 6, 16),
-    ?WEAPON(<<"Minigun">>, 7, 0),
-    ?WEAPON(<<"Flak Cannon">>, 8, 30),
-    ?WEAPON(<<"Rocket Launcher">>, 9, 6),
-    ?WEAPON(<<"Sniper Rifle">>, 0, 20)
-}).
-
 -define(WEAPON_FAILURE(Reason), #'WeaponFailure'{
     code = <<"weapon_error">>,
     reason = genlib:to_binary(Reason)
@@ -131,19 +94,6 @@
 -define(POWERUP_FAILURE(Reason), #'PowerupFailure'{
     code = <<"powerup_error">>,
     reason = genlib:to_binary(Reason)
-}).
-
-%% erlfmt-ignore
-%% Powerup service
--define(POWERUP(Name, Params), Name => #'Powerup'{name = Name, Params}).
-
--define(POWERUPS, #{
-    ?POWERUP(<<"Thigh Pads">>, level = 23),
-    ?POWERUP(<<"Body Armor">>, level = 82),
-    ?POWERUP(<<"Shield Belt">>, level = 0),
-    ?POWERUP(<<"AntiGrav Boots">>, level = 2),
-    ?POWERUP(<<"Damage Amplifier">>, time_left = 0),
-    ?POWERUP(<<"Invisibility">>, time_left = 0)
 }).
 
 -define(SERVER_IP, {0, 0, 0, 0}).
@@ -176,7 +126,7 @@
 
 -spec init(any()) -> genlib_gen:supervisor_ret().
 
--spec init(cowboy_req:req(), cowboy:http_status()) -> {stop, cowboy_req:req(), cowboy:http_status()}.
+-spec init(cowboy_req:req(), cowboy:http_status()) -> {ok, cowboy_req:req(), cowboy:http_status()}.
 -spec terminate(any(), any(), any()) -> ok.
 
 -spec all() -> [{group, group_name()}].
@@ -602,21 +552,24 @@ deadline_to_from_binary_test(_) ->
     DeadlineBin2 = woody_deadline:to_binary(Deadline2),
 
     Deadline3 = <<"2010-04-11T22:35:41+00:30">>,
-    try
-        woody_deadline:from_binary(Deadline3)
-    catch
-        error:{bad_deadline, not_utc} ->
-            ok
-    end,
+    _ =
+        try
+            woody_deadline:from_binary(Deadline3)
+        catch
+            error:{bad_deadline, not_utc} ->
+                ok
+        end,
     _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41+00:00">>),
     _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41-00:00">>),
 
-    try
-        woody_deadline:to_binary({{baddate, {22, 35, 41}}, 29})
-    catch
-        error:{bad_deadline, _} ->
-            ok
-    end,
+    _ =
+        try
+            BadDate = erlang:term_to_binary({baddate, {22, 35, 41}}),
+            woody_deadline:to_binary({erlang:binary_to_term(BadDate), 29})
+        catch
+            error:{bad_deadline, _} ->
+                ok
+        end,
 
     try
         woody_deadline:from_binary(<<"badboy">>)
@@ -627,7 +580,7 @@ deadline_to_from_binary_test(_) ->
 
 call_ok_test(C) ->
     Gun = <<"Enforcer">>,
-    gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, ?WEAPONS)}, true, C).
+    gun_test_basic(<<"call_ok">>, Gun, {ok, genlib_map:get(Gun, weapons())}, C).
 
 call_resolver_nxdomain(C) ->
     Context = make_context(<<"nxdomain">>),
@@ -641,7 +594,7 @@ call3_ok_test(C) ->
     Gun = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts = mk_client_opts(#{url => Url}, C),
-    Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect = {ok, genlib_map:get(Gun, weapons())},
     Expect = woody_client:call(Request, Opts).
 
 call3_ok_default_ev_handler_test(C) ->
@@ -649,7 +602,7 @@ call3_ok_default_ev_handler_test(C) ->
     Gun = <<"Enforcer">>,
     Request = {Service, get_weapon, {Gun, self_to_bin()}},
     Opts = mk_client_opts(#{url => Url, event_handler => {woody_event_handler_default, #{}}}, C),
-    Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect = {ok, genlib_map:get(Gun, weapons())},
     Expect = woody_client:call(Request, Opts).
 
 call_business_error_test(C) ->
@@ -658,13 +611,12 @@ call_business_error_test(C) ->
         <<"call_business_error">>,
         Gun,
         {exception, ?WEAPON_FAILURE("out of ammo")},
-        true,
         C
     ).
 
 call_throw_unexpected_test(C) ->
     Id = <<"call_throw_unexpected">>,
-    Current = genlib_map:get(<<"Rocket Launcher">>, ?WEAPONS),
+    Current = genlib_map:get(<<"Rocket Launcher">>, weapons()),
     Context = make_context(Id),
     ?assertError(
         {woody_error, {external, result_unexpected, _}},
@@ -705,18 +657,18 @@ call_oneway_void_test(C) ->
 
 call_sequence_with_context_meta_test(C) ->
     Gun = <<"Enforcer">>,
-    Current = genlib_map:get(Gun, ?WEAPONS),
+    Current = genlib_map:get(Gun, weapons()),
     Context = woody_context:new(
         <<"call_seq_with_context_meta">>,
         #{genlib:to_binary(Current#'Weapon'.slot_pos) => Gun}
     ),
-    Expect = {ok, genlib_map:get(<<"Ripper">>, ?WEAPONS)},
+    Expect = {ok, genlib_map:get(<<"Ripper">>, weapons())},
     Expect = call(Context, 'Weapons', switch_weapon, {Current, next, 1, self_to_bin()}, C).
 
 call_pass_thru_ok_test(C) ->
     Armor = <<"AntiGrav Boots">>,
     Context = make_context(<<"call_pass_thru_ok">>),
-    Expect = {ok, genlib_map:get(Armor, ?POWERUPS)},
+    Expect = {ok, genlib_map:get(Armor, powerups())},
     Expect = call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}, C),
     {ok, _} = receive_msg(Armor, Context).
 
@@ -725,12 +677,13 @@ call_pass_thru_except_test(C) ->
     Id = <<"call_pass_thru_except">>,
     RpcId = woody_context:new_rpc_id(?ROOT_REQ_PARENT_ID, Id, Id),
     Context = woody_context:new(RpcId),
-    try
-        call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}, C)
-    catch
-        error:{woody_error, {external, result_unexpected, _}} ->
-            ok
-    end,
+    _Result =
+        try
+            call(Context, 'Powerups', proxy_get_powerup, {Armor, self_to_bin()}, C)
+        catch
+            error:{woody_error, {external, result_unexpected, _}} ->
+                ok
+        end,
     {ok, _} = receive_msg(Armor, Context).
 
 call_pass_thru_bad_result_test(C) ->
@@ -850,7 +803,7 @@ call_deadline_ok_test(C) ->
     Opts = mk_client_opts(#{url => Url}, C),
     Deadline = woody_deadline:from_timeout(3000),
     Context = woody_context:new(Id, #{<<"sleep">> => <<"100">>}, Deadline),
-    Expect = {ok, genlib_map:get(Gun, ?WEAPONS)},
+    Expect = {ok, genlib_map:get(Gun, weapons())},
     Expect = woody_client:call(Request, Opts, Context).
 
 call_deadline_reached_on_client_test(C) ->
@@ -1044,7 +997,7 @@ handle_function(switch_weapon, {CurrentWeapon, Direction, Shift, To}, Context, #
 handle_function(get_weapon, {Name, To}, Context, _Opts) ->
     ok = handle_sleep(Context),
     ok = send_msg(To, {woody_context:get_rpc_id(parent_id, Context), Name}),
-    case genlib_map:get(Name, ?WEAPONS) of
+    case genlib_map:get(Name, weapons()) of
         #'Weapon'{ammo = 0} ->
             throw(?WEAPON_FAILURE("out of ammo"));
         Weapon = #'Weapon'{} ->
@@ -1162,9 +1115,71 @@ terminate(_, _, _) ->
     ok.
 
 %%
+%% Weapons service
+%%
+
+weapon_slots() ->
+    #{
+        1 => <<"Impact Hammer">>,
+        2 => <<"Enforcer">>,
+        3 => <<"Bio Rifle">>,
+        4 => <<"Shock Rifle">>,
+        5 => <<"Pulse Gun">>,
+        6 => <<"Ripper">>,
+        7 => <<"Minigun">>,
+        8 => <<"Flak Cannon">>,
+        9 => <<"Rocket Launcher">>,
+        0 => <<"Sniper Rifle">>
+    }.
+
+weapon(Name, Pos) ->
+    weapon(Name, Pos, undefined).
+
+weapon(Name, Pos, Ammo) ->
+    {Name, #'Weapon'{
+        name = Name,
+        slot_pos = Pos,
+        ammo = Ammo
+    }}.
+
+weapons() ->
+    maps:from_list([
+        weapon(<<"Impact Hammer">>, 1),
+        weapon(<<"Enforcer">>, 2, 25),
+        weapon(<<"Bio Rifle">>, 3, 0),
+        weapon(<<"Shock Rifle">>, 4, 0),
+        weapon(<<"Pulse Gun">>, 5, 0),
+        weapon(<<"Ripper">>, 6, 16),
+        weapon(<<"Minigun">>, 7, 0),
+        weapon(<<"Flak Cannon">>, 8, 30),
+        weapon(<<"Rocket Launcher">>, 9, 6),
+        weapon(<<"Sniper Rifle">>, 0, 20)
+    ]).
+
+%%
+%% Powerup service
+%%
+
+powerup(Name, Level) ->
+    powerup(Name, Level, undefined).
+
+powerup(Name, Level, TimeLeft) ->
+    {Name, #'Powerup'{name = Name, level = Level, time_left = TimeLeft}}.
+
+powerups() ->
+    maps:from_list([
+        powerup(<<"Thigh Pads">>, 23),
+        powerup(<<"Body Armor">>, 82),
+        powerup(<<"Shield Belt">>, 0),
+        powerup(<<"AntiGrav Boots">>, 2),
+        powerup(<<"Damage Amplifier">>, undefined, 0),
+        powerup(<<"Invisibility">>, undefined, 0)
+    ]).
+
+%%
 %% internal functions
 %%
-gun_test_basic(Id, Gun, Expect, WithMsg, C) ->
+gun_test_basic(Id, Gun, Expect, C) ->
     Context = make_context(Id),
     {Class, Reason} = get_except(Expect),
     try call(Context, 'Weapons', get_weapon, {Gun, self_to_bin()}, C) of
@@ -1172,14 +1187,12 @@ gun_test_basic(Id, Gun, Expect, WithMsg, C) ->
     catch
         Class:Reason -> ok
     end,
-    check_msg(WithMsg, Gun, Context).
+    check_msg(Gun, Context).
 
 get_except({ok, _}) ->
     {undefined, undefined};
 get_except({exception, _}) ->
-    {undefined, undefined};
-get_except(Except = {_Class, _Reason}) ->
-    Except.
+    {undefined, undefined}.
 
 make_context(ReqId) ->
     woody_context:new(ReqId).
@@ -1204,10 +1217,8 @@ get_service_endpoint('The Void') ->
         {?THRIFT_DEFS, 'Weapons'}
     }.
 
-check_msg(true, Msg, Context) ->
-    {ok, _} = receive_msg(Msg, Context);
-check_msg(false, _, _) ->
-    ok.
+check_msg(Msg, Context) ->
+    {ok, _} = receive_msg(Msg, Context).
 
 switch_weapon(CurrentWeapon, Direction, Shift, Context, CheckAnnot, C) ->
     {NextWName, NextWPos} = next_weapon(CurrentWeapon, Direction, Shift),
@@ -1230,14 +1241,14 @@ next_weapon(#'Weapon'{slot_pos = Pos}, prev, Shift) ->
     next_weapon(Pos - Shift).
 
 next_weapon(Pos) when is_integer(Pos), Pos >= 0, Pos < 10 ->
-    {genlib_map:get(Pos, ?SLOTS, <<"no weapon">>), Pos};
+    {genlib_map:get(Pos, weapon_slots(), <<"no weapon">>), Pos};
 next_weapon(_) ->
     throw(?WEAPON_STACK_OVERFLOW).
 
 return_powerup(<<"Invisibility">>) ->
     woody_error:raise(system, {internal, result_unknown, ?ERR_POWERUP_STATE_UNKNOWN});
 return_powerup(Name) when is_binary(Name) ->
-    return_powerup(genlib_map:get(Name, ?POWERUPS, ?BAD_POWERUP_REPLY));
+    return_powerup(genlib_map:get(Name, powerups(), ?BAD_POWERUP_REPLY));
 return_powerup(#'Powerup'{level = Level}) when Level == 0 ->
     throw(?POWERUP_FAILURE("run out"));
 return_powerup(#'Powerup'{time_left = Time}) when Time == 0 ->
