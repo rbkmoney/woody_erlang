@@ -536,6 +536,8 @@ deadline_to_from_timeout_test(_) ->
     ok = timer:sleep(Timeout1),
     true = woody_deadline:is_reached(Deadline).
 
+-dialyzer({nowarn_function, deadline_to_from_binary_test/1}).
+
 deadline_to_from_binary_test(_) ->
     Deadline = {{{2010, 4, 11}, {22, 35, 41}}, 29},
     DeadlineBin = <<"2010-04-11T22:35:41.029Z">>,
@@ -559,17 +561,16 @@ deadline_to_from_binary_test(_) ->
             error:{bad_deadline, not_utc} ->
                 ok
         end,
+
     _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41+00:00">>),
     _ = woody_deadline:from_binary(<<"2010-04-11T22:35:41-00:00">>),
 
-    _ =
-        try
-            BadDate = erlang:term_to_binary({{baddate, {22, 35, 41}}, 29}),
-            woody_deadline:to_binary(erlang:binary_to_term(BadDate))
-        catch
-            error:{bad_deadline, _} ->
-                ok
-        end,
+    try
+        woody_deadline:to_binary({{baddate, {22, 35, 41}}, 29})
+    catch
+        error:{bad_deadline, _} ->
+            ok
+    end,
 
     try
         woody_deadline:from_binary(<<"badboy">>)
