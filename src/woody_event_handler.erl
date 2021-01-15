@@ -117,9 +117,9 @@
     %% EV_SERVICE_HANDLER_RESULT
     result =>
         woody:result()
-    | woody_error:business_error()
-    | woody_error:system_error()
-    | _Error,
+        | woody_error:business_error()
+        | woody_error:system_error()
+        | _Error,
     %% EV_SERVICE_HANDLER_RESULT
     ignore => boolean(),
     %% EV_SERVICE_HANDLER_RESULT

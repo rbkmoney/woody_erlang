@@ -564,8 +564,8 @@ deadline_to_from_binary_test(_) ->
 
     _ =
         try
-            BadDate = erlang:term_to_binary({baddate, {22, 35, 41}}),
-            woody_deadline:to_binary({erlang:binary_to_term(BadDate), 29})
+            BadDate = erlang:term_to_binary({{baddate, {22, 35, 41}}, 29}),
+            woody_deadline:to_binary(erlang:binary_to_term(BadDate))
         catch
             error:{bad_deadline, _} ->
                 ok
