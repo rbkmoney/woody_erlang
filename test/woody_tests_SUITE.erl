@@ -1098,8 +1098,7 @@ log_event(Event, RpcId, Meta) ->
             status,
             url,
             code,
-            result,
-            execution_time
+            result
         ]
     ),
     ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
