@@ -2,8 +2,7 @@
 
 -export([run/0]).
 
--spec run() ->
-    ok.
+-spec run() -> ok.
 run() ->
     Input = input(),
     Opts = #{iterations => 10},
@@ -11,14 +10,13 @@ run() ->
     _ = run(thrift, mk_thrift_runner(Input), Opts),
     ok.
 
--spec run(atom(), meter_memory_pressure:runner(), meter_memory_pressure:opts()) ->
-    ok.
+-spec run(atom(), meter_memory_pressure:runner(), meter_memory_pressure:opts()) -> ok.
 run(Name, Runner, Opts) ->
     _ = io:format("Benchmarking '~s' memory pressure...~n", [Name]),
     _ = io:format("====================================~n", []),
     Metrics = meter_memory_pressure:measure(Runner, Opts),
     lists:foreach(
-        fun (Metric) ->
+        fun(Metric) ->
             io:format("~24s = ~-16b~n", [Metric, maps:get(Metric, Metrics)])
         end,
         [
@@ -35,8 +33,7 @@ run(Name, Runner, Opts) ->
     _ = io:format("====================================~n~n", []),
     ok.
 
--spec input() ->
-    term().
+-spec input() -> term().
 input() ->
     %% NOTE
     %% You will need some reasonably complex term following `domain_config.Snapshot` thrift schema
@@ -45,16 +42,14 @@ input() ->
     {ok, Binary} = file:read_file("test/snapshot.term"),
     erlang:binary_to_term(Binary).
 
--spec mk_iolib_runner(term()) ->
-    meter_memory_pressure:runner().
+-spec mk_iolib_runner(term()) -> meter_memory_pressure:runner().
 mk_iolib_runner(Snapshot) ->
-    fun () ->
+    fun() ->
         bench_woody_formatter:bench_iolib_formatter(Snapshot, [])
     end.
 
--spec mk_thrift_runner(term()) ->
-    meter_memory_pressure:runner().
+-spec mk_thrift_runner(term()) -> meter_memory_pressure:runner().
 mk_thrift_runner(Snapshot) ->
-    fun () ->
+    fun() ->
         bench_woody_formatter:bench_thrift_formatter(Snapshot, [])
     end.

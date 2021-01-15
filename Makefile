@@ -7,9 +7,12 @@ UTILS_PATH := build_utils
 # with handling of the varriable in build_utils is fixed
 TEMPLATES_PATH := .
 SERVICE_NAME := woody
-BUILD_IMAGE_TAG := 07d3946f8f005782697de20270ac58cdcd18b011
 
-CALL_W_CONTAINER := all submodules compile xref lint test bench dialyze clean distclean
+BUILD_IMAGE_NAME := build-erlang
+BUILD_IMAGE_TAG := c60896ef07d41e7ae2e5f9b6ce845a60ad79acc7
+
+CALL_W_CONTAINER := all submodules compile xref lint test bench dialyze clean distclean \
+	check_format format
 
 .PHONY: $(CALL_W_CONTAINER)
 
@@ -35,6 +38,12 @@ xref: submodules
 
 lint: compile
 	elvis rock
+
+check_format:
+	$(REBAR) fmt -c
+
+format:
+	$(REBAR) fmt -w
 
 clean:
 	$(REBAR) clean

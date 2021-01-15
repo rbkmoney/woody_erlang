@@ -3,26 +3,28 @@
 -behaviour(woody_client_behaviour).
 
 -include_lib("thrift/include/thrift_constants.hrl").
+
 -include("woody_defs.hrl").
 
 %% woody_client_behaviour callback
--export([call      /3]).
+-export([call/3]).
 -export([child_spec/1]).
 
 %% Types
 -type options() :: #{
-    url            := woody:url(),
-    event_handler  := woody:ev_handlers(),
+    url := woody:url(),
+    event_handler := woody:ev_handlers(),
     transport_opts => transport_options(),
-    resolver_opts  => woody_resolver:options(),
-    protocol       => thrift,
-    transport      => http
+    resolver_opts => woody_resolver:options(),
+    protocol => thrift,
+    transport => http
 }.
 
 %% See hackney:request/5 for available options.
 -type transport_options() :: map().
 
--define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000). %% millisec
+%% millisec
+-define(DEFAULT_CONNECT_AND_SEND_TIMEOUT, 1000).
 -define(DEFAULT_TRANSPORT_OPTIONS, #{
     connect_options => [
         % Turn TCP_NODELAY on.
@@ -36,26 +38,24 @@
 %%
 %% API
 %%
--spec child_spec(options()) ->
-    supervisor:child_spec().
+-spec child_spec(options()) -> supervisor:child_spec().
 child_spec(Options) ->
     TransportOpts = get_transport_opts(Options),
     Name = maps:get(pool, TransportOpts, undefined),
     hackney_pool:child_spec(Name, maps:to_list(TransportOpts)).
 
--spec call(woody:request(), options(), woody_state:st()) ->
-    woody_client:result().
+-spec call(woody:request(), options(), woody_state:st()) -> woody_client:result().
 call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     WoodyContext = woody_state:get_context(WoodyState),
     WoodyState1 = woody_state:add_ev_meta(
         #{
-            service        => ServiceName,
+            service => ServiceName,
             service_schema => Service,
-            function       => Function,
-            type           => woody_util:get_rpc_type(Service, Function),
-            args           => Args,
-            deadline       => woody_context:get_deadline(WoodyContext),
-            metadata       => woody_context:get_meta(WoodyContext)
+            function => Function,
+            type => woody_util:get_rpc_type(Service, Function),
+            args => Args,
+            deadline => woody_context:get_deadline(WoodyContext),
+            metadata => woody_context:get_meta(WoodyContext)
         },
         WoodyState
     ),
@@ -72,9 +72,9 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
 -type header_parse_value() :: none | woody:http_header_val().
 
 -define(CODEC, thrift_strict_binary_codec).
--define(ERROR_RESP_BODY   , <<"parse http response body error">>   ).
--define(ERROR_RESP_HEADER , <<"parse http response headers error">>).
--define(BAD_RESP_HEADER   , <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
+-define(ERROR_RESP_BODY, <<"parse http response body error">>).
+-define(ERROR_RESP_HEADER, <<"parse http response headers error">>).
+-define(BAD_RESP_HEADER, <<"reason unknown due to bad ", ?HEADER_PREFIX/binary, "-error- headers">>).
 
 -define(SERVER_VIOLATION_ERROR,
     {external, result_unexpected, <<
@@ -83,36 +83,33 @@ call({Service = {_, ServiceName}, Function, Args}, Opts, WoodyState) ->
     >>}
 ).
 
--spec get_transport_opts(options()) ->
-    woody_client_thrift_http_transport:transport_options().
+-spec get_transport_opts(options()) -> woody_client_thrift_http_transport:transport_options().
 get_transport_opts(Opts) ->
     maps:get(transport_opts, Opts, #{}).
 
--spec get_resolver_opts(options()) ->
-    woody_resolver:options().
+-spec get_resolver_opts(options()) -> woody_resolver:options().
 get_resolver_opts(Opts) ->
     maps:get(resolver_opts, Opts, #{}).
 
--spec do_call(woody:service(), woody:func(), woody:args(), options(), woody_state:st()) ->
-    woody_client:result().
+-spec do_call(woody:service(), woody:func(), woody:args(), options(), woody_state:st()) -> woody_client:result().
 do_call(Service, Function, Args, Opts, WoodyState) ->
     Buffer = ?CODEC:new(),
-    Result = case thrift_client_codec:write_function_call(Buffer, ?CODEC, Service, Function, Args, 0) of
-        {ok, Buffer1} ->
-            case send_call(Buffer1, Opts, WoodyState) of
-                {ok, Response} ->
-                    handle_result(Service, Function, Response);
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end,
+    Result =
+        case thrift_client_codec:write_function_call(Buffer, ?CODEC, Service, Function, Args, 0) of
+            {ok, Buffer1} ->
+                case send_call(Buffer1, Opts, WoodyState) of
+                    {ok, Response} ->
+                        handle_result(Service, Function, Response);
+                    Error ->
+                        Error
+                end;
+            Error ->
+                Error
+        end,
     log_result(Result, WoodyState),
     map_result(Result).
 
--spec handle_result(woody:service(), woody:func(), binary()) ->
-    _Result.
+-spec handle_result(woody:service(), woody:func(), binary()) -> _Result.
 handle_result(Service, Function, Response) ->
     Buffer = ?CODEC:new(Response),
     case thrift_client_codec:read_function_result(Buffer, ?CODEC, Service, Function, 0) of
@@ -134,9 +131,11 @@ handle_result(Service, Function, Response) ->
             Error
     end.
 
+%% erlfmt-ignore
 -spec send_call(?CODEC:buffer(), options(), woody_state:st()) ->
     {ok, binary()} | {error, {system, _}}.
-send_call(Buffer, Opts = #{url := Url}, WoodyState) ->
+
+send_call(Buffer, #{url := Url} = Opts, WoodyState) ->
     Context = woody_state:get_context(WoodyState),
     TransportOpts = get_transport_opts(Opts),
     ResolverOpts = get_resolver_opts(Opts),
@@ -177,11 +176,14 @@ set_timeouts(Options, Context) ->
             %% It is intentional, that application can override the timeout values
             %% calculated from the deadline (first option value in the list takes
             %% the precedence).
-            maps:merge(#{
-                connect_timeout => ConnectTimeout,
-                send_timeout =>    SendTimeout,
-                recv_timeout =>    Timeout
-            }, Options)
+            maps:merge(
+                #{
+                    connect_timeout => ConnectTimeout,
+                    send_timeout => SendTimeout,
+                    recv_timeout => Timeout
+                },
+                Options
+            )
     end.
 
 calc_timeouts(Timeout) ->
@@ -189,30 +191,27 @@ calc_timeouts(Timeout) ->
     %% should take no more than 20% of the total request time
     %% and in any case no more, than DEFAULT_CONNECT_AND_SEND_TIMEOUT together.
     case max(0, Timeout) div 5 of
-        T when (T*2) > ?DEFAULT_CONNECT_AND_SEND_TIMEOUT ->
+        T when (T * 2) > ?DEFAULT_CONNECT_AND_SEND_TIMEOUT ->
             ?DEFAULT_CONNECT_AND_SEND_TIMEOUT;
         T ->
             T
     end.
 
--spec make_woody_headers(woody_context:ctx()) ->
-    http_headers().
+-spec make_woody_headers(woody_context:ctx()) -> http_headers().
 make_woody_headers(Context) ->
     add_optional_headers(Context, [
-        {<<"content-type">>    , ?CONTENT_TYPE_THRIFT},
-        {<<"accept">>          , ?CONTENT_TYPE_THRIFT},
-        {?HEADER_RPC_ROOT_ID   , woody_context:get_rpc_id(trace_id , Context)},
-        {?HEADER_RPC_ID        , woody_context:get_rpc_id(span_id  , Context)},
-        {?HEADER_RPC_PARENT_ID , woody_context:get_rpc_id(parent_id, Context)}
+        {<<"content-type">>, ?CONTENT_TYPE_THRIFT},
+        {<<"accept">>, ?CONTENT_TYPE_THRIFT},
+        {?HEADER_RPC_ROOT_ID, woody_context:get_rpc_id(trace_id, Context)},
+        {?HEADER_RPC_ID, woody_context:get_rpc_id(span_id, Context)},
+        {?HEADER_RPC_PARENT_ID, woody_context:get_rpc_id(parent_id, Context)}
     ]).
 
--spec add_optional_headers(woody_context:ctx(), http_headers()) ->
-    http_headers().
+-spec add_optional_headers(woody_context:ctx(), http_headers()) -> http_headers().
 add_optional_headers(Context, Headers) ->
     add_deadline_header(Context, add_metadata_headers(Context, Headers)).
 
--spec add_metadata_headers(woody_context:ctx(), http_headers()) ->
-    http_headers().
+-spec add_metadata_headers(woody_context:ctx(), http_headers()) -> http_headers().
 add_metadata_headers(Context, Headers) ->
     maps:fold(fun add_metadata_header/3, Headers, woody_context:get_meta(Context)).
 
@@ -232,13 +231,13 @@ do_add_deadline_header(Deadline, Headers) ->
 add_host_header(#hackney_url{netloc = Netloc}, Headers) ->
     [{<<"Host">>, Netloc} | Headers].
 
--spec handle_response(_, woody_state:st()) ->
-    {ok, woody:http_body()} | {error, {system, woody_error:system_error()}}.
+-spec handle_response(_, woody_state:st()) -> {ok, woody:http_body()} | {error, {system, woody_error:system_error()}}.
 handle_response({ok, 200, Headers, Ref}, WoodyState) ->
-    Meta = case check_error_reason(Headers, 200, WoodyState) of
-        <<>>   -> #{};
-        Reason -> #{reason => Reason}
-    end,
+    Meta =
+        case check_error_reason(Headers, 200, WoodyState) of
+            <<>> -> #{};
+            Reason -> #{reason => Reason}
+        end,
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, Meta#{status => ok, code => 200}),
     get_body(hackney:body(Ref), WoodyState);
 handle_response({ok, Code, Headers, Ref}, WoodyState) ->
@@ -257,25 +256,25 @@ handle_response({error, {closed, _}}, WoodyState) ->
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Reason}),
     {error, {system, {external, result_unknown, Reason}}};
 handle_response({error, Reason}, WoodyState) when
-    Reason =:= timeout      ;
-    Reason =:= econnaborted ;
-    Reason =:= enetreset    ;
-    Reason =:= econnreset   ;
-    Reason =:= eshutdown    ;
-    Reason =:= etimedout    ;
+    Reason =:= timeout;
+    Reason =:= econnaborted;
+    Reason =:= enetreset;
+    Reason =:= econnreset;
+    Reason =:= eshutdown;
+    Reason =:= etimedout;
     Reason =:= closed
 ->
     BinReason = woody_util:to_binary(Reason),
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => BinReason}),
     {error, {system, {external, result_unknown, BinReason}}};
 handle_response({error, Reason}, WoodyState) when
-    Reason             =:= econnrefused    ;
-    Reason             =:= connect_timeout ;
-    Reason             =:= checkout_timeout;
-    Reason             =:= enetdown        ;
-    Reason             =:= enetunreach     ;
-    Reason             =:= ehostunreach    ;
-    Reason             =:= eacces          ;
+    Reason =:= econnrefused;
+    Reason =:= connect_timeout;
+    Reason =:= checkout_timeout;
+    Reason =:= enetdown;
+    Reason =:= enetunreach;
+    Reason =:= ehostunreach;
+    Reason =:= eacces;
     element(1, Reason) =:= resolve_failed
 ->
     BinReason = woody_error:format_details(Reason),
@@ -288,13 +287,11 @@ handle_response({error, Reason}, WoodyState) ->
     _ = log_event(?EV_CLIENT_RECEIVE, WoodyState, #{status => error, reason => Details}),
     {error, {system, {internal, result_unexpected, Details}}}.
 
--spec check_error_reason(http_headers(), woody:http_code(), woody_state:st()) ->
-    woody_error:details().
+-spec check_error_reason(http_headers(), woody:http_code(), woody_state:st()) -> woody_error:details().
 check_error_reason(Headers, Code, WoodyState) ->
     do_check_error_reason(get_header_value(?HEADER_E_REASON, Headers), Code, WoodyState).
 
--spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_state:st()) ->
-    woody_error:details().
+-spec do_check_error_reason(header_parse_value(), woody:http_code(), woody_state:st()) -> woody_error:details().
 do_check_error_reason(none, 200, _WoodyState) ->
     <<>>;
 do_check_error_reason(none, Code, WoodyState) ->
@@ -310,8 +307,7 @@ check_error_headers(502, Headers, WoodyState) ->
 check_error_headers(Code, Headers, WoodyState) ->
     {get_error_class(Code), check_error_reason(Headers, Code, WoodyState)}.
 
--spec get_error_class(woody:http_code()) ->
-    woody_error:class().
+-spec get_error_class(woody:http_code()) -> woody_error:class().
 get_error_class(503) ->
     resource_unavailable;
 get_error_class(504) ->
@@ -342,8 +338,7 @@ check_502_error_class(Bad, _, WoodyState) ->
     ),
     {result_unexpected, ?BAD_RESP_HEADER}.
 
--spec get_error_class_header_value(http_headers()) ->
-    header_parse_value().
+-spec get_error_class_header_value(http_headers()) -> header_parse_value().
 get_error_class_header_value(Headers) ->
     case get_header_value(?HEADER_E_CLASS, Headers) of
         None when None =:= none orelse None =:= multiple ->
@@ -352,12 +347,11 @@ get_error_class_header_value(Headers) ->
             genlib_string:to_lower(Value)
     end.
 
--spec get_header_value(woody:http_header_name(), http_headers()) ->
-    header_parse_value().
+-spec get_header_value(woody:http_header_name(), http_headers()) -> header_parse_value().
 get_header_value(Name, Headers) ->
-    case lists:dropwhile(fun ({K, _}) -> Name /= genlib_string:to_lower(K) end, Headers) of
+    case lists:dropwhile(fun({K, _}) -> Name /= genlib_string:to_lower(K) end, Headers) of
         [{_, Value} | _] -> Value;
-        []               -> none
+        [] -> none
     end.
 
 -spec get_body({ok, woody:http_body()} | {error, atom()}, woody_state:st()) ->
@@ -375,8 +369,7 @@ log_result({error, {business, ThriftExcept}}, WoodyState) ->
 log_result({error, Result}, WoodyState) ->
     log_event(?EV_SERVICE_RESULT, WoodyState, #{status => error, class => system, result => Result}).
 
--spec map_result(woody_client:result() | {error, _ThriftError}) ->
-    woody_client:result().
+-spec map_result(woody_client:result() | {error, _ThriftError}) -> woody_client:result().
 map_result(Res = {ok, _}) ->
     Res;
 map_result(Res = {error, {Type, _}}) when Type =:= business orelse Type =:= system ->

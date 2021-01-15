@@ -1,4 +1,5 @@
 -module(woody_monitor_h).
+
 -behaviour(cowboy_stream).
 
 -include("woody_defs.hrl").
@@ -30,20 +31,20 @@ set_event(Event, Req) ->
 
 %% callbacks
 
--spec init(cowboy_stream:streamid(), cowboy_req:req(), cowboy:opts())
-    -> {cowboy_stream:commands(), state()}.
+-spec init(cowboy_stream:streamid(), cowboy_req:req(), cowboy:opts()) -> {cowboy_stream:commands(), state()}.
 init(StreamID, Req, Opts) ->
     {Commands0, Next} = cowboy_stream:init(StreamID, Req, Opts),
     {Commands0, #{next => Next, event_to_emit => ?EV_SERVER_RECEIVE}}.
 
--spec data(cowboy_stream:streamid(), cowboy_stream:fin(), cowboy_req:resp_body(), State)
-    -> {cowboy_stream:commands(), State} when State::state().
+-spec data(cowboy_stream:streamid(), cowboy_stream:fin(), cowboy_req:resp_body(), State) ->
+    {cowboy_stream:commands(), State}
+when
+    State :: state().
 data(StreamID, IsFin, Data, #{next := Next0} = State) ->
     {Commands0, Next} = cowboy_stream:data(StreamID, IsFin, Data, Next0),
     {Commands0, State#{next => Next}}.
 
--spec info(cowboy_stream:streamid(), any(), State)
-    -> {cowboy_stream:commands(), State} when State::state().
+-spec info(cowboy_stream:streamid(), any(), State) -> {cowboy_stream:commands(), State} when State :: state().
 info(StreamID, {woody_state, WoodyState} = Info, #{next := Next0} = State) ->
     {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
     {Commands, State#{next => Next, woody_state => WoodyState}};
@@ -61,7 +62,8 @@ terminate(
     {socket_error, _, HumanReadable} = Reason,
     #{woody_state := WoodyState, next := Next, event_to_emit := Event = ?EV_SERVER_RECEIVE}
 ) ->
-    woody_event_handler:handle_event(Event,
+    woody_event_handler:handle_event(
+        Event,
         WoodyState,
         #{status => error, reason => woody_util:to_binary(HumanReadable)}
     ),
@@ -71,7 +73,8 @@ terminate(
     {socket_error, _, HumanReadable} = Reason,
     #{woody_state := WoodyState, next := Next, event_to_emit := Event = ?EV_SERVICE_HANDLER_RESULT}
 ) ->
-    woody_event_handler:handle_event(Event,
+    woody_event_handler:handle_event(
+        Event,
         WoodyState,
         #{status => error, class => system, result => woody_util:to_binary(HumanReadable)}
     ),
@@ -79,9 +82,14 @@ terminate(
 terminate(StreamID, Reason, #{next := Next}) ->
     cowboy_stream:terminate(StreamID, Reason, Next).
 
--spec early_error(cowboy_stream:streamid(), cowboy_stream:reason(),
-    cowboy_stream:partial_req(), Resp, cowboy:opts()) -> Resp
-    when Resp::cowboy_stream:resp_command().
+-spec early_error(
+    cowboy_stream:streamid(),
+    cowboy_stream:reason(),
+    cowboy_stream:partial_req(),
+    Resp,
+    cowboy:opts()
+) -> Resp when
+    Resp :: cowboy_stream:resp_command().
 early_error(StreamID, Reason, PartialReq, Resp, Opts) ->
     % We can't really do anything about it
     cowboy_stream:early_error(StreamID, Reason, PartialReq, Resp, Opts).

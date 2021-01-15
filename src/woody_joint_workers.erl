@@ -24,26 +24,24 @@
 -export([worker_start_link/3]).
 -export([worker_init/4]).
 
--type deadline()   :: woody_deadline:deadline().
+-type deadline() :: woody_deadline:deadline().
 -type task(Result) :: fun((deadline()) -> Result).
--type id()         :: _.
--type exception()  :: {atom(), term(), list()}.
+-type id() :: _.
+-type exception() :: {atom(), term(), list()}.
 
 %%
 %% API
 %%
--spec child_spec(atom(), genlib_gen:reg_name()) ->
-    supervisor:child_spec().
+-spec child_spec(atom(), genlib_gen:reg_name()) -> supervisor:child_spec().
 child_spec(ChildID, RegName) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, start_link, [RegName]},
-        restart  => permanent,
-        type     => supervisor
+        id => ChildID,
+        start => {?MODULE, start_link, [RegName]},
+        restart => permanent,
+        type => supervisor
     }.
 
--spec start_link(genlib_gen:reg_name()) ->
-    genlib_gen:start_ret().
+-spec start_link(genlib_gen:reg_name()) -> genlib_gen:start_ret().
 start_link(RegName) ->
     genlib_adhoc_supervisor:start_link(
         RegName,
@@ -51,31 +49,27 @@ start_link(RegName) ->
         [worker_child_spec(worker)]
     ).
 
--spec do(genlib_gen:ref(), id(), task(Result), deadline()) ->
-    Result.
+-spec do(genlib_gen:ref(), id(), task(Result), deadline()) -> Result.
 do(Ref, ID, Task, Deadline) ->
     do(Ref, ID, Task, Deadline, 10).
 
 %%
 %% Internal API
 %%
--spec worker_child_spec(atom()) ->
-    supervisor:child_spec().
+-spec worker_child_spec(atom()) -> supervisor:child_spec().
 worker_child_spec(ChildID) ->
     #{
-        id       => ChildID,
-        start    => {?MODULE, worker_start_link, []},
-        restart  => temporary,
-        type     => worker
+        id => ChildID,
+        start => {?MODULE, worker_start_link, []},
+        restart => temporary,
+        type => worker
     }.
 
--spec worker_start_link(id(), task(_), deadline()) ->
-    genlib_gen:start_ret().
+-spec worker_start_link(id(), task(_), deadline()) -> genlib_gen:start_ret().
 worker_start_link(ID, Task, Deadline) ->
     proc_lib:start_link(?MODULE, worker_init, [ID, self(), Task, Deadline], deadline_to_timeout(Deadline)).
 
--spec worker_init(id(), pid(), task(_), deadline()) ->
-    ok.
+-spec worker_init(id(), pid(), task(_), deadline()) -> ok.
 worker_init(ID, Parent, Task, Deadline) ->
     Self = self(),
     case gproc:reg_or_locate({n, l, ID}) of
@@ -92,8 +86,7 @@ worker_init(ID, Parent, Task, Deadline) ->
 %%
 %% local
 %%
--spec do(genlib_gen:ref(), id(), task(Result), deadline(), non_neg_integer()) ->
-    Result.
+-spec do(genlib_gen:ref(), id(), task(Result), deadline(), non_neg_integer()) -> Result.
 do(Ref, ID, Task, Deadline, 0) ->
     erlang:error(fatal_retrying_error, [Ref, ID, Task, Deadline]);
 do(Ref, ID, Task, Deadline, Attempts) ->
@@ -108,7 +101,7 @@ do(Ref, ID, Task, Deadline, Attempts) ->
             % когда соединяются запросы с разными дедлайнами
             case woody_deadline:is_reached(Deadline) of
                 false -> do(Ref, ID, Task, Deadline);
-                true  -> erlang:error(deadline_reached, [Ref, ID, Task, Deadline])
+                true -> erlang:error(deadline_reached, [Ref, ID, Task, Deadline])
             end;
         {error, {exception, {Class, Error, Stacktrace}}} ->
             erlang:Class({Error, Stacktrace});
@@ -117,7 +110,7 @@ do(Ref, ID, Task, Deadline, Attempts) ->
     end.
 
 -spec wait_for_result(pid(), deadline()) ->
-      {ok, _Result}
+    {ok, _Result}
     | {error, deadline_reached | race_detected | {worker_error, _Reason} | {exception, exception()}}.
 wait_for_result(Pid, Deadline) ->
     Timeout = deadline_to_timeout(Deadline),
@@ -131,8 +124,7 @@ wait_for_result(Pid, Deadline) ->
             erlang:demonitor(MRef, [flush]),
             {error, {exception, Exception}};
         %% произошла гонка
-        {'DOWN', MRef, process, Pid, Reason}
-            when Reason =:= normal; Reason =:= noproc ->
+        {'DOWN', MRef, process, Pid, Reason} when Reason =:= normal; Reason =:= noproc ->
             {error, race_detected};
         %% упал воркер по таймауту
         {'DOWN', MRef, process, Pid, deadline_reached} ->
@@ -145,30 +137,25 @@ wait_for_result(Pid, Deadline) ->
         {error, deadline_reached}
     end.
 
--spec broadcast_result(_Result) ->
-    ok.
+-spec broadcast_result(_Result) -> ok.
 broadcast_result(Result) ->
     receive
         {?MODULE, wait_for_result, MRef, Pid} ->
             Pid ! {?MODULE, broadcast_result, MRef, Result},
             broadcast_result(Result)
-    after 0 ->
-        ok
+    after 0 -> ok
     end.
 
--spec sync_with_employer(timeout()) ->
-    ok.
+-spec sync_with_employer(timeout()) -> ok.
 sync_with_employer(Timeout) ->
     receive
         {?MODULE, wait_for_result, MRef, Pid} ->
             self() ! {?MODULE, wait_for_result, MRef, Pid},
             ok
-    after Timeout ->
-        exit(deadline_reached)
+    after Timeout -> exit(deadline_reached)
     end.
 
--spec deadline_to_timeout(deadline()) ->
-    timeout().
+-spec deadline_to_timeout(deadline()) -> timeout().
 deadline_to_timeout(Deadline) ->
     try
         woody_deadline:to_timeout(Deadline)
@@ -177,16 +164,17 @@ deadline_to_timeout(Deadline) ->
             0
     end.
 
--spec set_worker_deadline_timer(deadline()) ->
-    ok.
+-spec set_worker_deadline_timer(deadline()) -> ok.
 set_worker_deadline_timer(Deadline) ->
     case deadline_to_timeout(Deadline) of
-        infinity -> ok;
-        Timeout  -> _ = genlib:unwrap(timer:exit_after(Timeout, self(), deadline_reached)), ok
+        infinity ->
+            ok;
+        Timeout ->
+            _ = genlib:unwrap(timer:exit_after(Timeout, self(), deadline_reached)),
+            ok
     end.
 
--spec do_task_safe(task(Result), deadline()) ->
-    {ok, Result} | {exception, exception()}.
+-spec do_task_safe(task(Result), deadline()) -> {ok, Result} | {exception, exception()}.
 do_task_safe(Task, Deadline) ->
     try
         {ok, Task(Deadline)}

@@ -3,6 +3,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+
 -include("woody_test_thrift.hrl").
 
 -behaviour(supervisor).
@@ -35,7 +36,7 @@
 %% supervisor callback
 -export([init/1]).
 
--type config()    :: [{atom(), any()}].
+-type config() :: [{atom(), any()}].
 -type group_name() :: atom().
 -type case_name() :: atom().
 
@@ -56,9 +57,7 @@
 %%% CT callbacks
 %%%
 
--spec all() ->
-    [case_name()].
-
+-spec all() -> [{group, group_name()}].
 all() ->
     [
         {group, 'tlsv1.3'},
@@ -66,9 +65,7 @@ all() ->
         {group, 'tlsv1.1'}
     ].
 
--spec groups() ->
-    [{group_name(), list(), [case_name()]}].
-
+-spec groups() -> [{group_name(), list(), [case_name()]}].
 groups() ->
     TestGroup = [
         client_wo_cert_test,
@@ -81,34 +78,26 @@ groups() ->
         {'tlsv1.3', [parallel], TestGroup}
     ].
 
--spec init_per_suite(config()) ->
-    config().
-
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
-    {ok, Sup}          = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    true               = erlang:unlink(Sup),
-    {ok, Apps}         = application:ensure_all_started(woody),
+    {ok, Sup} = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+    true = erlang:unlink(Sup),
+    {ok, Apps} = application:ensure_all_started(woody),
     [{sup, Sup}, {apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    ok.
-
+-spec end_per_suite(config()) -> ok.
 end_per_suite(C) ->
     Sup = ?config(sup, C),
-    ok  = proc_lib:stop(Sup),
-    [application:stop(App) || App <- proplists:get_value(apps, C)],
+    ok = proc_lib:stop(Sup),
+    _ = [application:stop(App) || App <- proplists:get_value(apps, C)],
     ok.
 
--spec init_per_group(group_name(), config()) ->
-    config().
-
+-spec init_per_group(group_name(), config()) -> config().
 init_per_group(Name, C) ->
     {ok, WoodyServer} = start_woody_server(Name, C),
     [{woody_server, WoodyServer}, {group_name, Name} | C].
 
--spec end_per_group(group_name(), config()) ->
-    any().
-
+-spec end_per_group(group_name(), config()) -> any().
 end_per_group(_Name, C) ->
     stop_woody_server(C).
 
@@ -117,12 +106,11 @@ end_per_group(_Name, C) ->
 %%%
 
 -spec client_wo_cert_test(config()) -> _.
-
 client_wo_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)} | client_ssl_opts(Vsn)],
     try
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -136,19 +124,17 @@ client_wo_cert_test(C) ->
     end.
 
 -spec valid_client_cert_test(config()) -> _.
-
 valid_client_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?client_cert(C)} | client_ssl_opts(Vsn)],
     {ok, #'Weapon'{}} = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions).
 
 -spec invalid_client_cert_test(config()) -> _.
-
 invalid_client_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?invalid_client_cert(C)} | client_ssl_opts(Vsn)],
     try
-        get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -159,9 +145,7 @@ invalid_client_cert_test(C) ->
             {match, _} = re:run(Reason, <<"^{tls_alert,[\"\{]unknown[ _]ca.*$">>, [])
     end.
 
--spec client_ssl_opts(atom()) ->
-    [ssl:tls_client_option()].
-
+-spec client_ssl_opts(atom()) -> [ssl:tls_client_option()].
 client_ssl_opts('tlsv1.3') ->
     % NOTE
     % We need at least an extra TLSv1.2 here and default OTP cipher suites,
@@ -183,12 +167,26 @@ client_ssl_opts(Vsn) ->
     woody_event_handler:event_meta(),
     woody:options()
 ) -> _.
-
 handle_event(Event, RpcId, Meta, _) ->
     {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
-        Event, Meta, RpcId,
-        [event, role, service, service_schema, function, type, args, metadata,
-         deadline, status, url, code, result, execution_time]
+        Event,
+        Meta,
+        RpcId,
+        [
+            event,
+            role,
+            service,
+            service_schema,
+            function,
+            type,
+            args,
+            metadata,
+            deadline,
+            status,
+            url,
+            code,
+            result
+        ]
     ),
     ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
 
@@ -196,9 +194,7 @@ handle_event(Event, RpcId, Meta, _) ->
 %%% woody_server_thrift_handler callback
 %%%
 
--spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
-    {ok, woody:result()}.
-
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
 handle_function(get_weapon, {Name, _Data}, Context, _Opts) ->
     _ = assert_common_name([<<"Valid Test Client">>], Context),
     {ok, #'Weapon'{name = Name, slot_pos = 0}}.
@@ -207,12 +203,13 @@ handle_function(get_weapon, {Name, _Data}, Context, _Opts) ->
 %%% Supervisor callback
 %%%
 
--spec init(_) -> _.
-
+-spec init(_) -> genlib_gen:supervisor_ret().
 init(_) ->
-    {ok, {
-        {one_for_one, 1, 1}, []
-}}.
+    {ok,
+        {
+            {one_for_one, 1, 1},
+            []
+        }}.
 
 %%%
 %%% Internal functions
@@ -221,26 +218,24 @@ init(_) ->
 start_woody_server(Vsn, C) ->
     Sup = ?config(sup, C),
     Server = woody_server:child_spec(?MODULE, #{
-        handlers       => [{?PATH, {{?THRIFT_DEFS, 'Weapons'}, ?MODULE}}],
-        event_handler  => ?MODULE,
-        ip             => {0, 0, 0, 0},
-        port           => 8043,
+        handlers => [{?PATH, {{?THRIFT_DEFS, 'Weapons'}, ?MODULE}}],
+        event_handler => ?MODULE,
+        ip => {0, 0, 0, 0},
+        port => 8043,
         transport_opts => #{
-            transport   => ranch_ssl,
+            transport => ranch_ssl,
             socket_opts => [
-                {cacertfile,           ?ca_cert(C)},
-                {certfile,             ?server_cert(C)},
-                {verify,               verify_peer},
+                {cacertfile, ?ca_cert(C)},
+                {certfile, ?server_cert(C)},
+                {verify, verify_peer},
                 {fail_if_no_peer_cert, true},
-                {versions,             [Vsn]}
+                {versions, [Vsn]}
             ]
         }
     }),
     supervisor:start_child(Sup, Server).
 
--spec stop_woody_server(config()) ->
-    ok.
-
+-spec stop_woody_server(config()) -> ok.
 stop_woody_server(C) ->
     ok = supervisor:terminate_child(?config(sup, C), ?MODULE),
     ok = supervisor:delete_child(?config(sup, C), ?MODULE).
@@ -254,8 +249,8 @@ get_weapon(Id, Gun, SSLOptions) ->
         transport_opts => #{
             ssl_options => [
                 {server_name_indication, "Test Server"},
-                {verify, verify_peer} |
-                SSLOptions
+                {verify, verify_peer}
+                | SSLOptions
             ]
         }
     },
@@ -268,9 +263,7 @@ get_service_endpoint('Weapons') ->
     }.
 
 to_binary(Atom) when is_atom(Atom) ->
-    erlang:atom_to_binary(Atom, utf8);
-to_binary(Binary) when is_binary(Binary) ->
-    Binary.
+    erlang:atom_to_binary(Atom, utf8).
 
 assert_common_name(CNs, Context) ->
     CN = woody_context:get_common_name(Context),

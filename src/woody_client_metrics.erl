@@ -28,10 +28,10 @@ increment_counter(Key) ->
 
 -spec increment_counter(any(), number()) -> ok | {error, term()}.
 increment_counter([hackney, _Host, _], _) ->
-    ok; % we don't need per host metrics
+    % we don't need per host metrics
+    ok;
 increment_counter(Key, Value) ->
     update_metric(counter, Key, Value).
-
 
 -spec decrement_counter(any()) -> ok | {error, term()}.
 decrement_counter(Key) ->
@@ -47,7 +47,7 @@ update_histogram(Key, Value) ->
 
 -spec update_gauge(any(), number()) -> ok | {error, term()}.
 update_gauge(Key, Value) ->
-   update_metric(gauge, Key, Value).
+    update_metric(gauge, Key, Value).
 
 -spec update_meter(any(), number()) -> ok | {error, term()}.
 update_meter(Key, Value) ->
@@ -71,7 +71,6 @@ update_metric(Type, Key0, Value) ->
 
 tag_key(Key) when is_list(Key) ->
     [woody, client | Key].
-
 
 is_allowed_metric([hackney_pool, _, Metric]) ->
     lists:member(Metric, get_allowed_pool_metrics());

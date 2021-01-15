@@ -7,10 +7,12 @@
 
 %% woody_server_thrift_handler callbacks
 -behaviour(woody_server_thrift_handler).
+
 -export([handle_function/4]).
 
 %% woody_event_handler callbacks
 -behaviour(woody_event_handler).
+
 -export([handle_event/4]).
 
 -export([all/0]).
@@ -32,8 +34,7 @@
 -spec respects_max_connections(config()) -> any().
 -spec shuts_down_gracefully(config()) -> any().
 
--spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) ->
-    {ok, woody:result()}.
+-spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
 
 -spec handle_event(
     woody_event_handler:event(),
@@ -65,22 +66,24 @@ init_per_testcase(Name, C) ->
     Port = get_random_port(),
     [
         {client, #{
-            url              => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
-            event_handler    => {?MODULE, {client, Name}}
+            url => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
+            event_handler => {?MODULE, {client, Name}}
         }},
-        {server , #{
-            ip               => {127, 0, 0, 1},
-            port             => Port,
-            event_handler    => [{?MODULE, {server, Name}}],
+        {server, #{
+            ip => {127, 0, 0, 1},
+            port => Port,
+            event_handler => [{?MODULE, {server, Name}}],
             shutdown_timeout => 5000
         }},
-        {testcase, Name} | C
+        {testcase, Name}
+        | C
     ].
 
 %%
 
 respects_max_connections(C) ->
-    MaxConns = 10 + rand:uniform(10), % (10; 20]
+    % (10; 20]
+    MaxConns = 10 + rand:uniform(10),
     Table = ets:new(?MODULE, [public, {read_concurrency, true}, {write_concurrency, true}]),
     true = ets:insert_new(Table, [{slot, 0}]),
     Service = {woody_test_thrift, 'Weapons'},
@@ -99,19 +102,24 @@ respects_max_connections(C) ->
     ReadBodyOpts = #{},
     {ok, ServerPid} = start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C),
     Results = genlib_pmap:map(
-        fun (_) ->
+        fun(_) ->
             woody_client:call({Service, 'get_weapon', {<<"BFG">>, <<>>}}, Client)
         end,
         lists:seq(1, MaxConns * 10)
     ),
     Slots = lists:map(
-        fun ({ok, #'Weapon'{slot_pos = Slot}}) -> Slot end,
+        fun({ok, #'Weapon'{slot_pos = Slot}}) -> Slot end,
         Results
     ),
     ?assert(lists:max(Slots) =< MaxConns),
     ok = stop_woody_server(ServerPid).
 
--define(receive_or_timeout(Msg, Timeout), receive Msg -> ok after Timeout -> timeout end).
+-define(receive_or_timeout(Msg, Timeout),
+    receive
+        Msg -> ok
+    after Timeout -> timeout
+    end
+).
 
 shuts_down_gracefully(C) ->
     Client = ?config(client, C),
@@ -124,12 +132,12 @@ shuts_down_gracefully(C) ->
     ParentPid = self(),
     %% send a shutdown signal to the server in 1000ms
     %% then try making a new connection with it, expect econnrefused
-    TestPid = spawn_link(fun() -> process_econnrefused_test(Client, ParentPid)   end),
-    _       = spawn_link(fun() -> process_delayed_kill(ServerPid, TestPid, 1000) end),
+    TestPid = spawn_link(fun() -> process_econnrefused_test(Client, ParentPid) end),
+    _ = spawn_link(fun() -> process_delayed_kill(ServerPid, TestPid, 1000) end),
     %% fire some requests and expect them to finish successfuly
     %% even when server is shutting down in the meantime
     _ = genlib_pmap:map(
-        fun (_) ->
+        fun(_) ->
             ?assertEqual(
                 {ok, #'Powerup'{name = <<"Warbanner">>}},
                 get_powerup(Client, <<"Warbanner">>, <<>>)
@@ -161,13 +169,13 @@ process_delayed_kill(ServerPid, TestPid, Timeout) ->
 start_woody_server(Handler, TransportOpts, ProtocolOpts, ReadBodyOpts, C) ->
     ServerOpts0 = ?config(server, C),
     SupervisorOpts = woody_server:child_spec(
-            {?MODULE, ?config(testcase, C)},
-            ServerOpts0#{
-                handlers       => [Handler],
-                read_body_opts => ReadBodyOpts,
-                transport_opts => TransportOpts,
-                protocol_opts  => ProtocolOpts
-            }
+        {?MODULE, ?config(testcase, C)},
+        ServerOpts0#{
+            handlers => [Handler],
+            read_body_opts => ReadBodyOpts,
+            transport_opts => TransportOpts,
+            protocol_opts => ProtocolOpts
+        }
     ),
     genlib_adhoc_supervisor:start_link(#{}, [SupervisorOpts]).
 
@@ -181,7 +189,6 @@ handle_function(get_weapon, {Name, _}, _Context, {respects_max_connections, Tabl
     ok = timer:sleep(rand:uniform(10)),
     _ = ets:update_counter(Table, slot, -1),
     {ok, #'Weapon'{name = Name, slot_pos = Slot}};
-
 handle_function(get_powerup, {Name, _}, _Context, _) ->
     ok = timer:sleep(2000),
     {ok, #'Powerup'{name = Name}}.
