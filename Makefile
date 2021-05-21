@@ -51,10 +51,8 @@ clean:
 	$(REBAR) as prod clean
 
 distclean:
-	$(REBAR) clean -a
-	$(REBAR) as test clean -a
-	$(REBAR) as prod clean -a
-	rm -rfv _build _builds _cache _steps _temp
+	rm -rf test/woody_test_thrift.?rl test/.rebar3
+	rm -rfv _build
 
 dialyze:
 	$(REBAR) as test dialyzer

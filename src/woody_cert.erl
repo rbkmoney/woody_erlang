@@ -35,8 +35,8 @@ get_common_name(#'OTPCertificate'{tbsCertificate = TbsCert}) ->
 get_cn_from_rdn({rdnSequence, RDNSeq}) ->
     [
         to_binary(V)
-        || ATVs <- RDNSeq,
-           #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs
+     || ATVs <- RDNSeq,
+        #'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_T, V}} <- ATVs
     ];
 get_cn_from_rdn(_) ->
     [].

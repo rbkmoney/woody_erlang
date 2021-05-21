@@ -146,8 +146,8 @@ max(Name, Info1, Info2) ->
     combine(Name, fun erlang:max/2, Info1, Info2).
 
 combine(Name, Fun, Info1, Info2) ->
-    {_Name, V1} = lists:keyfind(Name, 1, Info1),
-    {_Name, V2} = lists:keyfind(Name, 1, Info2),
+    {_, V1} = lists:keyfind(Name, 1, Info1),
+    {_, V2} = lists:keyfind(Name, 1, Info2),
     Fun(V1, V2).
 
 increment(Name, Metrics) ->

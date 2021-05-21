@@ -5,7 +5,7 @@
 -include_lib("hackney/include/hackney_lib.hrl").
 
 -include("woody_test_thrift.hrl").
--include("src/woody_defs.hrl").
+-include("woody_defs.hrl").
 
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
@@ -443,10 +443,12 @@ get_handler('Powerups') ->
 get_handler('Weapons') ->
     {
         ?PATH_WEAPONS,
-        {{?THRIFT_DEFS, 'Weapons'},
+        {
+            {?THRIFT_DEFS, 'Weapons'},
             {?MODULE, #{
                 meta_test_id => <<"call_seq_with_context_meta">>
-            }}}
+            }}
+        }
     }.
 
 get_fail_code(call_no_headers_404_test) -> 404;
@@ -936,9 +938,10 @@ calls_with_cache(_) ->
 
 -define(HACKNEY_URL(Scheme, Netloc, Path), #hackney_url{scheme = Scheme, netloc = Netloc, raw_path = Path}).
 
--define(RESPONSE(Scheme, OldNetloc, NewNetloc, Path),
-    {?HACKNEY_URL(Scheme, OldNetloc, Path), ?HACKNEY_URL(Scheme, NewNetloc, Path)}
-).
+-define(RESPONSE(Scheme, OldNetloc, NewNetloc, Path), {
+    ?HACKNEY_URL(Scheme, OldNetloc, Path),
+    ?HACKNEY_URL(Scheme, NewNetloc, Path)
+}).
 
 woody_resolver_inet(C) ->
     WoodyState = woody_state:new(client, woody_context:new(), ?MODULE),
