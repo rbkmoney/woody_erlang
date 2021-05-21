@@ -5,7 +5,7 @@
 -include_lib("hackney/include/hackney_lib.hrl").
 
 -include("woody_test_thrift.hrl").
--include("src/woody_defs.hrl").
+-include("woody_defs.hrl").
 
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
