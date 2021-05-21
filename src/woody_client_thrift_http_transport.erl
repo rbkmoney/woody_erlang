@@ -102,11 +102,13 @@ flush(
         )
     of
         {ok, Response} ->
-            {Transport#{
+            {
+                Transport#{
                     read_buffer => Response,
                     write_buffer => <<>>
                 },
-                ok};
+                ok
+            };
         Error ->
             {Transport#{read_buffer => <<>>, write_buffer => <<>>}, Error}
     end.

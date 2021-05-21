@@ -62,8 +62,12 @@ init(_) ->
 -spec handle_call(get_number_of_events | {event(), rpc_id(), event_meta(), options()}, _, state()) ->
     {reply, ok | {ok, non_neg_integer()}, state()}.
 handle_call(
-    {Event = ?EV_SERVICE_HANDLER_RESULT, Rpc, #{status := error, class := system, result := ?SOCKET_CLOSED} = Meta,
-        Opts},
+    {
+        Event = ?EV_SERVICE_HANDLER_RESULT,
+        Rpc,
+        #{status := error, class := system, result := ?SOCKET_CLOSED} = Meta,
+        Opts
+    },
     _,
     #{
         socket_errors_caught := Caught

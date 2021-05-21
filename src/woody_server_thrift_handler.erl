@@ -350,11 +350,13 @@ handle_internal_error(Error, ExcClass, Stack, State = #{woody_state := WoodyStat
         WoodyState,
         #{class => system, result => Error, except_class => ExcClass, stack => Stack, ignore => false}
     ),
-    {{error,
+    {
+        {error,
             {system,
                 {internal, result_unexpected,
                     format_unexpected_error(ExcClass, woody_error:format_details(Error), Stack)}}},
-        State}.
+        State
+    }.
 
 -spec encode_reply(ok | {error, woody_error:business_error()}, _Result, state()) ->
     {ok | {error, woody_error:error()}, state()}.
