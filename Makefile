@@ -9,7 +9,7 @@ TEMPLATES_PATH := .
 SERVICE_NAME := woody
 
 BUILD_IMAGE_NAME := build-erlang
-BUILD_IMAGE_TAG := c60896ef07d41e7ae2e5f9b6ce845a60ad79acc7
+BUILD_IMAGE_TAG := eb6f9920868599f7e1a8ee9aaedb1921a027f7a0
 
 CALL_W_CONTAINER := all submodules compile xref lint test bench dialyze clean distclean \
 	check_format format
