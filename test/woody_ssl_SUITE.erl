@@ -168,7 +168,7 @@ client_ssl_opts(Vsn) ->
     woody:options()
 ) -> _.
 handle_event(Event, RpcId, Meta, _) ->
-    {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
+    {{Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
         Event,
         Meta,
         RpcId,

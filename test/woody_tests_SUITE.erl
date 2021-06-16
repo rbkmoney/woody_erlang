@@ -1086,7 +1086,7 @@ handle_proxy_event(Event, Code, Descr) ->
 
 log_event(Event, RpcId, Meta) ->
     %% _ woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
-    {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
+    {{Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
         Event,
         Meta,
         RpcId,
