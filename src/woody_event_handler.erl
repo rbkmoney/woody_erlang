@@ -446,7 +446,7 @@ get_url_or_code(#{code := Code}) ->
 maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = WoodyStateEvMeta) when
     Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND
 ->
-    ExecutionEndTime = os:system_time(millisecond),
+    ExecutionEndTime = erlang:monotonic_time(millisecond),
     ExecutionTimeMs = ExecutionEndTime - ExecutionStartTime,
     WoodyStateEvMeta#{
         execution_end_time => ExecutionEndTime,
