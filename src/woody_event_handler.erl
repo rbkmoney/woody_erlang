@@ -561,8 +561,6 @@ format_service_request_test_() ->
                         args =>
                             {undefined, <<"1CQdDqPROyW">>,
                                 {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}},
-                        deadline => undefined,
-                        execution_start_time => 1565596875497,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -597,8 +595,6 @@ format_service_request_test_() ->
                                 undefined,
                                 {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}
                             },
-                        deadline => undefined,
-                        execution_start_time => 1565596875497,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -626,8 +622,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>},
-                        deadline => undefined,
-                        execution_start_time => 1565596875696,
                         function => 'Get',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -655,8 +649,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"~s">>},
-                        deadline => undefined,
-                        execution_start_time => 1565596875696,
                         function => 'Get',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -687,8 +679,6 @@ format_service_request_test_() ->
                         args =>
                             {{payproc_CustomerParams, <<"1CQdDqPROyW">>, <<"1CQdDwgt3R3">>,
                                 {domain_ContactInfo, undefined, <<"invalid_shop">>}, {nl, {json_Null}}}},
-                        deadline => undefined,
-                        execution_start_time => 1565596876258,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -721,8 +711,6 @@ format_service_request_test_() ->
                                 {payproc_UserInfo, <<"1CQdDqPROyW">>, {external_user, {payproc_ExternalUser}}},
                                 <<"1CQdDqPROyW">>
                             },
-                        deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
-                        execution_start_time => 1565596876266,
                         function => 'GetRevision',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -756,8 +744,6 @@ format_service_request_test_() ->
                                 <<"1CQdDqPROyW">>,
                                 {revision, 1}
                             },
-                        deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
-                        execution_start_time => 1565596876292,
                         function => 'Checkout',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -785,8 +771,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>, <<>>},
-                        deadline => undefined,
-                        execution_start_time => 1565596876383,
                         function => 'Block',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -814,8 +798,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>, <<>>},
-                        deadline => undefined,
-                        execution_start_time => 1565596876458,
                         function => 'Unblock',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -854,8 +836,6 @@ format_service_request_test_() ->
                                 {mg_stateproc_Machine, <<"party">>, <<"1CQxZsCgLJY">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 12}, {12, 46, 36}}, 433},
-                        execution_start_time => 1565613966542,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQxZsCgLJY">>,
@@ -929,8 +909,6 @@ format_service_request_test_() ->
                                         {shop_account_creation,
                                             {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}
                             ]},
-                        deadline => undefined,
-                        execution_start_time => 1565617299263,
                         function => 'CreateClaim',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CR1Xziml7o">>,
@@ -1053,8 +1031,6 @@ format_service_request_test_() ->
                                         {str, <<"ct">>} =>
                                             {str, <<"application/x-erlang-binary">>}
                                     }}}}},
-                        deadline => {{{2019, 8, 13}, {7, 52, 41}}, 105},
-                        execution_start_time => 1565682731109,
                         function => 'ProcessCall',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSHThTEJ84">>,
@@ -1133,8 +1109,6 @@ format_service_request_with_limit_test_() ->
                                         {shop_account_creation,
                                             {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}
                             ]},
-                        deadline => undefined,
-                        execution_start_time => 1565617299263,
                         function => 'CreateClaim',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CR1Xziml7o">>,
@@ -1170,8 +1144,6 @@ result_test_() ->
                 format_event(
                     ?EV_SERVICE_HANDLER_RESULT,
                     #{
-                        deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
-                        execution_start_time => 1565695142994,
                         function => 'ProcessCall',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1268,8 +1240,6 @@ result_test_() ->
                                 <<"1CSWG2vduGe">>,
                                 {revision, 6}
                             },
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 42},
-                        execution_start_time => 1565695143068,
                         function => 'Checkout',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1358,8 +1328,6 @@ result_test_() ->
                                 {mg_stateproc_Machine, <<"customer">>, <<"1CSWGJ3N8Ns">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
-                        execution_start_time => 1565695143707,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1430,8 +1398,6 @@ result_test_() ->
                                 {mg_stateproc_Machine, <<"customer">>, <<"1CSWGJ3N8Ns">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
-                        execution_start_time => 1565695143707,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1489,8 +1455,6 @@ result_test_() ->
                 format_event(
                     ?EV_SERVICE_HANDLER_RESULT,
                     #{
-                        deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
-                        execution_start_time => 1565695142994,
                         function => 'Call',
                         metadata => #{},
                         result =>
@@ -1528,8 +1492,6 @@ exception_test_() ->
                     ?EV_SERVICE_RESULT,
                     #{
                         args => {<<"1Cfo5OJzx6O">>},
-                        deadline => undefined,
-                        execution_start_time => 1566386841317,
                         class => business,
                         function => 'Get',
                         metadata => #{
@@ -1568,8 +1530,6 @@ exception_test_() ->
                                 {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined,
                                 undefined}
                         },
-                        deadline => undefined,
-                        execution_start_time => 1566386899959,
                         class => business,
                         function => 'StartPayment',
                         metadata => #{
@@ -1606,8 +1566,6 @@ exception_test_() ->
                                 {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined,
                                 undefined, undefined}
                         },
-                        deadline => undefined,
-                        execution_start_time => 1575444908463,
                         class => business,
                         function => 'StartPayment',
                         metadata => #{
