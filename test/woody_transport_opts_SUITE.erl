@@ -10,11 +10,6 @@
 
 -export([handle_function/4]).
 
-%% woody_event_handler callbacks
--behaviour(woody_event_handler).
-
--export([handle_event/4]).
-
 -export([all/0]).
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
@@ -35,13 +30,6 @@
 -spec shuts_down_gracefully(config()) -> any().
 
 -spec handle_function(woody:func(), woody:args(), woody_context:ctx(), woody:options()) -> {ok, woody:result()}.
-
--spec handle_event(
-    woody_event_handler:event(),
-    woody:rpc_id(),
-    woody_event_handler:event_meta(),
-    woody:options()
-) -> _.
 
 %%
 
@@ -67,12 +55,12 @@ init_per_testcase(Name, C) ->
     [
         {client, #{
             url => iolist_to_binary(["http://localhost:", integer_to_list(Port), "/"]),
-            event_handler => {?MODULE, {client, Name}}
+            event_handler => {woody_ct_event_h, {client, Name}}
         }},
         {server, #{
             ip => {127, 0, 0, 1},
             port => Port,
-            event_handler => [{?MODULE, {server, Name}}],
+            event_handler => [{woody_ct_event_h, {server, Name}}],
             shutdown_timeout => 5000
         }},
         {testcase, Name}
@@ -192,10 +180,6 @@ handle_function(get_weapon, {Name, _}, _Context, {respects_max_connections, Tabl
 handle_function(get_powerup, {Name, _}, _Context, _) ->
     ok = timer:sleep(2000),
     {ok, #'Powerup'{name = Name}}.
-
-handle_event(Event, RpcId, Meta, Opts) ->
-    {Format, Msg} = woody_event_handler:format_event(Event, Meta, RpcId, #{}),
-    ct:pal("~p " ++ Format, [Opts] ++ Msg).
 
 get_powerup(Client, Name, Arg) ->
     woody_client:call({{woody_test_thrift, 'Powerups'}, 'get_powerup', {Name, Arg}}, Client).

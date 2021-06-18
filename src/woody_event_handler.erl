@@ -5,7 +5,7 @@
 
 -export([get_event_severity/2]).
 -export([format_event/3, format_event/4]).
--export([format_event_and_meta/3, format_event_and_meta/4, format_event_and_meta/5]).
+-export([format_meta/2, format_meta/3]).
 -export([format_rpc_id/1]).
 
 -include("woody_defs.hrl").
@@ -266,25 +266,16 @@ format_event(Event, Meta, RpcId, Opts) ->
     Msg = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
     append_msg(RpcIdMsg, Msg).
 
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) -> {msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID) ->
-    format_event_and_meta(Event, Meta, RpcID, [role, service, function, type]).
+-spec format_meta(event(), event_meta()) -> meta().
+format_meta(Event, Meta) ->
+    format_meta(Event, Meta, [role, service, function, type]).
 
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
-    {msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
-    format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, #{}).
-
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), options()) ->
-    {msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
-    Msg = format_event(Event, Meta, RpcID, Opts),
-    {Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
-
-get_essential_meta(Meta, Event, Keys) ->
-    Meta1 = maps:with(Keys, Meta),
+-spec format_meta(event(), event_meta(), [meta_key()]) ->
+    meta().
+format_meta(Event, Meta, EssentialMetaKeys) ->
+    Meta1 = maps:with(EssentialMetaKeys, Meta),
     Meta2 =
-        case lists:member(event, Keys) of
+        case lists:member(event, EssentialMetaKeys) of
             true ->
                 Meta1#{event => Event};
             false ->

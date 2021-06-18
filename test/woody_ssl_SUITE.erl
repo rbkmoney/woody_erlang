@@ -8,7 +8,6 @@
 
 -behaviour(supervisor).
 -behaviour(woody_server_thrift_handler).
--behaviour(woody_event_handler).
 
 %% common test callbacks
 -export([
@@ -26,9 +25,6 @@
     valid_client_cert_test/1,
     invalid_client_cert_test/1
 ]).
-
-%% woody_event_handler callback
--export([handle_event/4]).
 
 %% woody_server_thrift_handler callback
 -export([handle_function/4]).
@@ -110,7 +106,7 @@ client_wo_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)} | client_ssl_opts(Vsn)],
     try
-        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, Vsn, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -127,14 +123,14 @@ client_wo_cert_test(C) ->
 valid_client_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?client_cert(C)} | client_ssl_opts(Vsn)],
-    {ok, #'Weapon'{}} = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions).
+    {ok, #'Weapon'{}} = get_weapon(?FUNCTION_NAME, <<"BFG">>, Vsn, SSLOptions).
 
 -spec invalid_client_cert_test(config()) -> _.
 invalid_client_cert_test(C) ->
     Vsn = ?config(group_name, C),
     SSLOptions = [{cacertfile, ?ca_cert(C)}, {certfile, ?invalid_client_cert(C)} | client_ssl_opts(Vsn)],
     try
-        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, SSLOptions),
+        _ = get_weapon(?FUNCTION_NAME, <<"BFG">>, Vsn, SSLOptions),
         error(unreachable)
     catch
         % NOTE
@@ -156,39 +152,6 @@ client_ssl_opts('tlsv1.3') ->
     ];
 client_ssl_opts(Vsn) ->
     [{versions, [Vsn]}].
-
-%%%
-%%% woody_event_handler callback
-%%%
-
--spec handle_event(
-    woody_event_handler:event(),
-    woody:rpc_id(),
-    woody_event_handler:event_meta(),
-    woody:options()
-) -> _.
-handle_event(Event, RpcId, Meta, _) ->
-    {{Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
-        Event,
-        Meta,
-        RpcId,
-        [
-            event,
-            role,
-            service,
-            service_schema,
-            function,
-            type,
-            args,
-            metadata,
-            deadline,
-            status,
-            url,
-            code,
-            result
-        ]
-    ),
-    ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
 
 %%%
 %%% woody_server_thrift_handler callback
@@ -219,7 +182,7 @@ start_woody_server(Vsn, C) ->
     Sup = ?config(sup, C),
     Server = woody_server:child_spec(?MODULE, #{
         handlers => [{?PATH, {{?THRIFT_DEFS, 'Weapons'}, ?MODULE}}],
-        event_handler => ?MODULE,
+        event_handler => {woody_ct_event_h, {server, Vsn}},
         ip => {0, 0, 0, 0},
         port => 8043,
         transport_opts => #{
@@ -240,12 +203,12 @@ stop_woody_server(C) ->
     ok = supervisor:terminate_child(?config(sup, C), ?MODULE),
     ok = supervisor:delete_child(?config(sup, C), ?MODULE).
 
-get_weapon(Id, Gun, SSLOptions) ->
+get_weapon(Id, Gun, Vsn, SSLOptions) ->
     Context = woody_context:new(to_binary(Id)),
     {Url, Service} = get_service_endpoint('Weapons'),
     Options = #{
         url => Url,
-        event_handler => ?MODULE,
+        event_handler => {woody_ct_event_h, {client, Vsn}},
         transport_opts => #{
             ssl_options => [
                 {server_name_indication, "Test Server"},
