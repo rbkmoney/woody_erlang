@@ -2,8 +2,10 @@
 
 %% API
 -export([handle_event/3, handle_event/4]).
+
+-export([get_event_severity/2]).
 -export([format_event/3, format_event/4]).
--export([format_event_and_meta/3, format_event_and_meta/4, format_event_and_meta/5]).
+-export([format_meta/2, format_meta/3]).
 -export([format_rpc_id/1]).
 
 -include("woody_defs.hrl").
@@ -196,8 +198,7 @@
 -export_type([status/0]).
 
 -type severity() :: debug | info | warning | error.
--type msg() :: {list(), list()}.
--type log_msg() :: {severity(), msg()}.
+-type msg() :: {io:format(), [term()]}.
 -type meta_key() ::
     event
     | role
@@ -213,7 +214,7 @@
     | code
     | result.
 
--export_type([severity/0, msg/0, log_msg/0, meta_key/0]).
+-export_type([severity/0, msg/0, meta_key/0]).
 
 -type meta() :: #{atom() => _}.
 
@@ -258,32 +259,23 @@ format_rpc_id(#{span_id := Span, trace_id := Trace, parent_id := Parent}) ->
 format_rpc_id(undefined) ->
     {"~s", ["undefined"]}.
 
--spec format_event(event(), event_meta(), woody:rpc_id() | undefined, options()) -> log_msg().
+-spec format_event(event(), event_meta(), woody:rpc_id() | undefined, options()) -> msg().
 format_event(Event, Meta, RpcId, Opts) ->
     RpcIdMsg = {_RpcIdFmt, RpcIdParams} = format_rpc_id(RpcId),
     RpcIdLen = erlang:iolist_size(RpcIdParams),
-    {Severity, Msg} = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
-    {Severity, append_msg(RpcIdMsg, Msg)}.
+    Msg = format_event(Event, Meta, preserve_rpc_id_length(RpcIdLen, Opts)),
+    append_msg(RpcIdMsg, Msg).
 
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined) -> {severity(), msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID) ->
-    format_event_and_meta(Event, Meta, RpcID, [role, service, function, type]).
+-spec format_meta(event(), event_meta()) -> meta().
+format_meta(Event, Meta) ->
+    format_meta(Event, Meta, [role, service, function, type]).
 
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key())) ->
-    {severity(), msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys) ->
-    format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, #{}).
-
--spec format_event_and_meta(event(), event_meta(), woody:rpc_id() | undefined, list(meta_key()), options()) ->
-    {severity(), msg(), meta()}.
-format_event_and_meta(Event, Meta, RpcID, EssentialMetaKeys, Opts) ->
-    {Severity, Msg} = format_event(Event, Meta, RpcID, Opts),
-    {Severity, Msg, get_essential_meta(Meta, Event, EssentialMetaKeys)}.
-
-get_essential_meta(Meta, Event, Keys) ->
-    Meta1 = maps:with(Keys, Meta),
+-spec format_meta(event(), event_meta(), [meta_key()]) ->
+    meta().
+format_meta(Event, Meta, EssentialMetaKeys) ->
+    Meta1 = maps:with(EssentialMetaKeys, Meta),
     Meta2 =
-        case lists:member(event, Keys) of
+        case lists:member(event, EssentialMetaKeys) of
             true ->
                 Meta1#{event => Event};
             false ->
@@ -296,95 +288,155 @@ format_deadline(Meta = #{deadline := Deadline}) when Deadline =/= undefined ->
 format_deadline(Meta) ->
     Meta.
 
--spec format_event(event(), event_meta(), options()) -> log_msg().
+-spec format_event(event(), event_meta(), options()) -> msg().
 format_event(?EV_CLIENT_BEGIN, _Meta, _Opts) ->
-    {debug, {"[client] request begin", []}};
+    {"[client] request begin", []};
 format_event(?EV_CLIENT_END, _Meta, _Opts) ->
-    {debug, {"[client] request end", []}};
+    {"[client] request end", []};
 format_event(?EV_CALL_SERVICE, Meta, Opts) ->
-    {info, append_msg({"[client] calling ", []}, format_service_request(Meta, Opts))};
+    append_format("[client] calling ", format_service_request(Meta, Opts));
 format_event(?EV_SERVICE_RESULT, #{status := error, result := Error, stack := Stack}, _Opts) ->
-    {error, format_exception({"[client] error while handling request: ~p", [Error]}, Stack)};
+    format_exception({"[client] error while handling request: ~p", [Error]}, Stack);
 format_event(?EV_SERVICE_RESULT, #{status := error, result := Result}, _Opts) ->
-    {warning, {"[client] error while handling request ~p", [Result]}};
+    {"[client] error while handling request ~p", [Result]};
 format_event(?EV_SERVICE_RESULT, #{status := ok, result := Exception, class := business} = Meta, Opts) ->
     Msg = format_service_exception(Exception, Meta, Opts),
-    {info, append_msg({"[client] request handling business error: ", []}, Msg)};
+    append_format("[client] request handling business error: ", Msg);
 format_event(?EV_SERVICE_RESULT, #{status := ok, result := Result} = Meta, Opts) ->
     Msg = format_service_reply(Result, Meta, Opts),
-    {info, append_msg({"[client] request handled successfully: ", []}, Msg)};
+    append_format("[client] request handled successfully: ", Msg);
 format_event(?EV_CLIENT_SEND, #{url := URL}, _Opts) ->
-    {debug, {"[client] sending request to ~s", [URL]}};
+    {"[client] sending request to ~s", [URL]};
 format_event(?EV_CLIENT_RESOLVE_BEGIN, #{host := Host}, _Opts) ->
-    {debug, {"[client] resolving location of ~s", [Host]}};
+    {"[client] resolving location of ~s", [Host]};
 format_event(?EV_CLIENT_RESOLVE_RESULT, #{status := ok, host := Host, address := Address}, _Opts) ->
-    {debug, {"[client] resolved location of ~s to ~ts", [Host, Address]}};
+    {"[client] resolved location of ~s to ~ts", [Host, Address]};
 format_event(?EV_CLIENT_RESOLVE_RESULT, #{status := error, host := Host, reason := Reason}, _Opts) ->
-    {debug, {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]}};
+    {"[client] resolving location of ~s failed due to: ~ts", [Host, Reason]};
 format_event(?EV_CLIENT_RECEIVE, #{status := ok, code := Code, reason := Reason}, _Opts) ->
-    {debug, {"[client] received response with code ~p and info details: ~ts", [Code, Reason]}};
+    {"[client] received response with code ~p and info details: ~ts", [Code, Reason]};
 format_event(?EV_CLIENT_RECEIVE, #{status := ok, code := Code}, _Opts) ->
-    {debug, {"[client] received response with code ~p", [Code]}};
+    {"[client] received response with code ~p", [Code]};
 format_event(?EV_CLIENT_RECEIVE, #{status := error, code := Code, reason := Reason}, _Opts) ->
-    {warning, {"[client] received response with code ~p and details: ~ts", [Code, Reason]}};
+    {"[client] received response with code ~p and details: ~ts", [Code, Reason]};
 format_event(?EV_CLIENT_RECEIVE, #{status := error, reason := Reason}, _Opts) ->
-    {warning, {"[client] sending request error ~ts", [Reason]}};
+    {"[client] sending request error ~ts", [Reason]};
 format_event(?EV_SERVER_RECEIVE, #{url := URL, status := ok}, _Opts) ->
-    {debug, {"[server] request to ~s received", [URL]}};
+    {"[server] request to ~s received", [URL]};
 format_event(?EV_SERVER_RECEIVE, #{url := URL, status := error, reason := Reason}, _Opts) ->
-    {debug, {"[server] request to ~s unpacking error ~ts", [URL, Reason]}};
+    {"[server] request to ~s unpacking error ~ts", [URL, Reason]};
 format_event(?EV_SERVER_SEND, #{status := ok, code := Code}, _Opts) ->
-    {debug, {"[server] response sent with code ~p", [Code]}};
+    {"[server] response sent with code ~p", [Code]};
 format_event(?EV_SERVER_SEND, #{status := error, code := Code}, _Opts) ->
-    {warning, {"[server] response sent with code ~p", [Code]}};
+    {"[server] response sent with code ~p", [Code]};
 format_event(?EV_INVOKE_SERVICE_HANDLER, Meta, Opts) ->
-    {info, append_msg({"[server] handling ", []}, format_service_request(Meta, Opts))};
+    append_format("[server] handling ", format_service_request(Meta, Opts));
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status := ok, result := Result} = Meta, Opts) ->
     Msg = format_service_reply(Result, Meta, Opts),
-    {info, append_msg({"[server] handling result: ", []}, Msg)};
+    append_format("[server] handling result: ", Msg);
 format_event(
     ?EV_SERVICE_HANDLER_RESULT,
     #{status := error, class := business, result := Exception} = Meta,
     Opts
 ) ->
     Msg = format_service_exception(Exception, Meta, Opts),
-    {info, append_msg({"[server] handling result business error: ", []}, Msg)};
+    append_format("[server] handling result business error: ", Msg);
 format_event(
     ?EV_SERVICE_HANDLER_RESULT,
     #{status := error, class := system, result := Error, stack := Stack, except_class := Class},
     _Opts
 ) ->
-    {error, format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack)};
+    format_exception({"[server] handling system internal error: ~s:~p", [Class, Error]}, Stack);
 format_event(?EV_SERVICE_HANDLER_RESULT, #{status := error, class := system, result := Error}, _Opts) ->
-    {warning, {"[server] handling system woody error: ~p", [Error]}};
+    {"[server] handling system woody error: ~p", [Error]};
 format_event(?EV_CLIENT_CACHE_BEGIN, _Meta, _Opts) ->
-    {debug, {"[client] request begin", []}};
+    {"[client] request begin", []};
 format_event(?EV_CLIENT_CACHE_END, _Meta, _Opts) ->
-    {debug, {"[client] request end", []}};
+    {"[client] request end", []};
 format_event(?EV_CLIENT_CACHE_HIT, #{url := URL}, _Opts) ->
-    {info, {"[client] request to '~s' cache hit", [URL]}};
+    {"[client] request to '~s' cache hit", [URL]};
 format_event(?EV_CLIENT_CACHE_MISS, #{url := URL}, _Opts) ->
-    {debug, {"[client] request to '~s' cache miss", [URL]}};
+    {"[client] request to '~s' cache miss", [URL]};
 format_event(?EV_CLIENT_CACHE_UPDATE, #{url := URL, result := Result} = Meta, Opts) ->
     Msg = format_service_reply(Result, Meta, Opts),
-    {debug, append_msg({"[client] request to '~s' cache update: ", [URL]}, Msg)};
+    append_msg({"[client] request to '~s' cache update: ", [URL]}, Msg);
 format_event(?EV_CLIENT_CACHE_RESULT, #{url := URL, result := Result} = Meta, Opts) ->
     Msg = format_service_reply(Result, Meta, Opts),
-    {debug, append_msg({"[client] request to '~s' cache result: ", [URL]}, Msg)};
+    append_msg({"[client] request to '~s' cache result: ", [URL]}, Msg);
 format_event(
     ?EV_INTERNAL_ERROR,
     #{role := Role, error := Error, class := Class, reason := Reason, stack := Stack},
     _Opts
 ) ->
-    {error, format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack)};
+    format_exception({"[~p] internal error ~ts ~s:~ts", [Role, Error, Class, Reason]}, Stack);
 format_event(?EV_INTERNAL_ERROR, #{role := Role, error := Error, reason := Reason}, _Opts) ->
-    {warning, {"[~p] internal error ~p, ~ts", [Role, Error, Reason]}};
+    {"[~p] internal error ~p, ~ts", [Role, Error, Reason]};
 format_event(?EV_TRACE, Meta = #{event := Event, role := Role, headers := Headers, body := Body}, _Opts) ->
-    {debug, {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]}};
+    {"[~p] trace ~s, with ~p~nheaders:~n~p~nbody:~n~ts", [Role, Event, get_url_or_code(Meta), Headers, Body]};
 format_event(?EV_TRACE, #{event := Event, role := Role}, _Opts) ->
-    {debug, {"[~p] trace ~ts", [Role, Event]}};
+    {"[~p] trace ~ts", [Role, Event]};
 format_event(UnknownEventType, Meta, _Opts) ->
-    {warning, {" unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}}.
+    {" unknown woody event type '~s' with meta ~p", [UnknownEventType, Meta]}.
+
+-spec get_event_severity(event(), event_meta()) -> severity().
+get_event_severity(?EV_CLIENT_BEGIN, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_END, _Meta) ->
+    debug;
+get_event_severity(?EV_CALL_SERVICE, _Meta) ->
+    info;
+get_event_severity(?EV_SERVICE_RESULT, #{status := ok}) ->
+    info;
+get_event_severity(?EV_SERVICE_RESULT, #{status := error, stack := _Stack}) ->
+    error;
+get_event_severity(?EV_SERVICE_RESULT, #{status := error, result := _Error}) ->
+    warning;
+get_event_severity(?EV_CLIENT_SEND, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_RESOLVE_BEGIN, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_RESOLVE_RESULT, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_RECEIVE, #{status := ok}) ->
+    debug;
+get_event_severity(?EV_CLIENT_RECEIVE, #{status := error}) ->
+    warning;
+get_event_severity(?EV_SERVER_RECEIVE, _Meta) ->
+    debug;
+get_event_severity(?EV_SERVER_SEND, #{status := ok}) ->
+    debug;
+get_event_severity(?EV_SERVER_SEND, #{status := error}) ->
+    warning;
+get_event_severity(?EV_INVOKE_SERVICE_HANDLER, _Meta) ->
+    info;
+get_event_severity(?EV_SERVICE_HANDLER_RESULT, #{status := ok}) ->
+    info;
+get_event_severity(?EV_SERVICE_HANDLER_RESULT, #{status := error, class := business}) ->
+    info;
+get_event_severity(?EV_SERVICE_HANDLER_RESULT, #{status := error, class := system, stack := _Stack}) ->
+    error;
+get_event_severity(?EV_SERVICE_HANDLER_RESULT, #{status := error, class := system, result := _Error}) ->
+    warning;
+get_event_severity(?EV_CLIENT_CACHE_BEGIN, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_CACHE_END, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_CACHE_HIT, _Meta) ->
+    info;
+get_event_severity(?EV_CLIENT_CACHE_MISS, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_CACHE_UPDATE, _Meta) ->
+    debug;
+get_event_severity(?EV_CLIENT_CACHE_RESULT, _Meta) ->
+    debug;
+get_event_severity(?EV_INTERNAL_ERROR, #{error := _, class := _Class, stack := _Stack}) ->
+    error;
+get_event_severity(?EV_INTERNAL_ERROR, #{error := _, reason := _Reason}) ->
+    warning;
+get_event_severity(?EV_TRACE, _Meta) ->
+    debug;
+get_event_severity(_UnknownEventType, _Meta) ->
+    warning.
 
 %%
 %% Internal functions
@@ -438,6 +490,10 @@ format_exception(BaseMsg, Stack) ->
 append_msg({F1, A1}, {F2, A2}) ->
     {F1 ++ F2, A1 ++ A2}.
 
+-spec append_format(string(), msg()) -> msg().
+append_format(F1, {F2, A2}) ->
+    {F1 ++ F2, A2}.
+
 get_url_or_code(#{url := Url}) ->
     Url;
 get_url_or_code(#{code := Code}) ->
@@ -446,7 +502,7 @@ get_url_or_code(#{code := Code}) ->
 maybe_add_exec_time(Event, #{execution_start_time := ExecutionStartTime} = WoodyStateEvMeta) when
     Event =:= ?EV_CLIENT_RECEIVE; Event =:= ?EV_SERVER_SEND
 ->
-    ExecutionEndTime = os:system_time(millisecond),
+    ExecutionEndTime = erlang:monotonic_time(millisecond),
     ExecutionTimeMs = ExecutionEndTime - ExecutionStartTime,
     WoodyStateEvMeta#{
         execution_end_time => ExecutionEndTime,
@@ -475,7 +531,9 @@ get_formatter_opts(_) ->
 -include_lib("eunit/include/eunit.hrl").
 
 -spec test() -> _.
-format_msg_limited({_Severity, {Fmt, Params}}) ->
+
+-spec format_msg_limited(msg()) -> string().
+format_msg_limited({Fmt, Params}) ->
     lists:flatten(
         io_lib:format(Fmt, Params, [{chars_limit, 1024}])
     ).
@@ -494,8 +552,6 @@ format_service_request_test_() ->
                         args =>
                             {undefined, <<"1CQdDqPROyW">>,
                                 {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}},
-                        deadline => undefined,
-                        execution_start_time => 1565596875497,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -530,8 +586,6 @@ format_service_request_test_() ->
                                 undefined,
                                 {payproc_PartyParams, {domain_PartyContactInfo, <<"hg_ct_helper">>}}
                             },
-                        deadline => undefined,
-                        execution_start_time => 1565596875497,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -559,8 +613,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>},
-                        deadline => undefined,
-                        execution_start_time => 1565596875696,
                         function => 'Get',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -588,8 +640,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"~s">>},
-                        deadline => undefined,
-                        execution_start_time => 1565596875696,
                         function => 'Get',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -620,8 +670,6 @@ format_service_request_test_() ->
                         args =>
                             {{payproc_CustomerParams, <<"1CQdDqPROyW">>, <<"1CQdDwgt3R3">>,
                                 {domain_ContactInfo, undefined, <<"invalid_shop">>}, {nl, {json_Null}}}},
-                        deadline => undefined,
-                        execution_start_time => 1565596876258,
                         function => 'Create',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -654,8 +702,6 @@ format_service_request_test_() ->
                                 {payproc_UserInfo, <<"1CQdDqPROyW">>, {external_user, {payproc_ExternalUser}}},
                                 <<"1CQdDqPROyW">>
                             },
-                        deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
-                        execution_start_time => 1565596876266,
                         function => 'GetRevision',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -689,8 +735,6 @@ format_service_request_test_() ->
                                 <<"1CQdDqPROyW">>,
                                 {revision, 1}
                             },
-                        deadline => {{{2019, 8, 12}, {8, 1, 46}}, 263},
-                        execution_start_time => 1565596876292,
                         function => 'Checkout',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -718,8 +762,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>, <<>>},
-                        deadline => undefined,
-                        execution_start_time => 1565596876383,
                         function => 'Block',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -747,8 +789,6 @@ format_service_request_test_() ->
                     ?EV_CALL_SERVICE,
                     #{
                         args => {undefined, <<"1CQdDqPROyW">>, <<>>},
-                        deadline => undefined,
-                        execution_start_time => 1565596876458,
                         function => 'Unblock',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQdDqPROyW">>,
@@ -787,8 +827,6 @@ format_service_request_test_() ->
                                 {mg_stateproc_Machine, <<"party">>, <<"1CQxZsCgLJY">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 12}, {12, 46, 36}}, 433},
-                        execution_start_time => 1565613966542,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CQxZsCgLJY">>,
@@ -862,8 +900,6 @@ format_service_request_test_() ->
                                         {shop_account_creation,
                                             {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}
                             ]},
-                        deadline => undefined,
-                        execution_start_time => 1565617299263,
                         function => 'CreateClaim',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CR1Xziml7o">>,
@@ -986,8 +1022,6 @@ format_service_request_test_() ->
                                         {str, <<"ct">>} =>
                                             {str, <<"application/x-erlang-binary">>}
                                     }}}}},
-                        deadline => {{{2019, 8, 13}, {7, 52, 41}}, 105},
-                        execution_start_time => 1565682731109,
                         function => 'ProcessCall',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSHThTEJ84">>,
@@ -1066,8 +1100,6 @@ format_service_request_with_limit_test_() ->
                                         {shop_account_creation,
                                             {payproc_ShopAccountParams, {domain_CurrencyRef, <<"RUB">>}}}}}
                             ]},
-                        deadline => undefined,
-                        execution_start_time => 1565617299263,
                         function => 'CreateClaim',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CR1Xziml7o">>,
@@ -1103,8 +1135,6 @@ result_test_() ->
                 format_event(
                     ?EV_SERVICE_HANDLER_RESULT,
                     #{
-                        deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
-                        execution_start_time => 1565695142994,
                         function => 'ProcessCall',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1201,8 +1231,6 @@ result_test_() ->
                                 <<"1CSWG2vduGe">>,
                                 {revision, 6}
                             },
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 42},
-                        execution_start_time => 1565695143068,
                         function => 'Checkout',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1291,8 +1319,6 @@ result_test_() ->
                                 {mg_stateproc_Machine, <<"customer">>, <<"1CSWGJ3N8Ns">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
-                        execution_start_time => 1565695143707,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1363,8 +1389,6 @@ result_test_() ->
                                 {mg_stateproc_Machine, <<"customer">>, <<"1CSWGJ3N8Ns">>, [],
                                     {mg_stateproc_HistoryRange, undefined, undefined, forward},
                                     {mg_stateproc_Content, undefined, {bin, <<>>}}, undefined, {bin, <<>>}}}},
-                        deadline => {{{2019, 8, 13}, {11, 19, 33}}, 606},
-                        execution_start_time => 1565695143707,
                         function => 'ProcessSignal',
                         metadata => #{
                             <<"user-identity.id">> => <<"1CSWG2vduGe">>,
@@ -1422,8 +1446,6 @@ result_test_() ->
                 format_event(
                     ?EV_SERVICE_HANDLER_RESULT,
                     #{
-                        deadline => {{{2019, 8, 13}, {11, 19, 32}}, 986},
-                        execution_start_time => 1565695142994,
                         function => 'Call',
                         metadata => #{},
                         result =>
@@ -1461,8 +1483,6 @@ exception_test_() ->
                     ?EV_SERVICE_RESULT,
                     #{
                         args => {<<"1Cfo5OJzx6O">>},
-                        deadline => undefined,
-                        execution_start_time => 1566386841317,
                         class => business,
                         function => 'Get',
                         metadata => #{
@@ -1501,8 +1521,6 @@ exception_test_() ->
                                 {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined,
                                 undefined}
                         },
-                        deadline => undefined,
-                        execution_start_time => 1566386899959,
                         class => business,
                         function => 'StartPayment',
                         metadata => #{
@@ -1539,8 +1557,6 @@ exception_test_() ->
                                 {instant, {payproc_InvoicePaymentParamsFlowInstant}}, true, undefined, undefined,
                                 undefined, undefined}
                         },
-                        deadline => undefined,
-                        execution_start_time => 1575444908463,
                         class => business,
                         function => 'StartPayment',
                         metadata => #{

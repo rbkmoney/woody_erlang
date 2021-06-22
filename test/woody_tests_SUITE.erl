@@ -1085,28 +1085,7 @@ handle_proxy_event(Event, Code, Descr) ->
     erlang:error(badarg, [Event, Code, Descr]).
 
 log_event(Event, RpcId, Meta) ->
-    %% _ woody_event_handler_default:handle_event(Event, RpcId, Meta, []).
-    {_Severity, {Format, Msg}, EvMeta} = woody_event_handler:format_event_and_meta(
-        Event,
-        Meta,
-        RpcId,
-        [
-            event,
-            role,
-            service,
-            service_schema,
-            function,
-            type,
-            args,
-            metadata,
-            deadline,
-            status,
-            url,
-            code,
-            result
-        ]
-    ),
-    ct:pal(Format ++ "~nmeta: ~p", Msg ++ [EvMeta]).
+    woody_ct_event_h:handle_event(Event, RpcId, Meta, []).
 
 %%
 %% cowboy_http_handler callbacks

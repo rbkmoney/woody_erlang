@@ -125,11 +125,11 @@ bench_iolib_formatter({Meta, RpcID}, _) ->
     format_msg(format_event_iolib(Meta, RpcID)).
 
 format_event_iolib(#{service := Service, function := Function, args := Args}, _RpcID) ->
-    {info, {"calling ~0p:~0p(~0tp)", [Service, Function, Args]}}.
+    {"calling ~0p:~0p(~0tp)", [Service, Function, Args]}.
 
 -spec bench_thrift_formatter(input(), _State) -> term().
 bench_thrift_formatter({Meta, RpcID}, _) ->
     format_msg(woody_event_handler:format_event('call service', Meta, RpcID)).
 
-format_msg({_Severity, {Format, Params}}) ->
+format_msg({Format, Params}) ->
     io_lib:format(Format, Params).
