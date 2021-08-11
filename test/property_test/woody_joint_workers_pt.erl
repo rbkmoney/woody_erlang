@@ -34,6 +34,9 @@
 
 %% проверяет работоспособность в условиях параллельных запросов,
 %% но по факту не может проверить, что запросы действительно соединяются
+
+%% Suppress proper's internal type mismatch for setup generator
+-dialyzer([no_return, no_opaque]).
 prop_test() ->
     ?FORALL(
         Commands,
