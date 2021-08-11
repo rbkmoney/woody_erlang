@@ -42,6 +42,9 @@ end_per_suite(C) ->
 %%
 %% tests
 %%
+
+%% Suppress proper's internal type mismatch for setup generator
+-dialyzer([no_return, no_opaque]).
 prop_test(_C) ->
     R = proper:quickcheck(
         woody_joint_workers_pt:prop_test(),
