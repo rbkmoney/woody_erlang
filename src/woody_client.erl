@@ -16,6 +16,7 @@
     event_handler := woody:ev_handlers(),
     protocol => thrift,
     transport => http,
+    deadline => woody:deadline(),
     %% Set to override protocol handler module selection, useful for test purposes, rarely
     %% if ever needed otherwise.
     protocol_handler_override => module(),
@@ -51,7 +52,8 @@ call(Request, Options) ->
     | {exception, woody_error:business_error()}
     | no_return().
 call(Request, Options = #{event_handler := EvHandler}, Context) ->
-    Child = woody_context:new_child(Context),
+    Deadline = maps:get(deadline, Context, undefined),
+    Child = attach_deadline(Deadline, woody_context:new_child(Context)),
     WoodyState = woody_state:new(client, Child, EvHandler),
     case call_safe(Request, Options, WoodyState) of
         Result = {ok, _} ->
@@ -92,3 +94,8 @@ handle_client_error(Class, Error, Stacktrace, WoodyState) ->
         final => false
     }),
     {error, {system, {internal, result_unexpected, <<"client error: ", Details/binary>>}}}.
+
+attach_deadline(undefined, Context) ->
+    Context;
+attach_deadline(Deadline, Context) ->
+    woody_context:set_deadline(Deadline, Context).

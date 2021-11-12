@@ -35,13 +35,14 @@
 %% Thrift
 -type service_name() :: atom().
 -type service() :: {module(), service_name()}.
+-type context() :: woody_context:ctx().
 -type func() :: atom().
 -type args() :: tuple().
 -type request() :: {service(), func(), args()}.
 -type result() :: _.
 -type th_handler() :: {service(), handler(options())}.
 
--export_type([request/0, result/0, service/0, service_name/0, func/0, args/0, th_handler/0]).
+-export_type([request/0, result/0, service/0, context/0, service_name/0, func/0, args/0, th_handler/0]).
 
 -type rpc_type() :: call | cast.
 
